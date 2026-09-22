@@ -1,0 +1,14 @@
+[debug] [2026-09-22T14:47:59.672Z] ----------------------------------------------------------------------
+[debug] [2026-09-22T14:47:59.674Z] Command:       /Users/johnnywu/.nvm/versions/node/v22.17.1/bin/node /Users/johnnywu/.nvm/versions/node/v22.17.1/bin/firebase apps:list
+[debug] [2026-09-22T14:47:59.674Z] CLI Version:   15.30.2
+[debug] [2026-09-22T14:47:59.674Z] Platform:      darwin
+[debug] [2026-09-22T14:47:59.674Z] Node Version:  v22.17.1
+[debug] [2026-09-22T14:47:59.674Z] Detected Agent: antigravity
+[debug] [2026-09-22T14:47:59.674Z] Time:          Wed Sep 23 2026 00:47:59 GMT+1000 (Australian Eastern Standard Time)
+[debug] [2026-09-22T14:47:59.674Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-09-22T14:47:59.768Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-22T14:47:59.768Z] > authorizing via signed-in user (panghowu@gmail.com)
+[debug] [2026-09-22T14:47:59.775Z] Checked if tokens are valid: true, expires at: 1790089605800
+[debug] [2026-09-22T14:47:59.775Z] Checked if tokens are valid: true, expires at: 1790089605800
+[debug] [2026-09-22T14:47:59.776Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/bible-notes-sweedish:searchApps pageSize=100

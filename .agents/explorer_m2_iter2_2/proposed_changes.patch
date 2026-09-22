@@ -1,0 +1,197 @@
+diff --git a/src/utils/authRouting.ts b/src/utils/authRouting.ts
+new file mode 100644
+--- /dev/null
++++ b/src/utils/authRouting.ts
+@@ -0,0 +1,48 @@
++/**
++ * Route protection and redirect logic for authentication lifecycle.
++ * Centralizes redirect decisions between public auth screens and protected app screens.
++ */
++
++export const AUTH_ROUTE = '/(auth)/login';
++export const TABS_ROUTE = '/(tabs)';
++
++/**
++ * Checks whether the current route segments belong to the (auth) group.
++ *
++ * @param segments - Array of route segments from Expo Router's useSegments()
++ * @returns true if the root segment is '(auth)', false otherwise
++ */
++export function isInAuthGroup(segments: readonly string[] | string[]): boolean {
++  return Array.isArray(segments) && segments.length > 0 && segments[0] === '(auth)';
++}
++
++/**
++ * Determines whether an authentication-based redirect is required.
++ *
++ * Redirect rules:
++ * 1. While loading is true, returns null (do not redirect while resolving).
++ * 2. If unauthenticated and outside (auth) group, redirect to /(auth)/login.
++ * 3. If authenticated and inside (auth) group, redirect to /(tabs).
++ * 4. Otherwise, return null (stay on current route).
++ *
++ * @param isAuthenticated - Whether the user is currently authenticated
++ * @param segments - Array of route segments from Expo Router's useSegments()
++ * @param loading - Optional flag indicating if auth state is resolving (defaults to false)
++ * @returns Target route string if redirect is needed, or null if no redirect
++ */
++export function getAuthRedirect(
++  isAuthenticated: boolean,
++  segments: readonly string[] | string[],
++  loading: boolean = false
++): string | null {
++  if (loading) {
++    return null;
++  }
++
++  const inAuth = isInAuthGroup(segments);
++
++  if (!isAuthenticated && !inAuth) {
++    return AUTH_ROUTE;
++  }
++
++  if (isAuthenticated && inAuth) {
++    return TABS_ROUTE;
++  }
++
++  return null;
++}
+diff --git a/app/_layout.tsx b/app/_layout.tsx
+--- a/app/_layout.tsx
++++ b/app/_layout.tsx
+@@ -17,2 +17,3 @@
+ import { AuthProvider, useAuth } from '../src/context/AuthContext';
++import { getAuthRedirect } from '../src/utils/authRouting';
+ 
+@@ -36,9 +37,4 @@
+-    const inAuthGroup = segments[0] === '(auth)';
+-
+-    if (!user && !inAuthGroup) {
+-      // Unauthenticated user attempting to access protected screens
+-      router.replace('/(auth)/login');
+-    } else if (user && inAuthGroup) {
+-      // Authenticated user attempting to access auth screens
+-      router.replace('/(tabs)');
+-    }
++    const redirectRoute = getAuthRedirect(Boolean(user), segments);
++    if (redirectRoute) {
++      router.replace(redirectRoute as any);
++    }
+   }, [user, loading, segments, navigationState?.key]);
+diff --git a/tests/unit/authRouting.test.ts b/tests/unit/authRouting.test.ts
+--- a/tests/unit/authRouting.test.ts
++++ b/tests/unit/authRouting.test.ts
+@@ -1,47 +1,50 @@
+-describe('Auth Route Protection Redirect Matrix', () => {
+-  type Segment = string;
+-
+-  function calculateRedirect(
+-    user: { uid: string } | null,
+-    loading: boolean,
+-    segments: Segment[]
+-  ): string | null {
+-    if (loading) return null;
+-    const inAuthGroup = segments[0] === '(auth)';
+-    if (!user && !inAuthGroup) {
+-      return '/(auth)/login';
+-    }
+-    if (user && inAuthGroup) {
+-      return '/(tabs)';
+-    }
+-    return null;
+-  }
+-
+-  test('when loading, returns no redirect', () => {
+-    expect(calculateRedirect(null, true, ['(tabs)'])).toBeNull();
+-    expect(calculateRedirect({ uid: '123' }, true, ['(auth)', 'login'])).toBeNull();
+-  });
+-
+-  test('unauthenticated user outside (auth) redirects to /(auth)/login', () => {
+-    expect(calculateRedirect(null, false, ['(tabs)'])).toBe('/(auth)/login');
+-    expect(calculateRedirect(null, false, ['note', '1'])).toBe('/(auth)/login');
+-    expect(calculateRedirect(null, false, ['notifications'])).toBe('/(auth)/login');
+-  });
+-
+-  test('unauthenticated user inside (auth) does not redirect', () => {
+-    expect(calculateRedirect(null, false, ['(auth)', 'login'])).toBeNull();
+-    expect(calculateRedirect(null, false, ['(auth)', 'register'])).toBeNull();
+-  });
+-
+-  test('authenticated user inside (auth) redirects to /(tabs)', () => {
+-    expect(calculateRedirect({ uid: '123' }, false, ['(auth)', 'login'])).toBe('/(tabs)');
+-    expect(calculateRedirect({ uid: '123' }, false, ['(auth)', 'register'])).toBe('/(tabs)');
+-  });
+-
+-  test('authenticated user outside (auth) stays on current route', () => {
+-    expect(calculateRedirect({ uid: '123' }, false, ['(tabs)'])).toBeNull();
+-    expect(calculateRedirect({ uid: '123' }, false, ['note', '456'])).toBeNull();
+-    expect(calculateRedirect({ uid: '123' }, false, ['friend', '789'])).toBeNull();
+-  });
+-});
++import {
++  getAuthRedirect,
++  isInAuthGroup,
++  AUTH_ROUTE,
++  TABS_ROUTE,
++} from '../../src/utils/authRouting';
++
++describe('Auth Route Protection Redirect Matrix', () => {
++  describe('getAuthRedirect', () => {
++    test('when loading is true, returns null regardless of auth state or route', () => {
++      expect(getAuthRedirect(false, ['(tabs)'], true)).toBeNull();
++      expect(getAuthRedirect(true, ['(auth)', 'login'], true)).toBeNull();
++      expect(getAuthRedirect(false, ['(auth)', 'login'], true)).toBeNull();
++      expect(getAuthRedirect(true, ['(tabs)'], true)).toBeNull();
++    });
++
++    test('unauthenticated user outside (auth) redirects to /(auth)/login', () => {
++      expect(getAuthRedirect(false, ['(tabs)'])).toBe('/(auth)/login');
++      expect(getAuthRedirect(false, ['note', '1'])).toBe('/(auth)/login');
++      expect(getAuthRedirect(false, ['notifications'])).toBe('/(auth)/login');
++      expect(getAuthRedirect(false, ['friend', 'profile'])).toBe('/(auth)/login');
++    });
++
++    test('unauthenticated user inside (auth) does not redirect', () => {
++      expect(getAuthRedirect(false, ['(auth)', 'login'])).toBeNull();
++      expect(getAuthRedirect(false, ['(auth)', 'register'])).toBeNull();
++    });
++
++    test('authenticated user inside (auth) redirects to /(tabs)', () => {
++      expect(getAuthRedirect(true, ['(auth)', 'login'])).toBe('/(tabs)');
++      expect(getAuthRedirect(true, ['(auth)', 'register'])).toBe('/(tabs)');
++    });
++
++    test('authenticated user outside (auth) stays on current route (no redirect)', () => {
++      expect(getAuthRedirect(true, ['(tabs)'])).toBeNull();
++      expect(getAuthRedirect(true, ['note', '456'])).toBeNull();
++      expect(getAuthRedirect(true, ['friend', '789'])).toBeNull();
++      expect(getAuthRedirect(true, ['notifications'])).toBeNull();
++    });
++
++    test('empty segments array is treated as outside auth group', () => {
++      expect(getAuthRedirect(false, [])).toBe('/(auth)/login');
++      expect(getAuthRedirect(true, [])).toBeNull();
++    });
++  });
++
++  describe('isInAuthGroup helper', () => {
++    test('correctly identifies (auth) group', () => {
++      expect(isInAuthGroup(['(auth)'])).toBe(true);
++      expect(isInAuthGroup(['(auth)', 'login'])).toBe(true);
++      expect(isInAuthGroup(['(auth)', 'register'])).toBe(true);
++    });
++
++    test('returns false for non-auth groups and empty array', () => {
++      expect(isInAuthGroup(['(tabs)'])).toBe(false);
++      expect(isInAuthGroup(['note', '1'])).toBe(false);
++      expect(isInAuthGroup([])).toBe(false);
++    });
++  });
++
++  describe('Route Constants', () => {
++    test('AUTH_ROUTE and TABS_ROUTE match design specification', () => {
++      expect(AUTH_ROUTE).toBe('/(auth)/login');
++      expect(TABS_ROUTE).toBe('/(tabs)');
++    });
++  });
++});

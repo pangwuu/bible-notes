@@ -1,0 +1,9 @@
+--- a/app/(tabs)/settings.tsx
++++ b/app/(tabs)/settings.tsx
+@@ -273,5 +273,3 @@
+     color: colors.textSecondary,
+     marginBottom: spacing.xs,
+     marginTop: spacing.xs,
+-    textTransform: 'uppercase',
+-    letterSpacing: 0.5,
+   },

@@ -1,0 +1,29 @@
+--- a/app.json
++++ b/app.json
+@@ -23,10 +23,10 @@
+       "userInterfaceStyle": "dark",
+       "package": "com.biblenotes.app"
+     },
+-    "web": {
+-      "bundler": "metro",
+-      "output": "static"
+-    },
++    "platforms": [
++      "ios",
++      "android"
++    ],
+     "plugins": [
+       "expo-router",
+       "expo-font"
+--- a/metro.config.js
++++ b/metro.config.js
+@@ -1,5 +1,9 @@
+ // Learn more https://docs.expo.dev/guides/customizing-metro
+ const { getDefaultConfig } = require('expo/metro-config');
++
++// As of SDK 56, expo-router checks for @react-navigation imports unless disabled.
++// ThemeProvider and NavigationDarkTheme are imported for theme integration.
++process.env.EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK = "1";
+ 
+ /** @type {import('expo/metro-config').MetroConfig} */
+ const config = getDefaultConfig(__dirname);

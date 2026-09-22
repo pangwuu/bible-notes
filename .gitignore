@@ -1,1 +1,21 @@
+node_modules/
+.expo/
+dist/
+web-build/
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Environment & Secrets
 .env
+.env*.local
+
+# macOS
+.DS_Store
+
+# Test Coverage
+coverage/
+
+# Native Builds
+android/
+ios/

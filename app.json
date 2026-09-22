@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "Bible Notes",
+    "slug": "bible-notes",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "biblenotes",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#1A1816"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "userInterfaceStyle": "dark",
+      "bundleIdentifier": "com.biblenotes.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1A1816"
+      },
+      "userInterfaceStyle": "dark",
+      "package": "com.biblenotes.app"
+    },
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "plugins": [
+      "expo-router",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
