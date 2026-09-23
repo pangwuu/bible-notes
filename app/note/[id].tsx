@@ -91,24 +91,25 @@ export default function NoteDetailScreen() {
   const isAuthor = !!(user?.uid && note?.user_id === user.uid);
 
   useLayoutEffect(() => {
-    if (isAuthor) {
-      navigation.setOptions({
-        headerRight: () => (
-          <View style={styles.headerActions}>
-            <Pressable
-              onPress={() => router.push({ pathname: '/note/edit', params: { id: note?.id } })}
-              style={styles.headerButton}
-              hitSlop={8}
-            >
-              <Ionicons name="pencil" size={20} color={colors.accent.keyIdea} />
-            </Pressable>
-            <Pressable onPress={handleDelete} style={styles.headerButton} hitSlop={8}>
-              <Ionicons name="trash-outline" size={20} color={colors.accent.danger} />
-            </Pressable>
-          </View>
-        ),
-      });
-    }
+    navigation.setOptions({
+      title: note ? formatPassageDisplay(note.passage) : 'Note Detail',
+      headerRight: isAuthor
+        ? () => (
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={() => router.push({ pathname: '/note/edit', params: { id: note?.id } })}
+                style={styles.headerButton}
+                hitSlop={8}
+              >
+                <Ionicons name="pencil" size={20} color={colors.accent.keyIdea} />
+              </Pressable>
+              <Pressable onPress={handleDelete} style={styles.headerButton} hitSlop={8}>
+                <Ionicons name="trash-outline" size={20} color={colors.accent.danger} />
+              </Pressable>
+            </View>
+          )
+        : undefined,
+    });
   }, [navigation, isAuthor, note, router]);
 
   if (loading) {

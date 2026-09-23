@@ -8,7 +8,7 @@ import { colors } from './theme';
 export interface SwedishSectionConfig {
   key: 'keyIdea' | 'question' | 'application';
   symbol: string;
-  iconName: 'bulb-outline' | 'help-circle-outline' | 'navigate-outline';
+  iconName: 'bulb-outline' | 'help-circle-outline' | 'footsteps-outline';
   name: string;
   headerMarkdown: string;
   color: string;
@@ -37,7 +37,7 @@ export const SWEDISH_SECTIONS: readonly SwedishSectionConfig[] = [
   {
     key: 'application',
     symbol: '🏹',
-    iconName: 'navigate-outline',
+    iconName: 'footsteps-outline',
     name: 'Application',
     headerMarkdown: '### 🏹 Application(s)',
     color: colors.accent.application,

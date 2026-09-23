@@ -8,7 +8,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Text, Searchbar } from 'react-native-paper';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import { colors, spacing, radius } from '../../src/constants/theme';
@@ -58,9 +58,12 @@ export default function FriendsScreen() {
     }
   }, [user]);
 
-  useEffect(() => {
-    loadSocialData();
-  }, [loadSocialData]);
+  // Re-fetch friends data whenever screen regains focus (e.g. after unfriending on friend profile)
+  useFocusEffect(
+    useCallback(() => {
+      loadSocialData();
+    }, [loadSocialData])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);

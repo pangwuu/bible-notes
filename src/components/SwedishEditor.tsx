@@ -176,7 +176,7 @@ export const SwedishEditor: React.FC<SwedishEditorProps> = ({
       {/* Section 3: Application */}
       <View style={styles.section}>
         <View style={styles.sectionHeaderRow}>
-          <Ionicons name="navigate-outline" size={15} color={colors.accent.application} />
+          <Ionicons name="footsteps-outline" size={15} color={colors.accent.application} />
           <Text style={[styles.sectionCaption, { color: colors.accent.application }]}>
             Application
           </Text>

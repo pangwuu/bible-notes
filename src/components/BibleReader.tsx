@@ -62,7 +62,19 @@ export function buildScriptureHtml(
     })
     .join('');
 
-  return `<div style="color:${textColor};font-size:${fontSize}px;line-height:${lineHeight}px;margin:0;padding:0;">${innerHtml}</div>`;
+  return `<div style="color:${textColor};font-size:${fontSize}px;line-height:${lineHeight}px;margin:0;padding:0;">
+    <style>
+      .scripture-heading, h3, h4, b.heading {
+        font-weight: 700;
+        color: #EDE7DD;
+        display: block;
+        margin-top: 10px;
+        margin-bottom: 4px;
+        font-size: ${fontSize + 1}px;
+      }
+    </style>
+    ${innerHtml}
+  </div>`;
 }
 
 export const BibleReader: React.FC<BibleReaderProps> = ({
@@ -78,8 +90,9 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [collapsed, setCollapsed] = useState<boolean>(initiallyCollapsed);
   const [showVerseNumbers, setShowVerseNumbers] = useState<boolean>(true);
+  const [fontSize, setFontSize] = useState<number>(16);
 
-  // Read verse number preference from safeStorage
+  // Read verse number preference and font size from safeStorage
   useEffect(() => {
     let isMounted = true;
     safeStorage.getItem('bible_show_verse_numbers').then((stored) => {
@@ -91,10 +104,29 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
         }
       }
     });
+
+    safeStorage.getItem('bible_font_size').then((stored) => {
+      if (isMounted && stored !== null) {
+        const parsed = parseInt(stored, 10);
+        if (!isNaN(parsed) && parsed >= 12 && parsed <= 26) {
+          setFontSize(parsed);
+        }
+      }
+    });
+
     return () => {
       isMounted = false;
     };
   }, []);
+
+  const updateFontSize = (newSize: number) => {
+    const clamped = Math.max(12, Math.min(26, newSize));
+    setFontSize(clamped);
+    safeStorage.setItem('bible_font_size', String(clamped)).catch(() => {});
+  };
+
+  const handleDecreaseFontSize = () => updateFontSize(fontSize - 2);
+  const handleIncreaseFontSize = () => updateFontSize(fontSize + 2);
 
   // Sync selectedTranslation when preferredTranslation prop changes
   useEffect(() => {
@@ -157,18 +189,18 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
         showVerseNumbers,
         colors.textPrimary,
         colors.accentKeyIdea,
-        typography.body.fontSize,
-        typography.body.lineHeight
+        fontSize,
+        Math.round(fontSize * 1.5)
       );
     }
     return '';
-  }, [passageResult?.verses, showVerseNumbers]);
+  }, [passageResult?.verses, showVerseNumbers, fontSize]);
 
   const contentWidth = Math.max(windowWidth - spacing.md * 4, 280);
 
   return (
     <View style={[styles.container, style]}>
-      {/* Header bar with Title, Version Pill, and Collapse Toggle */}
+      {/* Header bar with Title, Font Size Controls, Version Pill, and Collapse Toggle */}
       <View style={styles.headerRow}>
         <Pressable
           style={styles.headerLeft}
@@ -190,11 +222,36 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
           />
         </Pressable>
 
-        <View style={styles.activeBadge}>
-          <Text style={styles.activeBadgeText}>{selectedTranslation}</Text>
-          {passageResult?.cached ? (
-            <Ionicons name="cloud-offline-outline" size={12} color={colors.textSecondary} style={{ marginLeft: 3 }} />
-          ) : null}
+        <View style={styles.headerRightControls}>
+          {/* Font Size Selector Pills */}
+          <View style={styles.fontSizeControls}>
+            <Pressable
+              onPress={handleDecreaseFontSize}
+              style={styles.fontBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Decrease Bible font size"
+              hitSlop={6}
+            >
+              <Text style={styles.fontBtnText}>A-</Text>
+            </Pressable>
+            <Text style={styles.fontSizeLabel}>{fontSize}</Text>
+            <Pressable
+              onPress={handleIncreaseFontSize}
+              style={styles.fontBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Increase Bible font size"
+              hitSlop={6}
+            >
+              <Text style={styles.fontBtnText}>A+</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.activeBadge}>
+            <Text style={styles.activeBadgeText}>{selectedTranslation}</Text>
+            {passageResult?.cached ? (
+              <Ionicons name="cloud-offline-outline" size={12} color={colors.textSecondary} style={{ marginLeft: 3 }} />
+            ) : null}
+          </View>
         </View>
       </View>
 
@@ -264,14 +321,16 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
                     systemFonts={[typography.body.fontFamily]}
                     baseStyle={{
                       fontFamily: typography.body.fontFamily,
-                      fontSize: typography.body.fontSize,
-                      lineHeight: typography.body.lineHeight,
+                      fontSize: fontSize,
+                      lineHeight: Math.round(fontSize * 1.5),
                       color: colors.textPrimary,
                     }}
                   />
                 </View>
               ) : (
-                <Text style={styles.scriptureText}>{passageResult?.text}</Text>
+                <Text style={[styles.scriptureText, { fontSize: fontSize, lineHeight: Math.round(fontSize * 1.5) }]}>
+                  {passageResult?.text}
+                </Text>
               )}
 
               {/* Attribution Line */}
@@ -320,6 +379,37 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textPrimary,
     marginRight: spacing.xs,
+  },
+  headerRightControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  fontSizeControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.bgSurfaceRaised,
+    borderRadius: radius.control,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: colors.borderHairline,
+    marginRight: 2,
+  },
+  fontBtn: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  fontBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  fontSizeLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginHorizontal: 3,
   },
   activeBadge: {
     flexDirection: 'row',

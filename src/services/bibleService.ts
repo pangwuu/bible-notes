@@ -160,7 +160,7 @@ export function parseBracketVerses(rawText: string, fallbackStartVerse = 1): Ver
  */
 export async function fetchFromCrosswayEsv(passageQuery: string, customApiKey?: string): Promise<VerseSegment[]> {
   const token = customApiKey && customApiKey.trim() ? customApiKey.trim() : DEFAULT_ESV_API_TOKEN;
-  const url = `${ESV_API_BASE_URL}?q=${encodeURIComponent(passageQuery)}&include-footnotes=false&include-headings=false&include-passage-references=false&include-verse-numbers=true`;
+  const url = `${ESV_API_BASE_URL}?q=${encodeURIComponent(passageQuery)}&include-footnotes=false&include-headings=true&include-passage-references=false&include-verse-numbers=true`;
 
   console.log(`[BibleService] Fetching from Crossway ESV API: ${url} (Token: ${token.slice(0, 6)}...)`);
   let response: Response;
@@ -195,12 +195,14 @@ export async function fetchFromCrosswayEsv(passageQuery: string, customApiKey?: 
 }
 
 /**
- * Strips HTML tags from text returned by bolls.life.
+ * Processes HTML from multi-translation responses (bolls.life / APIs).
+ * Preserves section headings (h3, h4, b, div.s) while cleaning raw noise.
  */
 function cleanHtml(raw: string): string {
   if (!raw) return '';
   return raw
     .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<(?:h[1-6]|b|strong|div class="s[^"]*")[^>]*>(.*?)<\/(?:h[1-6]|b|strong|div)>/gi, '<b class="heading">$1</b><br/>')
     .replace(/<[^>]*>/g, '')
     .replace(/\s+/g, ' ')
     .trim();
