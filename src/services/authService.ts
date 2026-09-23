@@ -46,6 +46,39 @@ export interface LoginResponse {
 }
 
 /**
+ * Generates N-gram substrings of length >= 3 across username, displayName, and email prefix
+ * to enable partial substring search without external full-text search infrastructure.
+ */
+export function generateSearchTokens(username?: string, displayName?: string, email?: string): string[] {
+  const tokenSet = new Set<string>();
+
+  const processWord = (text?: string) => {
+    if (!text) return;
+    const clean = text.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const len = clean.length;
+    // Generate all sliding substrings of length >= 3
+    for (let start = 0; start < len; start++) {
+      for (let end = start + 3; end <= Math.min(start + 15, len); end++) {
+        tokenSet.add(clean.substring(start, end));
+      }
+    }
+    // Also include exact clean word
+    if (clean.length > 0) {
+      tokenSet.add(clean);
+    }
+  };
+
+  processWord(username);
+  processWord(displayName);
+  if (email) {
+    const emailPrefix = email.split('@')[0];
+    processWord(emailPrefix);
+  }
+
+  return Array.from(tokenSet);
+}
+
+/**
  * Checks if a username is available in Firestore.
  * Performs format validation and lowercases before query.
  */
@@ -66,7 +99,8 @@ export async function checkUsernameAvailable(username: string): Promise<boolean>
     // If client is unauthenticated and firestore.rules block read with permission-denied,
     // allow client to proceed to registerUser where authenticated check & rollback is enforced.
     if (error?.code === 'permission-denied') {
-      console.warn('checkUsernameAvailable: unauthenticated read blocked by rules; deferring to registration.');
+      // In unauthenticated context, read is restricted by firestore.rules;
+      // return true so registration form proceeds to registerUser() where atomic check & rollback is enforced.
       return true;
     }
     throw error;
@@ -158,6 +192,8 @@ export async function registerUser(
 
     // 6. Create Firestore profile document
     const now = serverTimestamp();
+    const searchTokens = generateSearchTokens(normalizedUsername, trimmedDisplayName, normalizedEmail);
+
     const profileDoc: UserDocument = {
       id: user.uid,
       uid: user.uid,
@@ -171,6 +207,7 @@ export async function registerUser(
         custom_esv_api_key: '',
       },
       custom_esv_api_key: '',
+      search_tokens: searchTokens,
       created_at: now,
       updated_at: now,
     };
@@ -259,11 +296,26 @@ export async function updateUserProfile(
       updated_at: serverTimestamp(),
     };
 
-    // If updating display name, synchronize full_name and Firebase Auth
+    // If updating display name, synchronize full_name, Firebase Auth, and search_tokens
     if (updates.display_name) {
       payload.full_name = updates.display_name;
       if (auth.currentUser && auth.currentUser.uid === uid) {
         await updateProfile(auth.currentUser, { displayName: updates.display_name });
+      }
+
+      // Fetch current profile to regenerate search_tokens with username & email
+      try {
+        const snap = await getDoc(userDocRef);
+        if (snap.exists()) {
+          const currentData = snap.data() as UserProfile;
+          payload.search_tokens = generateSearchTokens(
+            currentData.username || '',
+            updates.display_name,
+            currentData.email || ''
+          );
+        }
+      } catch (err) {
+        console.warn('Failed to regenerate search_tokens on profile update:', err);
       }
     }
 

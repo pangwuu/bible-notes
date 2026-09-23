@@ -14,9 +14,12 @@ import {
   deleteDoc,
   query,
   where,
+  limit,
+  startAfter,
   serverTimestamp,
+  DocumentSnapshot,
 } from 'firebase/firestore';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import safeStorage from '../utils/safeStorage';
 import { db, auth } from './firebase';
 import {
   Note,
@@ -92,14 +95,14 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
     await setDoc(newDocRef, notePayload);
   } catch (error) {
     // If offline or network drop, queue write locally
-    await AsyncStorage.setItem(
+    await safeStorage.setItem(
       `pending_offline_save_${noteId}`,
       JSON.stringify(notePayload)
     );
   }
 
-  // Cache note locally in AsyncStorage
-  await AsyncStorage.setItem(`note_${noteId}`, JSON.stringify(createdNote));
+  // Cache note locally in safeStorage
+  await safeStorage.setItem(`note_${noteId}`, JSON.stringify(createdNote));
 
   return createdNote;
 }
@@ -159,7 +162,7 @@ export async function updateNote(noteId: string, updates: UpdateNoteInput): Prom
   try {
     await updateDoc(noteRef, firestoreUpdates);
   } catch (err) {
-    await AsyncStorage.setItem(
+    await safeStorage.setItem(
       `pending_offline_save_${validId}`,
       JSON.stringify(firestoreUpdates)
     );
@@ -192,7 +195,7 @@ export async function updateNote(noteId: string, updates: UpdateNoteInput): Prom
     updated_at: Date.now(),
   };
 
-  await AsyncStorage.setItem(`note_${validId}`, JSON.stringify(updatedNote));
+  await safeStorage.setItem(`note_${validId}`, JSON.stringify(updatedNote));
 
   return updatedNote;
 }
@@ -210,8 +213,8 @@ export async function deleteNote(noteId: string): Promise<void> {
     // Continue local cleanup even if offline
   }
 
-  await AsyncStorage.removeItem(`note_${validId}`);
-  await AsyncStorage.removeItem(`pending_offline_save_${validId}`);
+  await safeStorage.removeItem(`note_${validId}`);
+  await safeStorage.removeItem(`pending_offline_save_${validId}`);
 }
 
 /**
@@ -226,14 +229,14 @@ export async function getNote(noteId: string): Promise<Note | null> {
 
     if (snap.exists()) {
       const note = noteDocumentToNote(snap.data(), snap.id);
-      await AsyncStorage.setItem(`note_${validId}`, JSON.stringify(note));
+      await safeStorage.setItem(`note_${validId}`, JSON.stringify(note));
       return note;
     }
   } catch (err) {
     // Network failure: fallback to local cache
   }
 
-  const cached = await AsyncStorage.getItem(`note_${validId}`);
+  const cached = await safeStorage.getItem(`note_${validId}`);
   if (cached) {
     try {
       return JSON.parse(cached) as Note;
@@ -269,10 +272,10 @@ export async function getUserNotes(userId: string): Promise<Note[]> {
     });
 
     // Cache user notes index
-    await AsyncStorage.setItem(`user_notes_${userId}`, JSON.stringify(notes));
+    await safeStorage.setItem(`user_notes_${userId}`, JSON.stringify(notes));
     return notes;
   } catch (err) {
-    const cached = await AsyncStorage.getItem(`user_notes_${userId}`);
+    const cached = await safeStorage.getItem(`user_notes_${userId}`);
     if (cached) {
       try {
         return JSON.parse(cached) as Note[];
@@ -299,4 +302,56 @@ export async function getNotesByTag(userId: string, tag: string): Promise<Note[]
   const cleanTag = tag.trim().toLowerCase();
   const allNotes = await getUserNotes(userId);
   return allNotes.filter((n) => n.tags.includes(cleanTag));
+}
+
+/**
+ * Aggregate all unique tags from a user's notes for suggestion chips.
+ */
+export async function getUserTags(userId: string): Promise<string[]> {
+  const allNotes = await getUserNotes(userId);
+  const tagSet = new Set<string>();
+  for (const n of allNotes) {
+    if (n.tags && Array.isArray(n.tags)) {
+      for (const t of n.tags) {
+        if (t && t.trim()) {
+          tagSet.add(t.trim().toLowerCase());
+        }
+      }
+    }
+  }
+  return Array.from(tagSet).sort();
+}
+
+/**
+ * Paginated query for user notes with cursor support.
+ */
+export async function getUserNotesPaginated(
+  userId: string,
+  pageSize: number = 20,
+  lastDoc?: DocumentSnapshot
+): Promise<{ notes: Note[]; lastDoc: DocumentSnapshot | null }> {
+  if (!userId) return { notes: [], lastDoc: null };
+
+  try {
+    const notesRef = collection(db, 'notes');
+    let q = query(notesRef, where('user_id', '==', userId));
+
+    if (lastDoc) {
+      q = query(q, startAfter(lastDoc), limit(pageSize));
+    } else {
+      q = query(q, limit(pageSize));
+    }
+
+    const snap = await getDocs(q);
+    const notes: Note[] = [];
+    snap.forEach((docSnap) => {
+      notes.push(noteDocumentToNote(docSnap.data(), docSnap.id));
+    });
+
+    const newLastDoc = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+    return { notes, lastDoc: newLastDoc };
+  } catch (err) {
+    const fallbackNotes = await getUserNotes(userId);
+    return { notes: fallbackNotes.slice(0, pageSize), lastDoc: null };
+  }
 }

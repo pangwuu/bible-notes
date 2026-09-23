@@ -1,7 +1,7 @@
 /**
  * PassagePicker.tsx
  * YouVersion-Style Step-by-Step Passage Picker Modal Flow
- * (Book -> Chapter -> Verse Range)
+ * (Book to Chapter to Verse Range)
  * 
  * Strict Adherence to DESIGN.md and PROJECT.md:
  * - Base warm dark palette: bgBase (#1A1816), bgSurface (#242019), bgSurfaceRaised (#2E2921)
@@ -23,6 +23,7 @@ import {
   TextInput,
   TouchableWithoutFeedback,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { colors, radii, spacing } from '../constants/theme';
 import {
@@ -194,7 +195,16 @@ export default function PassagePicker({
     else if (onDismiss) onDismiss();
   }, [onClose, onDismiss]);
 
-  // Step state machine: 'book' -> 'chapter' -> 'verse'
+  // Dynamic tile size calculation for perfect 5-column square grid (Option 1)
+  const { width: windowWidth } = useWindowDimensions();
+  const squareTileSize = useMemo(() => {
+    // gridContainer has padding: spacing.md on left and right (spacing.md * 2)
+    // 5 columns have 4 gaps of spacing.sm
+    const availableWidth = windowWidth - spacing.md * 2 - spacing.sm * 4;
+    return Math.max(48, Math.floor(availableWidth / 5));
+  }, [windowWidth]);
+
+  // Step state machine: 'book' to 'chapter' to 'verse'
   const [step, setStep] = useState<PickerStep>('book');
 
   // Active selections
@@ -202,6 +212,7 @@ export default function PassagePicker({
   const [selectedChapter, setSelectedChapter] = useState<number>(8);
   const [selectedVerseStart, setSelectedVerseStart] = useState<number>(1);
   const [selectedVerseEnd, setSelectedVerseEnd] = useState<number>(11);
+  const [selectionAnchor, setSelectionAnchor] = useState<number | null>(null);
 
   // Search filter and testament segmentation
   const [testamentTab, setTestamentTab] = useState<'OT' | 'NT'>('NT');
@@ -220,6 +231,7 @@ export default function PassagePicker({
       setSelectedChapter(startCh);
       setSelectedVerseStart(startV);
       setSelectedVerseEnd(endV);
+      setSelectionAnchor(null);
 
       const bookMeta = findCanonicalBook(book);
       if (bookMeta) {
@@ -261,6 +273,7 @@ export default function PassagePicker({
     setSelectedChapter(1);
     setSelectedVerseStart(1);
     setSelectedVerseEnd(1);
+    setSelectionAnchor(null);
 
     if (book.chapters === 1) {
       // Boundary 17.4: Single-chapter book picker defaults chapter to 1
@@ -275,30 +288,38 @@ export default function PassagePicker({
     setSelectedChapter(chapterNum);
     setSelectedVerseStart(1);
     setSelectedVerseEnd(1);
+    setSelectionAnchor(null);
     setStep('verse');
   }, []);
 
   const handleSelectVerse = useCallback((verseNum: number) => {
-    setSelectedVerseStart((prevStart) => {
-      setSelectedVerseEnd((prevEnd) => {
-        // Tapping a verse lower than current start -> re-anchor start and end to this verse
-        if (verseNum < prevStart) {
-          return verseNum;
-        }
-        // Tapping same verse as start when range is already selected -> collapse to single verse
-        if (verseNum === prevStart && prevEnd > prevStart) {
-          return prevStart;
-        }
-        // Tapping a verse greater than or equal to start -> extend range
+    setSelectionAnchor((currentAnchor) => {
+      if (currentAnchor === null) {
+        // First tap: anchor start of range, select single verse
+        setSelectedVerseStart(verseNum);
+        setSelectedVerseEnd(verseNum);
         return verseNum;
-      });
-      return verseNum < prevStart ? verseNum : prevStart;
+      } else {
+        // Second tap: set range endpoints and complete selection
+        if (verseNum === currentAnchor) {
+          setSelectedVerseStart(verseNum);
+          setSelectedVerseEnd(verseNum);
+        } else if (verseNum > currentAnchor) {
+          setSelectedVerseStart(currentAnchor);
+          setSelectedVerseEnd(verseNum);
+        } else {
+          setSelectedVerseStart(verseNum);
+          setSelectedVerseEnd(currentAnchor);
+        }
+        return null;
+      }
     });
   }, []);
 
   const handleSelectEntireChapter = useCallback(() => {
     setSelectedVerseStart(1);
     setSelectedVerseEnd(currentChapterVerses);
+    setSelectionAnchor(null);
   }, [currentChapterVerses]);
 
   const handleBackStep = useCallback(() => {
@@ -320,6 +341,7 @@ export default function PassagePicker({
     setSelectedChapter(8);
     setSelectedVerseStart(1);
     setSelectedVerseEnd(11);
+    setSelectionAnchor(null);
     setTestamentTab('NT');
     setStep('book');
     setSearchQuery('');
@@ -515,6 +537,7 @@ export default function PassagePicker({
                   key={ch}
                   style={[
                     styles.chapterTile,
+                    { width: squareTileSize, height: squareTileSize },
                     isSelected && styles.chapterTileSelected,
                   ]}
                   onPress={() => handleSelectChapter(ch)}
@@ -546,7 +569,9 @@ export default function PassagePicker({
       <View style={styles.stepContainer}>
         <View style={styles.verseActionHeader}>
           <Text style={styles.stepHeaderNoticeText}>
-            Select start and end verse
+            {selectionAnchor !== null
+              ? `Select end verse (or confirm verse ${selectionAnchor})`
+              : 'Select start and end verse'}
           </Text>
           <Pressable
             style={styles.wholeChapterChip}
@@ -573,6 +598,7 @@ export default function PassagePicker({
                   key={v}
                   style={[
                     styles.verseTile,
+                    { width: squareTileSize, height: squareTileSize },
                     inRange && styles.verseTileInRange,
                     (isStart || isEnd) && styles.verseTileEndpoint,
                   ]}
@@ -932,16 +958,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
   },
   chapterTile: {
-    width: '17.6%',
-    aspectRatio: 1,
     backgroundColor: colors.bgSurface,
     borderRadius: radii.controls,
     borderWidth: 1,
     borderColor: colors.borderHairline,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 0,
   },
   chapterTileSelected: {
     borderColor: colors.accentKeyIdea,
@@ -949,8 +976,13 @@ const styles = StyleSheet.create({
   },
   chapterTileText: {
     fontSize: 15,
+    lineHeight: 18,
     fontWeight: '600',
     color: colors.textPrimary,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   chapterTileTextSelected: {
     color: colors.accentKeyIdea,
@@ -979,16 +1011,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
   },
   verseTile: {
-    width: '17.6%',
-    aspectRatio: 1,
     backgroundColor: colors.bgSurface,
     borderRadius: radii.controls,
     borderWidth: 1,
     borderColor: colors.borderHairline,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 0,
   },
   verseTileInRange: {
     backgroundColor: 'rgba(227, 165, 61, 0.15)',
@@ -1001,16 +1034,27 @@ const styles = StyleSheet.create({
   },
   verseTileText: {
     fontSize: 15,
+    lineHeight: 18,
     fontWeight: '500',
     color: colors.textPrimary,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   verseTileTextInRange: {
     color: colors.accentKeyIdea,
     fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 18,
+    includeFontPadding: false,
   },
   verseTileTextEndpoint: {
     color: colors.bgBase,
     fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 18,
+    includeFontPadding: false,
   },
   footerContainer: {
     backgroundColor: colors.bgSurface,

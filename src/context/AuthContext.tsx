@@ -44,6 +44,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const data = docSnap.data();
                 const defaultVis: NoteVisibility =
                   data.default_visibility || data.settings?.default_visibility || 'friends';
+                const preferredTrans: any =
+                  data.preferred_translation || data.settings?.preferred_translation || 'ESV';
 
                 const normalizedProfile: UserProfile = {
                   id: firebaseUser.uid,
@@ -53,9 +55,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   display_name: data.display_name || data.full_name || firebaseUser.displayName || '',
                   full_name: data.full_name || data.display_name || firebaseUser.displayName || '',
                   default_visibility: defaultVis,
+                  preferred_translation: preferredTrans,
                   settings: {
                     default_visibility: defaultVis,
                     custom_esv_api_key: data.settings?.custom_esv_api_key || data.custom_esv_api_key || '',
+                    preferred_translation: preferredTrans,
                   },
                   custom_esv_api_key: data.custom_esv_api_key || data.settings?.custom_esv_api_key || '',
                   created_at: data.created_at,
@@ -124,6 +128,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const data = docSnap.data();
         const defaultVis: NoteVisibility =
           data.default_visibility || data.settings?.default_visibility || 'friends';
+        const preferredTrans: any =
+          data.preferred_translation || data.settings?.preferred_translation || 'ESV';
 
         setProfile({
           id: auth.currentUser.uid,
@@ -133,9 +139,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           display_name: data.display_name || data.full_name || auth.currentUser.displayName || '',
           full_name: data.full_name || data.display_name || auth.currentUser.displayName || '',
           default_visibility: defaultVis,
+          preferred_translation: preferredTrans,
           settings: {
             default_visibility: defaultVis,
             custom_esv_api_key: data.settings?.custom_esv_api_key || data.custom_esv_api_key || '',
+            preferred_translation: preferredTrans,
           },
           custom_esv_api_key: data.custom_esv_api_key || data.settings?.custom_esv_api_key || '',
           created_at: data.created_at,

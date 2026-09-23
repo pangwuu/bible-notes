@@ -8,20 +8,29 @@ import {
   Divider,
   Portal,
   Dialog,
+  Switch,
 } from 'react-native-paper';
 import { colors, spacing, radius } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/AuthContext';
 import { updateUserProfile } from '../../src/services/authService';
-import type { NoteVisibility } from '../../src/types/user';
+import { clearPassageCache, SUPPORTED_TRANSLATIONS } from '../../src/services/bibleService';
+import safeStorage from '../../src/utils/safeStorage';
+import type { NoteVisibility, BibleTranslation } from '../../src/types/user';
 
 export default function SettingsScreen() {
   const { user, profile, signOut } = useAuth();
 
   // Preferences state
   const [defaultVisibility, setDefaultVisibility] = useState<NoteVisibility>('friends');
+  const [preferredTranslation, setPreferredTranslation] = useState<BibleTranslation>('ESV');
+  const [showVerseNumbers, setShowVerseNumbers] = useState<boolean>(true);
   const [esvKey, setEsvKey] = useState('');
   const [isSavingKey, setIsSavingKey] = useState(false);
   const [keySavedMessage, setKeySavedMessage] = useState<string | null>(null);
+
+  // Clear cache state
+  const [clearCacheDialogOpen, setClearCacheDialogOpen] = useState(false);
+  const [cacheClearedMessage, setCacheClearedMessage] = useState<string | null>(null);
 
   // Logout confirmation dialog state
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
@@ -33,10 +42,59 @@ export default function SettingsScreen() {
       if (profile.default_visibility) {
         setDefaultVisibility(profile.default_visibility);
       }
+      if (profile.preferred_translation || profile.settings?.preferred_translation) {
+        setPreferredTranslation(profile.preferred_translation || profile.settings?.preferred_translation || 'ESV');
+      }
       const existingKey = profile.settings?.custom_esv_api_key || profile.custom_esv_api_key || '';
       setEsvKey(existingKey);
     }
   }, [profile]);
+
+  // Read verse numbers preference from safeStorage
+  useEffect(() => {
+    safeStorage.getItem('bible_show_verse_numbers').then((val) => {
+      if (val !== null) {
+        try {
+          setShowVerseNumbers(JSON.parse(val));
+        } catch {
+          setShowVerseNumbers(val !== 'false');
+        }
+      }
+    });
+  }, []);
+
+  const handleToggleVerseNumbers = async (value: boolean) => {
+    setShowVerseNumbers(value);
+    await safeStorage.setItem('bible_show_verse_numbers', JSON.stringify(value));
+  };
+
+  const handleTranslationChange = async (trans: BibleTranslation) => {
+    setPreferredTranslation(trans);
+    if (user?.uid) {
+      try {
+        await updateUserProfile(user.uid, {
+          preferred_translation: trans,
+          settings: {
+            ...profile?.settings,
+            preferred_translation: trans,
+          },
+        });
+      } catch (err) {
+        console.warn('Failed to update preferred translation:', err);
+      }
+    }
+  };
+
+  const handleClearCache = async () => {
+    try {
+      await clearPassageCache();
+      setClearCacheDialogOpen(false);
+      setCacheClearedMessage('Passage cache cleared');
+      setTimeout(() => setCacheClearedMessage(null), 3000);
+    } catch (err) {
+      console.warn('Failed to clear passage cache:', err);
+    }
+  };
 
   const handleVisibilityChange = async (val: string) => {
     const newVis = val as NoteVisibility;
@@ -128,9 +186,54 @@ export default function SettingsScreen() {
         />
       </View>
 
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Preferred Bible translation</Text>
+        <Text style={styles.cardDescription}>
+          Primary translation used for reading and study reflections.
+        </Text>
+        <View style={styles.translationChipGrid}>
+          {SUPPORTED_TRANSLATIONS.map((t) => {
+            const isSelected = t.id === preferredTranslation;
+            return (
+              <Button
+                key={t.id}
+                mode={isSelected ? 'contained' : 'outlined'}
+                buttonColor={isSelected ? colors.accentKeyIdea : undefined}
+                textColor={isSelected ? colors.bgBase : colors.textPrimary}
+                style={[
+                  styles.translationChip,
+                  !isSelected && styles.translationChipOutlined,
+                ]}
+                labelStyle={styles.translationChipLabel}
+                onPress={() => handleTranslationChange(t.id)}
+              >
+                {t.shortName}
+              </Button>
+            );
+          })}
+        </View>
+      </View>
+
+      <Text style={styles.sectionHeader}>Bible display</Text>
+      <View style={styles.card}>
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleTextContainer}>
+            <Text style={styles.cardTitle}>Show verse numbers</Text>
+            <Text style={styles.cardDescription}>
+              Display superscript verse numbers inline when reading Scripture passages.
+            </Text>
+          </View>
+          <Switch
+            value={showVerseNumbers}
+            onValueChange={handleToggleVerseNumbers}
+            color={colors.accentKeyIdea}
+          />
+        </View>
+      </View>
+
       <Text style={styles.sectionHeader}>Crossway ESV API</Text>
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Custom API key</Text>
+        <Text style={styles.cardTitle}>Crossway ESV custom API key</Text>
         <Text style={styles.cardDescription}>
           Optionally override the default ESV Bearer token with your personal key.
         </Text>
@@ -163,6 +266,28 @@ export default function SettingsScreen() {
             disabled={isSavingKey}
           >
             Save key
+          </Button>
+        </View>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Passage offline cache</Text>
+        <Text style={styles.cardDescription}>
+          Remove downloaded Scripture passages from local device storage to free up space.
+        </Text>
+        <View style={styles.saveKeyRow}>
+          {cacheClearedMessage ? (
+            <Text style={styles.keySavedText}>{cacheClearedMessage}</Text>
+          ) : (
+            <View />
+          )}
+          <Button
+            mode="outlined"
+            textColor={colors.textSecondary}
+            style={styles.clearCacheBtn}
+            onPress={() => setClearCacheDialogOpen(true)}
+          >
+            Clear passage cache
           </Button>
         </View>
       </View>
@@ -208,6 +333,34 @@ export default function SettingsScreen() {
               disabled={isLoggingOut}
             >
               Sign out
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Clear Cache Confirmation Dialog */}
+        <Dialog
+          visible={clearCacheDialogOpen}
+          onDismiss={() => setClearCacheDialogOpen(false)}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Clear passage cache</Dialog.Title>
+          <Dialog.Content>
+            <Text style={styles.dialogDescription}>
+              Are you sure you want to remove all offline cached Bible passages from this device?
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              textColor={colors.textSecondary}
+              onPress={() => setClearCacheDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              textColor={colors.accentDanger}
+              onPress={handleClearCache}
+            >
+              Clear cache
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -299,6 +452,16 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: colors.bgSurface,
   },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  toggleTextContainer: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
   saveKeyRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -335,5 +498,29 @@ const styles = StyleSheet.create({
   dialogDescription: {
     color: colors.textSecondary,
     fontSize: 14,
+  },
+  translationChipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  translationChip: {
+    borderRadius: radius.control,
+    minWidth: 70,
+  },
+  translationChipOutlined: {
+    borderColor: colors.borderHairline,
+    backgroundColor: colors.bgSurfaceRaised,
+  },
+  translationChipLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginVertical: 4,
+    marginHorizontal: 8,
+  },
+  clearCacheBtn: {
+    borderColor: colors.borderHairline,
+    borderRadius: radius.control,
   },
 });

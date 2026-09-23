@@ -130,10 +130,10 @@ export function parseSwedishMarkdown(content: string): {
     return { lightContent: '', questionContent: '', arrowContent: '' };
   }
 
-  // Find header positions using flexible regex matching symbol or heading title
-  const keyIdeaRegex = /###?\s*💡\s*(?:Key Idea\(s\)|Key Idea)?/i;
-  const questionRegex = /###?\s*❓\s*(?:Question\(s\)|Question)?/i;
-  const arrowRegex = /###?\s*🏹\s*(?:Application\(s\)|Application)?/i;
+  // Find header positions using flexible regex matching symbol, heading title, or both
+  const keyIdeaRegex = /###?\s*(?:💡\s*)?(?:Key Idea\(s\)|Key Idea|💡)/i;
+  const questionRegex = /###?\s*(?:❓\s*)?(?:Question\(s\)|Question|❓)/i;
+  const arrowRegex = /###?\s*(?:🏹\s*)?(?:Application\(s\)|Application|🏹)/i;
 
   const mKey = keyIdeaRegex.exec(content);
   const mQue = questionRegex.exec(content);

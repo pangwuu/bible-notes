@@ -20,14 +20,17 @@ import { colors, spacing, radii, typography } from '../../src/constants/theme';
 import * as notesService from '../../src/services/notesService';
 import { Note, formatPassageDisplay } from '../../src/types/note';
 import { useAuth } from '../../src/context/AuthContext';
+import BibleReader from '../../src/components/BibleReader';
+import { findFriendNoteOverlaps, FriendOverlapItem } from '../../src/services/noteOverlapService';
 
 export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
   const navigation = useNavigation();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   const [note, setNote] = useState<Note | null>(null);
+  const [overlaps, setOverlaps] = useState<FriendOverlapItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +43,16 @@ export default function NoteDetailScreen() {
         if (isMounted) {
           if (fetched) {
             setNote(fetched);
+            // Fetch friend overlaps if user is logged in
+            if (user?.uid) {
+              findFriendNoteOverlaps(user.uid, fetched.passage)
+                .then((items) => {
+                  if (isMounted) setOverlaps(items);
+                })
+                .catch((err) => {
+                  console.warn('Failed to query friend note overlaps:', err);
+                });
+            }
           } else {
             setError('Note not found');
           }
@@ -54,7 +67,7 @@ export default function NoteDetailScreen() {
     return () => {
       isMounted = false;
     };
-  }, [id]);
+  }, [id, user]);
 
   const handleDelete = () => {
     if (!note) return;
@@ -141,44 +154,72 @@ export default function NoteDetailScreen() {
       </View>
 
       {/* Letterboxd-style Overlap Badge Pill */}
-      <View style={styles.overlapBadge}>
-        <View style={styles.overlapAvatar}>
-          <Text style={styles.overlapAvatarText}>S</Text>
-        </View>
-        <Text style={styles.overlapText}>Sarah also noted {note.passage.book} {note.passage.startChapter}:{note.passage.startVerse}</Text>
-      </View>
+      {overlaps.length > 0 && (
+        <View style={styles.overlapSection}>
+          {overlaps.map((item) => {
+            const friendName = item.friendProfile.display_name || item.friendProfile.username || 'Friend';
+            const initial = friendName[0].toUpperCase();
+            const passageSummary = formatPassageDisplay(item.note.passage);
 
-      {/* Scripture Reading Block */}
-      <View style={styles.scriptureCard}>
-        <Text style={styles.scriptureText}>
-          "For the word of God is living and active, sharper than any two-edged sword..."
-        </Text>
-      </View>
+            return (
+              <Pressable
+                key={item.note.id}
+                style={styles.overlapBadge}
+                onPress={() => router.push({ pathname: '/note/[id]', params: { id: item.note.id } })}
+              >
+                <View style={styles.overlapAvatar}>
+                  <Text style={styles.overlapAvatarText}>{initial}</Text>
+                </View>
+                <Text style={styles.overlapText}>
+                  {friendName} also noted {passageSummary}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+
+      {/* Live Scripture Reading Card with Multi-Translation Comparison */}
+      <BibleReader
+        passage={note.passage}
+        preferredTranslation={profile?.settings?.preferred_translation || 'ESV'}
+        customApiKey={profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key}
+        initiallyCollapsed={false}
+      />
 
       {/* Swedish Method Sections */}
       {note.lightContent ? (
         <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: colors.accent.keyIdea }]}>
-            💡 Key Idea
-          </Text>
+          <View style={styles.sectionHeaderRow}>
+            <Ionicons name="bulb-outline" size={15} color={colors.accent.keyIdea} />
+            <Text style={[styles.sectionLabel, { color: colors.accent.keyIdea }]}>
+              Key Idea
+            </Text>
+          </View>
           <Text style={styles.bodyText}>{note.lightContent}</Text>
         </View>
       ) : null}
 
       {note.questionContent ? (
         <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: colors.accent.question }]}>
-            ❓ Question
-          </Text>
+          <View style={styles.sectionHeaderRow}>
+            <Ionicons name="help-circle-outline" size={15} color={colors.accent.question} />
+            <Text style={[styles.sectionLabel, { color: colors.accent.question }]}>
+              Question
+            </Text>
+          </View>
           <Text style={styles.bodyText}>{note.questionContent}</Text>
         </View>
       ) : null}
 
       {note.arrowContent ? (
         <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: colors.accent.application }]}>
-            🏹 Application
-          </Text>
+          <View style={styles.sectionHeaderRow}>
+            <Ionicons name="navigate-outline" size={15} color={colors.accent.application} />
+            <Text style={[styles.sectionLabel, { color: colors.accent.application }]}>
+              Application
+            </Text>
+          </View>
           <Text style={styles.bodyText}>{note.arrowContent}</Text>
         </View>
       ) : null}
@@ -250,6 +291,10 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     fontSize: typography.caption.fontSize,
   },
+  overlapSection: {
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
   overlapBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -297,10 +342,15 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: spacing.lg,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: spacing.xs,
+  },
   sectionLabel: {
     fontSize: typography.caption.fontSize,
     fontWeight: '600',
-    marginBottom: spacing.xs,
   },
   bodyText: {
     fontFamily: typography.body.fontFamily,

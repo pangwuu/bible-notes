@@ -3,7 +3,7 @@
  * Governed strictly by DESIGN.md.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radii, typography } from '../constants/theme';
 import { NoteVisibility } from '../types/note';
+import TagInput from './TagInput';
 
 export interface SwedishEditorProps {
   lightContent: string;
@@ -30,6 +31,7 @@ export interface SwedishEditorProps {
   onChangeVisibility: (val: NoteVisibility) => void;
   onBlur?: () => void;
   editable?: boolean;
+  suggestionTags?: string[];
 }
 
 const COMMON_TAG_SUGGESTIONS = [
@@ -59,22 +61,11 @@ export const SwedishEditor: React.FC<SwedishEditorProps> = ({
   onChangeVisibility,
   onBlur,
   editable = true,
+  suggestionTags,
 }) => {
-  const [tagInput, setTagInput] = useState('');
-
-  const handleAddTag = useCallback(() => {
-    const clean = tagInput.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
-    if (clean && !tags.includes(clean) && tags.length < 5) {
-      onAddTag(clean);
-      setTagInput('');
-    }
-  }, [tagInput, tags, onAddTag]);
-
-  const filteredSuggestions = tagInput.trim()
-    ? COMMON_TAG_SUGGESTIONS.filter(
-        (t) => t.startsWith(tagInput.trim().toLowerCase()) && !tags.includes(t)
-      )
-    : [];
+  const combinedSuggestions = useMemo(() => {
+    return Array.from(new Set([...(suggestionTags || []), ...COMMON_TAG_SUGGESTIONS]));
+  }, [suggestionTags]);
 
   return (
     <View style={styles.container}>
@@ -134,18 +125,23 @@ export const SwedishEditor: React.FC<SwedishEditorProps> = ({
 
       <View style={styles.divider} accessibilityRole="none" importantForAccessibility="no" />
 
-      {/* Section 1: 💡 Key Idea */}
+      {/* Section 1: Key Idea */}
       <View style={styles.section}>
-        <Text style={[styles.sectionCaption, { color: colors.accent.keyIdea }]}>
-          💡 Key Idea
-        </Text>
+        <View style={styles.sectionHeaderRow}>
+          <Ionicons name="bulb-outline" size={15} color={colors.accent.keyIdea} />
+          <Text style={[styles.sectionCaption, { color: colors.accent.keyIdea }]}>
+            Key Idea
+          </Text>
+        </View>
         <TextInput
           value={lightContent}
           onChangeText={onChangeLight}
           onBlur={onBlur}
-          placeholder="What is the main truth, light, or takeaway?"
+          placeholder="What light or main truth shines out from this passage?"
           placeholderTextColor={colors.text.secondary}
           multiline
+          scrollEnabled={false}
+          textAlignVertical="top"
           editable={editable}
           style={styles.unborderedInput}
         />
@@ -153,11 +149,14 @@ export const SwedishEditor: React.FC<SwedishEditorProps> = ({
 
       <View style={styles.divider} accessibilityRole="none" importantForAccessibility="no" />
 
-      {/* Section 2: ❓ Question */}
+      {/* Section 2: Question */}
       <View style={styles.section}>
-        <Text style={[styles.sectionCaption, { color: colors.accent.question }]}>
-          ❓ Question
-        </Text>
+        <View style={styles.sectionHeaderRow}>
+          <Ionicons name="help-circle-outline" size={15} color={colors.accent.question} />
+          <Text style={[styles.sectionCaption, { color: colors.accent.question }]}>
+            Question
+          </Text>
+        </View>
         <TextInput
           value={questionContent}
           onChangeText={onChangeQuestion}
@@ -165,6 +164,8 @@ export const SwedishEditor: React.FC<SwedishEditorProps> = ({
           placeholder="What is unclear, difficult, or invites deeper inquiry?"
           placeholderTextColor={colors.text.secondary}
           multiline
+          scrollEnabled={false}
+          textAlignVertical="top"
           editable={editable}
           style={styles.unborderedInput}
         />
@@ -172,11 +173,14 @@ export const SwedishEditor: React.FC<SwedishEditorProps> = ({
 
       <View style={styles.divider} accessibilityRole="none" importantForAccessibility="no" />
 
-      {/* Section 3: 🏹 Application */}
+      {/* Section 3: Application */}
       <View style={styles.section}>
-        <Text style={[styles.sectionCaption, { color: colors.accent.application }]}>
-          🏹 Application
-        </Text>
+        <View style={styles.sectionHeaderRow}>
+          <Ionicons name="navigate-outline" size={15} color={colors.accent.application} />
+          <Text style={[styles.sectionCaption, { color: colors.accent.application }]}>
+            Application
+          </Text>
+        </View>
         <TextInput
           value={arrowContent}
           onChangeText={onChangeArrow}
@@ -184,6 +188,8 @@ export const SwedishEditor: React.FC<SwedishEditorProps> = ({
           placeholder="How does this truth strike your personal walk today?"
           placeholderTextColor={colors.text.secondary}
           multiline
+          scrollEnabled={false}
+          textAlignVertical="top"
           editable={editable}
           style={styles.unborderedInput}
         />
@@ -191,64 +197,15 @@ export const SwedishEditor: React.FC<SwedishEditorProps> = ({
 
       <View style={styles.divider} accessibilityRole="none" importantForAccessibility="no" />
 
-      {/* Tag Chips Management */}
-      <View style={styles.tagsContainer}>
-        <Text style={styles.metaLabel}>Tags ({tags.length}/5)</Text>
-
-        <View style={styles.tagChipsRow}>
-          {tags.map((tag) => (
-            <View key={tag} style={styles.tagChip}>
-              <Text style={styles.tagChipText}>#{tag}</Text>
-              {editable && (
-                <Pressable
-                  onPress={() => onRemoveTag(tag)}
-                  hitSlop={6}
-                  style={styles.removeTagBtn}
-                >
-                  <Ionicons name="close" size={14} color={colors.text.secondary} />
-                </Pressable>
-              )}
-            </View>
-          ))}
-        </View>
-
-        {editable && tags.length < 5 && (
-          <View style={styles.tagInputWrapper}>
-            <TextInput
-              value={tagInput}
-              onChangeText={setTagInput}
-              onSubmitEditing={handleAddTag}
-              placeholder="Add tag (e.g. grace, prayer)..."
-              placeholderTextColor={colors.text.secondary}
-              autoCapitalize="none"
-              returnKeyType="done"
-              style={styles.tagTextInput}
-            />
-            {tagInput.trim().length > 0 && (
-              <Pressable onPress={handleAddTag} style={styles.addTagButton}>
-                <Text style={styles.addTagButtonText}>Add</Text>
-              </Pressable>
-            )}
-          </View>
-        )}
-
-        {filteredSuggestions.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.suggestionsRow}>
-            {filteredSuggestions.map((sug) => (
-              <Pressable
-                key={sug}
-                onPress={() => {
-                  onAddTag(sug);
-                  setTagInput('');
-                }}
-                style={styles.suggestionChip}
-              >
-                <Text style={styles.suggestionText}>+{sug}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
-      </View>
+      {/* Tag Chips Management via TagInput */}
+      <TagInput
+        tags={tags}
+        onAddTag={onAddTag}
+        onRemoveTag={onRemoveTag}
+        suggestions={combinedSuggestions}
+        maxTags={5}
+        editable={editable}
+      />
     </View>
   );
 };
@@ -299,10 +256,15 @@ const styles = StyleSheet.create({
   section: {
     paddingVertical: spacing.sm,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: spacing.xs,
+  },
   sectionCaption: {
     fontSize: typography.caption.fontSize,
     fontWeight: '600',
-    marginBottom: spacing.xs,
   },
   unborderedInput: {
     fontFamily: typography.body.fontFamily,
@@ -313,6 +275,7 @@ const styles = StyleSheet.create({
     padding: 0,
     backgroundColor: 'transparent',
     borderWidth: 0,
+    textAlignVertical: 'top',
   },
   divider: {
     height: 1,

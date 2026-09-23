@@ -1,10 +1,14 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../src/constants/theme';
 import HeaderNotificationBell from '../../src/components/HeaderNotificationBell';
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+  const bottomInset = insets.bottom > 0 ? insets.bottom : 8;
+
   return (
     <Tabs
       screenOptions={{
@@ -24,9 +28,14 @@ export default function TabsLayout() {
           backgroundColor: colors.bgSurface,
           borderTopColor: colors.borderHairline,
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 8,
+          height: 56 + bottomInset,
+          paddingBottom: bottomInset,
+          paddingTop: 6,
+        },
+        tabBarItemStyle: {
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: 44,
         },
         tabBarActiveTintColor: colors.accentKeyIdea,
         tabBarInactiveTintColor: colors.textSecondary,

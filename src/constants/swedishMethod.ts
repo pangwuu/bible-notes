@@ -8,6 +8,7 @@ import { colors } from './theme';
 export interface SwedishSectionConfig {
   key: 'keyIdea' | 'question' | 'application';
   symbol: string;
+  iconName: 'bulb-outline' | 'help-circle-outline' | 'navigate-outline';
   name: string;
   headerMarkdown: string;
   color: string;
@@ -18,6 +19,7 @@ export const SWEDISH_SECTIONS: readonly SwedishSectionConfig[] = [
   {
     key: 'keyIdea',
     symbol: '💡',
+    iconName: 'bulb-outline',
     name: 'Key Idea',
     headerMarkdown: '### 💡 Key Idea(s)',
     color: colors.accent.keyIdea,
@@ -26,6 +28,7 @@ export const SWEDISH_SECTIONS: readonly SwedishSectionConfig[] = [
   {
     key: 'question',
     symbol: '❓',
+    iconName: 'help-circle-outline',
     name: 'Question',
     headerMarkdown: '### ❓ Question(s)',
     color: colors.accent.question,
@@ -34,6 +37,7 @@ export const SWEDISH_SECTIONS: readonly SwedishSectionConfig[] = [
   {
     key: 'application',
     symbol: '🏹',
+    iconName: 'navigate-outline',
     name: 'Application',
     headerMarkdown: '### 🏹 Application(s)',
     color: colors.accent.application,

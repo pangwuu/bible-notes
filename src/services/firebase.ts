@@ -11,7 +11,7 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 // @ts-ignore - getReactNativePersistence is exported by React Native entry point but missing from root public TS types
 import { initializeAuth, getReactNativePersistence, getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import safeStorage from '../utils/safeStorage';
 
 export const firebaseConfig = {
   apiKey: 'AIzaSyC_sKH5ZPgT0J6ZvvB5isV0KIDi8xBNleE',
@@ -32,7 +32,7 @@ export const app: FirebaseApp = getApps().length === 0
  * Idempotent Auth initialization with React Native AsyncStorage persistence.
  * 
  * - In React Native mobile runtimes (iOS, Android, Expo Go), getReactNativePersistence
- *   is defined and wraps AsyncStorage for persistent sessions across app restarts.
+ *   is defined and wraps safeStorage for persistent sessions across app restarts.
  * - In Node/Jest unit test environments, getReactNativePersistence is undefined;
  *   Auth initializes with default in-memory persistence to avoid native module crashes.
  * - If called multiple times (e.g., during Fast Refresh), catches the error and
@@ -41,7 +41,7 @@ export const app: FirebaseApp = getApps().length === 0
 function createAuth(): Auth {
   try {
     const persistence = typeof getReactNativePersistence === 'function'
-      ? getReactNativePersistence(AsyncStorage)
+      ? getReactNativePersistence(safeStorage as any)
       : undefined;
 
     return initializeAuth(app, {

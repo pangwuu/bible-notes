@@ -4,22 +4,23 @@
  * Governed strictly by DESIGN.md.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   StyleSheet,
   ScrollView,
   Pressable,
   RefreshControl,
-  TextInput,
 } from 'react-native';
-import { Text, SegmentedButtons } from 'react-native-paper';
-import { useRouter } from 'expo-router';
+import { Text, SegmentedButtons, Searchbar } from 'react-native-paper';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radii, typography } from '../../src/constants/theme';
 import * as notesService from '../../src/services/notesService';
 import { Note, formatPassageDisplay } from '../../src/types/note';
 import { useAuth } from '../../src/context/AuthContext';
+import NoteCard from '../../src/components/NoteCard';
+import EmptyState from '../../src/components/EmptyState';
 
 export default function NotesBrowserScreen() {
   const router = useRouter();
@@ -45,9 +46,12 @@ export default function NotesBrowserScreen() {
     }
   }, [user]);
 
-  useEffect(() => {
-    loadNotes();
-  }, [loadNotes]);
+  // Re-fetch notes every time screen regains focus (e.g. after deleting or editing a note)
+  useFocusEffect(
+    useCallback(() => {
+      loadNotes();
+    }, [loadNotes])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -94,22 +98,17 @@ export default function NotesBrowserScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* Search Input */}
-      <View style={styles.searchWrapper}>
-        <Ionicons name="search" size={16} color={colors.text.secondary} />
-        <TextInput
+      {/* Search Input matching Friends search component */}
+      <View style={styles.searchContainer}>
+        <Searchbar
+          placeholder="Search by book, tag, or reflection..."
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search by book, tag, or reflection..."
-          placeholderTextColor={colors.text.secondary}
-          style={styles.searchInput}
-          autoCapitalize="none"
+          style={styles.searchBar}
+          inputStyle={{ color: colors.textPrimary }}
+          placeholderTextColor={colors.textSecondary}
+          iconColor={colors.textSecondary}
         />
-        {searchQuery.length > 0 && (
-          <Pressable onPress={() => setSearchQuery('')} hitSlop={6}>
-            <Ionicons name="close-circle" size={16} color={colors.text.secondary} />
-          </Pressable>
-        )}
       </View>
 
       {/* View Mode Segment */}
@@ -177,12 +176,13 @@ export default function NotesBrowserScreen() {
         )}
 
         {filteredNotes.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyTitle}>No notes found</Text>
-            <Text style={styles.emptySubtitle}>
-              Tap the button below to capture your first Swedish Method note.
-            </Text>
-          </View>
+          <EmptyState
+            icon="book-outline"
+            title="No notes found"
+            subtitle="Tap the button below to capture your first Swedish Method note."
+            actionLabel="Create note"
+            onAction={() => router.push('/note/edit')}
+          />
         ) : viewMode === 'book' ? (
           notesByBook.map(([book, bookNotes]) => (
             <View key={book} style={styles.group}>
@@ -190,67 +190,21 @@ export default function NotesBrowserScreen() {
                 {book} ({bookNotes.length})
               </Text>
               {bookNotes.map((note) => (
-                <Pressable
+                <NoteCard
                   key={note.id}
-                  style={styles.noteItem}
+                  note={note}
                   onPress={() => router.push({ pathname: '/note/[id]', params: { id: note.id } })}
-                >
-                  <View style={styles.itemHeader}>
-                    <Text style={styles.itemTitle}>{formatPassageDisplay(note.passage)}</Text>
-                    {/* Swedish Symbol Indicators */}
-                    <View style={styles.swedishIndicators}>
-                      {note.lightContent ? (
-                        <Text style={styles.indicatorSymbol}>💡</Text>
-                      ) : null}
-                      {note.questionContent ? (
-                        <Text style={styles.indicatorSymbol}>❓</Text>
-                      ) : null}
-                      {note.arrowContent ? (
-                        <Text style={styles.indicatorSymbol}>🏹</Text>
-                      ) : null}
-                    </View>
-                  </View>
-
-                  {note.lightContent ? (
-                    <Text numberOfLines={2} style={styles.itemSnippet}>
-                      {note.lightContent}
-                    </Text>
-                  ) : null}
-
-                  {note.tags.length > 0 && (
-                    <View style={styles.tagChips}>
-                      {note.tags.map((t) => (
-                        <Text key={t} style={styles.tagLabel}>
-                          #{t}
-                        </Text>
-                      ))}
-                    </View>
-                  )}
-                </Pressable>
+                />
               ))}
             </View>
           ))
         ) : (
           filteredNotes.map((note) => (
-            <Pressable
+            <NoteCard
               key={note.id}
-              style={styles.noteItem}
+              note={note}
               onPress={() => router.push({ pathname: '/note/[id]', params: { id: note.id } })}
-            >
-              <View style={styles.itemHeader}>
-                <Text style={styles.itemTitle}>{formatPassageDisplay(note.passage)}</Text>
-                <View style={styles.swedishIndicators}>
-                  {note.lightContent ? <Text style={styles.indicatorSymbol}>💡</Text> : null}
-                  {note.questionContent ? <Text style={styles.indicatorSymbol}>❓</Text> : null}
-                  {note.arrowContent ? <Text style={styles.indicatorSymbol}>🏹</Text> : null}
-                </View>
-              </View>
-              {note.lightContent ? (
-                <Text numberOfLines={2} style={styles.itemSnippet}>
-                  {note.lightContent}
-                </Text>
-              ) : null}
-            </Pressable>
+            />
           ))
         )}
       </ScrollView>
@@ -273,23 +227,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg.base,
   },
-  searchWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.bg.surface,
-    borderRadius: radii.controls,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: colors.border.hairline,
-    gap: spacing.xs,
+  searchContainer: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
   },
-  searchInput: {
-    flex: 1,
-    color: colors.text.primary,
-    fontSize: typography.caption.fontSize,
+  searchBar: {
+    backgroundColor: colors.bgSurface,
+    borderRadius: radii.controls,
+    borderWidth: 1,
+    borderColor: colors.borderHairline,
   },
   segmentContainer: {
     paddingHorizontal: spacing.md,

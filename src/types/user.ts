@@ -5,9 +5,12 @@
 
 export type NoteVisibility = 'private' | 'friends';
 
+export type BibleTranslation = 'ESV' | 'WEB' | 'KJV' | 'ASV' | 'BBE' | 'NIV' | 'CSB' | 'NLT';
+
 export interface UserSettings {
   default_visibility?: NoteVisibility;
   custom_esv_api_key?: string;
+  preferred_translation?: BibleTranslation;
 }
 
 export interface UserDocument {
@@ -18,8 +21,10 @@ export interface UserDocument {
   display_name: string;
   full_name: string; // alias for display_name
   default_visibility: NoteVisibility;
+  preferred_translation?: BibleTranslation;
   settings?: UserSettings;
   custom_esv_api_key?: string;
+  search_tokens?: string[];
   created_at: any; // FieldValue.serverTimestamp() or Timestamp
   updated_at: any; // FieldValue.serverTimestamp() or Timestamp
 }

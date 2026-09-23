@@ -19,8 +19,10 @@ import { useNavigation, useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, spacing, radii, typography } from '../../src/constants/theme';
 import SwedishEditor from '../../src/components/SwedishEditor';
 import PassagePicker, { PassageSelection } from '../../src/components/PassagePicker';
+import BibleReader from '../../src/components/BibleReader';
 import { PassageReference, NoteVisibility, formatPassageDisplay } from '../../src/types/note';
 import * as notesService from '../../src/services/notesService';
+import { notifyFriendsOfNoteOverlap } from '../../src/services/noteOverlapService';
 import { useAuth } from '../../src/context/AuthContext';
 
 export default function NoteEditScreen() {
@@ -35,26 +37,30 @@ export default function NoteEditScreen() {
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState<boolean>(false);
 
-  // Note State
-  const [passage, setPassage] = useState<PassageReference>({
-    book: 'John',
-    startChapter: 3,
-    startVerse: 16,
-    endChapter: 3,
-    endVerse: 17,
-    startOrdinal: 26136,
-    endOrdinal: 26137,
-  });
+  // Note State - defaults to null for new notes so users choose their own passage
+  const [passage, setPassage] = useState<PassageReference | null>(null);
 
   const [lightContent, setLightContent] = useState('');
   const [questionContent, setQuestionContent] = useState('');
   const [arrowContent, setArrowContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
+  const [userSuggestions, setUserSuggestions] = useState<string[]>([]);
   const [visibility, setVisibility] = useState<NoteVisibility>(
     profile?.default_visibility || 'friends'
   );
 
+  const [currentNoteId, setCurrentNoteId] = useState<string | undefined>(id);
+  const currentNoteIdRef = useRef<string | undefined>(id);
   const isSavingRef = useRef(false);
+
+  // Load user tag history for autocomplete
+  useEffect(() => {
+    if (user?.uid) {
+      notesService.getUserTags(user.uid).then((t) => {
+        setUserSuggestions(t);
+      }).catch(() => {});
+    }
+  }, [user?.uid]);
 
   // Load existing note if editing
   useEffect(() => {
@@ -88,13 +94,20 @@ export default function NoteEditScreen() {
   // Master Save Handler
   const handleSave = useCallback(async (): Promise<boolean> => {
     if (isSavingRef.current) return false;
+    if (!passage) {
+      setErrorBanner('Please select a scripture passage before saving');
+      return false;
+    }
     isSavingRef.current = true;
     setIsSaving(true);
     setErrorBanner(null);
 
+    const targetId = currentNoteIdRef.current || id;
+
     try {
-      if (id) {
-        await notesService.updateNote(id, {
+      let savedNote;
+      if (targetId) {
+        savedNote = await notesService.updateNote(targetId, {
           passage,
           lightContent,
           questionContent,
@@ -103,7 +116,7 @@ export default function NoteEditScreen() {
           visibility,
         });
       } else {
-        await notesService.createNote({
+        savedNote = await notesService.createNote({
           userId: user?.uid || '',
           authorUsername: profile?.username || user?.displayName || '',
           authorDisplayName: profile?.display_name || user?.displayName || '',
@@ -113,6 +126,18 @@ export default function NoteEditScreen() {
           arrowContent,
           tags,
           visibility,
+        });
+        if (savedNote?.id) {
+          setCurrentNoteId(savedNote.id);
+          currentNoteIdRef.current = savedNote.id;
+        }
+      }
+
+      // If note is visible to friends, evaluate verse overlaps and notify friends asynchronously
+      if (savedNote && visibility === 'friends' && user?.uid) {
+        const authorName = profile?.display_name || profile?.username || user?.displayName || 'A friend';
+        notifyFriendsOfNoteOverlap(user.uid, authorName, savedNote).catch((err) => {
+          console.warn('Failed to dispatch friend overlap notifications:', err);
         });
       }
 
@@ -179,10 +204,12 @@ export default function NoteEditScreen() {
         <Pressable
           onPress={handleExplicitSave}
           disabled={isSaving}
-          style={[styles.saveButton, isSaving && { opacity: 0.6 }]}
+          style={styles.headerButton}
           hitSlop={8}
         >
-          <Text style={styles.saveButtonText}>{isSaving ? 'Saving...' : 'Save'}</Text>
+          <Text style={[styles.headerSaveText, isSaving && { opacity: 0.6 }]}>
+            {isSaving ? 'Saving...' : 'Save'}
+          </Text>
         </Pressable>
       ),
     });
@@ -204,17 +231,35 @@ export default function NoteEditScreen() {
         </View>
       )}
 
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets={true}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Passage Selector Trigger Card */}
         <Pressable
           onPress={() => setShowPicker(true)}
-          style={styles.pickerTrigger}
+          style={[styles.pickerTrigger, !passage && styles.pickerTriggerEmpty]}
           accessibilityRole="button"
           accessibilityLabel="Select passage reference"
         >
           <Text style={styles.pickerLabel}>Passage Reference</Text>
-          <Text style={styles.pickerValue}>{formatPassageDisplay(passage)}</Text>
+          <Text style={[styles.pickerValue, !passage && styles.pickerValueEmpty]}>
+            {passage ? formatPassageDisplay(passage) : 'Tap to select passage...'}
+          </Text>
         </Pressable>
+
+        {/* Live Scripture Reader with Translation Switcher - only rendered when a passage is selected */}
+        {passage && (
+          <BibleReader
+            passage={passage}
+            preferredTranslation={profile?.settings?.preferred_translation || 'ESV'}
+            customApiKey={profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key}
+            initiallyCollapsed={false}
+          />
+        )}
 
         {/* Day One Unbordered Swedish Editor */}
         <SwedishEditor
@@ -249,22 +294,19 @@ export default function NoteEditScreen() {
             setVisibility(vis);
             setIsDirty(true);
           }}
-          onBlur={() => {
-            if (isDirty) {
-              handleSave();
-            }
-          }}
+          suggestionTags={userSuggestions}
         />
       </ScrollView>
 
       {/* YouVersion Passage Picker Modal */}
       <PassagePicker
         visible={showPicker}
-        initialPassage={passage}
+        initialPassage={passage || undefined}
         onSelect={(selected: PassageSelection) => {
           setPassage(selected);
           setIsDirty(true);
           setShowPicker(false);
+          if (errorBanner) setErrorBanner(null);
         }}
         onClose={() => setShowPicker(false)}
       />
@@ -283,7 +325,7 @@ const styles = StyleSheet.create({
   },
   container: {
     padding: spacing.md,
-    paddingBottom: spacing.xxl,
+    paddingBottom: 250,
   },
   headerButton: {
     paddingHorizontal: 8,
@@ -293,16 +335,10 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     fontSize: typography.body.fontSize,
   },
-  saveButton: {
-    backgroundColor: colors.accent.keyIdea,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: radii.controls,
-  },
-  saveButtonText: {
-    color: colors.bg.base,
+  headerSaveText: {
+    color: colors.accent.keyIdea,
     fontWeight: '600',
-    fontSize: typography.label.fontSize,
+    fontSize: typography.body.fontSize,
   },
   pickerTrigger: {
     backgroundColor: colors.bg.surface,
@@ -311,6 +347,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border.hairline,
     marginBottom: spacing.md,
+  },
+  pickerTriggerEmpty: {
+    borderStyle: 'dashed',
+    borderColor: colors.accent.keyIdea,
   },
   pickerLabel: {
     fontSize: typography.caption.fontSize,
@@ -321,6 +361,11 @@ const styles = StyleSheet.create({
     fontSize: typography.title.fontSize,
     fontWeight: '600',
     color: colors.text.primary,
+  },
+  pickerValueEmpty: {
+    fontSize: typography.body.fontSize,
+    color: colors.text.secondary,
+    fontWeight: '400',
   },
   errorBanner: {
     backgroundColor: colors.accent.danger,
