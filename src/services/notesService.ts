@@ -116,6 +116,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
       id: s.id,
       title: s.title,
       icon: s.icon,
+      color: s.color,
       content: s.content || '',
     })),
     content,
@@ -213,6 +214,7 @@ export async function updateNote(noteId: string, updates: UpdateNoteInput): Prom
       id: s.id,
       title: s.title,
       icon: s.icon,
+      color: s.color,
       content: s.content || '',
     }));
     if (updates.content === undefined) {

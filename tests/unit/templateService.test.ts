@@ -11,7 +11,9 @@ import {
   getTemplateById,
   compileSectionsToMarkdown,
   initializeSectionValues,
+  getSectionColor,
 } from '../../src/constants/templates';
+import { colors } from '../../src/constants/theme';
 import { NoteTemplate } from '../../src/types/template';
 
 describe('Note Templates Constants & Helpers', () => {
@@ -77,5 +79,33 @@ describe('Note Templates Constants & Helpers', () => {
     // Fallback to default when not found
     const missing = getTemplateById('unknown_id', [customTemplate]);
     expect(missing.id).toBe(DEFAULT_TEMPLATE.id);
+  });
+
+  describe('getSectionColor consistency', () => {
+    it('returns customColor directly when provided', () => {
+      expect(getSectionColor('light', '#123456')).toBe('#123456');
+      expect(getSectionColor('custom_section', '#ABCDEF')).toBe('#ABCDEF');
+    });
+
+    it('maps section IDs consistently to canonical theme colors', () => {
+      expect(getSectionColor('light')).toBe(colors.accent.keyIdea);
+      expect(getSectionColor('scripture')).toBe(colors.accent.keyIdea);
+      expect(getSectionColor('head')).toBe(colors.accent.keyIdea);
+      expect(getSectionColor('notes')).toBe(colors.accent.keyIdea);
+      expect(getSectionColor('interpretation')).toBe(colors.accent.keyIdea);
+
+      expect(getSectionColor('question')).toBe(colors.accent.question);
+      expect(getSectionColor('observation')).toBe(colors.accent.question);
+
+      expect(getSectionColor('arrow')).toBe(colors.accent.application);
+      expect(getSectionColor('application')).toBe(colors.accent.application);
+      expect(getSectionColor('hands')).toBe(colors.accent.application);
+
+      expect(getSectionColor('prayer')).toBe(colors.accent.social);
+      expect(getSectionColor('heart')).toBe(colors.accent.social);
+
+      // Default fallback
+      expect(getSectionColor('unknown')).toBe(colors.accent.keyIdea);
+    });
   });
 });

@@ -91,6 +91,7 @@ export const TemplateManagerModal: React.FC<TemplateManagerModalProps> = ({
           >
             {templates.map((template) => {
               const isSelected = template.id === selectedTemplateId;
+              const templateColor = template.color || colors.accent.keyIdea;
               return (
                 <View
                   key={template.id}
@@ -98,11 +99,11 @@ export const TemplateManagerModal: React.FC<TemplateManagerModalProps> = ({
                 >
                   <View style={styles.cardHeader}>
                     <View style={styles.cardTitleRow}>
-                      <View style={styles.iconCircle}>
+                      <View style={[styles.iconCircle, { borderColor: templateColor }]}>
                         <TemplateIcon
                           name={template.icon || 'document-text-outline'}
                           size={18}
-                          color={colors.accent.keyIdea}
+                          color={templateColor}
                         />
                       </View>
                       <View style={styles.nameBlock}>
@@ -170,7 +171,7 @@ export const TemplateManagerModal: React.FC<TemplateManagerModalProps> = ({
                           <TemplateIcon
                             name={sec.icon || 'document-text-outline'}
                             size={12}
-                            color={colors.accent.keyIdea}
+                            color={sec.color || templateColor}
                             style={styles.secChipIcon}
                           />
                         ) : null}

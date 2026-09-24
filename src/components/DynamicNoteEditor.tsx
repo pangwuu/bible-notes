@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { TemplateIcon } from './TemplateIcon';
 import { colors, spacing, radii, typography } from '../constants/theme';
+import { getSectionColor } from '../constants/templates';
 import { NoteVisibility, NoteSectionValue } from '../types/note';
 import { NoteTemplate } from '../types/template';
 import TagInput from './TagInput';
@@ -65,13 +66,8 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
     return Array.from(new Set([...(suggestionTags || []), ...COMMON_TAG_SUGGESTIONS]));
   }, [suggestionTags]);
 
-  const getSectionColor = (sec: NoteSectionValue, templateSec?: any) => {
-    if (sec.color) return sec.color;
-    if (templateSec?.color) return templateSec.color;
-    if (sec.id === 'light') return colors.accent.keyIdea;
-    if (sec.id === 'question') return colors.accent.question;
-    if (sec.id === 'arrow') return colors.accent.application;
-    return colors.accent.keyIdea;
+  const resolveSectionColor = (sec: NoteSectionValue, templateSec?: any) => {
+    return getSectionColor(sec.id, sec.color || templateSec?.color);
   };
 
   return (
@@ -147,7 +143,7 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
       {sections.map((section, idx) => {
         const templateSec = template.sections[idx] || template.sections.find((s) => s.id === section.id);
         const iconName = (section.icon || templateSec?.icon || 'document-text-outline') as any;
-        const color = getSectionColor(section, templateSec);
+        const color = resolveSectionColor(section, templateSec);
         const placeholder =
           templateSec?.placeholder || `Write your reflection for ${section.title}...`;
 

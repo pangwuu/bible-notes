@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { TemplateIcon } from '../../src/components/TemplateIcon';
 import Markdown from 'react-native-markdown-display';
 import { colors, spacing, radii, typography, markdownStyles } from '../../src/constants/theme';
+import { getSectionColor } from '../../src/constants/templates';
 import * as notesService from '../../src/services/notesService';
 import { Note, formatPassageDisplay, PassageReference, PassageSegment } from '../../src/types/note';
 import { formatSegmentDisplay, createPassageReference } from '../../src/utils/passageParser';
@@ -280,15 +281,7 @@ export default function NoteDetailScreen() {
       {note.sections && note.sections.length > 0 ? (
         note.sections.map((sec) => {
           if (!sec.content?.trim()) return null;
-          const secColor =
-            sec.color ||
-            (sec.id === 'light'
-              ? colors.accent.keyIdea
-              : sec.id === 'question'
-              ? colors.accent.question
-              : sec.id === 'arrow'
-              ? colors.accent.application
-              : colors.accent.keyIdea);
+          const secColor = getSectionColor(sec.id, sec.color);
 
           return (
             <View key={sec.id} style={styles.section}>

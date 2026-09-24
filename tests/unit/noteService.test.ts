@@ -388,4 +388,49 @@ describe('NotesService Unit Tests', () => {
     expect(parsedList).toHaveLength(1);
     expect(parsedList[0].id).toBe(note.id);
   });
+
+  test('createNote and updateNote preserve custom section colors', async () => {
+    mockSetDoc.mockResolvedValueOnce(undefined);
+
+    const inputWithCustomColors: CreateNoteInput = {
+      userId: 'user_123',
+      passage: samplePassage,
+      templateId: 'custom_template_1',
+      templateName: 'Custom Study',
+      sections: [
+        { id: 's1', title: 'Deep Dive', icon: 'star-outline', color: '#9584B8', content: 'Deep insight' },
+        { id: 's2', title: 'Takeaway', icon: 'flag-outline', color: '#4B9B94', content: 'Actionable takeaway' },
+      ],
+      tags: ['study'],
+      visibility: 'friends',
+    };
+
+    const created = await createNote(inputWithCustomColors);
+    expect(created.sections).toBeDefined();
+    expect(created.sections![0].color).toBe('#9584B8');
+    expect(created.sections![1].color).toBe('#4B9B94');
+
+    const firestorePayload = mockSetDoc.mock.calls[0][1];
+    expect(firestorePayload.sections[0].color).toBe('#9584B8');
+    expect(firestorePayload.sections[1].color).toBe('#4B9B94');
+
+    // Test updateNote preserves custom color
+    mockGetDoc.mockResolvedValueOnce({
+      exists: () => true,
+      id: created.id,
+      data: () => firestorePayload,
+    });
+    mockUpdateDoc.mockResolvedValueOnce(undefined);
+
+    const updated = await updateNote(created.id, {
+      sections: [
+        { id: 's1', title: 'Deep Dive', icon: 'star-outline', color: '#9584B8', content: 'Updated insight' },
+        { id: 's2', title: 'Takeaway', icon: 'flag-outline', color: '#4B9B94', content: 'Updated takeaway' },
+      ],
+    });
+
+    expect(updated.sections![0].color).toBe('#9584B8');
+    const updatePayload = mockUpdateDoc.mock.calls[0][1];
+    expect(updatePayload.sections[0].color).toBe('#9584B8');
+  });
 });

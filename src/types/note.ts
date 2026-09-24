@@ -3,6 +3,8 @@
  * Governed strictly by DESIGN.md, specs.md (§6.3), and firestore.rules.
  */
 
+import { colors } from '../constants/theme';
+
 export type NoteVisibility = 'friends' | 'private' | 'public';
 
 /**
@@ -98,6 +100,7 @@ export interface NoteDocument {
     id: string;
     title: string;
     icon?: string;
+    color?: string;
     content: string;
   }>;
 
@@ -348,9 +351,9 @@ export function noteDocumentToNote(data: any, id: string): Note {
   } else {
     // Synthesize sections from Swedish fields if legacy/blank
     sections = [
-      { id: 'light', title: 'Key Idea', icon: 'bulb-outline', color: '#E3A53D', content: lightContent },
-      { id: 'question', title: 'Question', icon: 'help-circle-outline', color: '#5B93C4', content: questionContent },
-      { id: 'arrow', title: 'Application', icon: 'footsteps-outline', color: '#7BA05B', content: arrowContent },
+      { id: 'light', title: 'Key Idea', icon: 'bulb-outline', color: colors.accent.keyIdea, content: lightContent },
+      { id: 'question', title: 'Question', icon: 'help-circle-outline', color: colors.accent.question, content: questionContent },
+      { id: 'arrow', title: 'Application', icon: 'footsteps-outline', color: colors.accent.application, content: arrowContent },
     ];
   }
 

@@ -270,7 +270,7 @@ export default function SettingsScreen() {
           <View style={styles.toggleTextContainer}>
             <Text style={styles.cardTitle}>Default text size</Text>
             <Text style={styles.cardDescription}>
-              Base font size for reading Scripture across note reflections.
+              Base font size for Scripture.
             </Text>
           </View>
           <FontSizeControls

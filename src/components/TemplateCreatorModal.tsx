@@ -37,9 +37,9 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [icon, setIcon] = useState('bulb-outline');
-  const [color, setColor] = useState('#E3A53D');
+  const [color, setColor] = useState<string>(colors.accent.keyIdea);
   const [sections, setSections] = useState<NoteTemplateSection[]>([
-    { id: 'sec_1', title: '', icon: 'bulb-outline', color: '#E3A53D', placeholder: '' },
+    { id: 'sec_1', title: '', icon: 'bulb-outline', color: colors.accent.keyIdea, placeholder: '' },
   ]);
   const [showIconPicker, setShowIconPicker] = useState<number | 'template' | null>(null);
 
@@ -48,19 +48,19 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
       setName(initialTemplate.name);
       setDescription(initialTemplate.description || '');
       setIcon(initialTemplate.icon || 'bulb-outline');
-      setColor(initialTemplate.color || '#E3A53D');
+      setColor(initialTemplate.color || colors.accent.keyIdea);
       setSections(
         initialTemplate.sections.length > 0
-          ? initialTemplate.sections.map((s) => ({ ...s, color: s.color || '#E3A53D' }))
-          : [{ id: 'sec_1', title: '', icon: 'bulb-outline', color: '#E3A53D', placeholder: '' }]
+          ? initialTemplate.sections.map((s) => ({ ...s, color: s.color || colors.accent.keyIdea }))
+          : [{ id: 'sec_1', title: '', icon: 'bulb-outline', color: colors.accent.keyIdea, placeholder: '' }]
       );
     } else {
       setName('');
       setDescription('');
       setIcon('bulb-outline');
-      setColor('#E3A53D');
+      setColor(colors.accent.keyIdea);
       setSections([
-        { id: 'sec_1', title: '', icon: 'bulb-outline', color: '#E3A53D', placeholder: '' },
+        { id: 'sec_1', title: '', icon: 'bulb-outline', color: colors.accent.keyIdea, placeholder: '' },
       ]);
     }
   }, [initialTemplate, visible]);
@@ -78,7 +78,7 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
     const nextId = `sec_${Date.now()}_${sections.length + 1}`;
     setSections([
       ...sections,
-      { id: nextId, title: '', icon: 'document-text-outline', color: '#5B93C4', placeholder: '' },
+      { id: nextId, title: '', icon: 'document-text-outline', color: colors.accent.question, placeholder: '' },
     ]);
   };
 
@@ -141,8 +141,8 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
     showIconPicker === 'template'
       ? color
       : typeof showIconPicker === 'number'
-      ? sections[showIconPicker]?.color || '#E3A53D'
-      : '#E3A53D';
+      ? sections[showIconPicker]?.color || colors.accent.keyIdea
+      : colors.accent.keyIdea;
 
   const activePickerIcon =
     showIconPicker === 'template'
@@ -237,7 +237,7 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
             </View>
 
             {sections.map((sec, idx) => {
-              const secColor = sec.color || '#E3A53D';
+              const secColor = sec.color || colors.accent.keyIdea;
               return (
                 <View key={sec.id} style={styles.sectionCard}>
                   <View style={styles.secCardHeader}>
