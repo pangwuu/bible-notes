@@ -117,13 +117,17 @@ describe('Note Overlap Math & Discovery', () => {
 
   describe('findFriendNoteOverlaps with Firestore queries', () => {
     const targetPassage: PassageReference = {
-      book: 'Romans',
-      startChapter: 8,
-      startVerse: 28,
-      endChapter: 8,
-      endVerse: 30,
-      startOrdinal: 28145,
-      endOrdinal: 28147,
+      display: 'Romans 8:28–30',
+      books: ['Romans'],
+      segments: [
+        {
+          book: 'Romans',
+          startChapter: 8,
+          startVerse: 28,
+          endChapter: 8,
+          endVerse: 30,
+        },
+      ],
     };
 
     test('returns empty array when user has no friends', async () => {
@@ -155,13 +159,19 @@ describe('Note Overlap Math & Discovery', () => {
             id: 'note_sarah_1',
             data: () => ({
               user_id: 'friend_sarah',
-              book: 'Romans',
-              chapter_start: 8,
-              verse_start: 26,
-              chapter_end: 8,
-              verse_end: 29,
-              start_verse_id: 28143,
-              end_verse_id: 28146,
+              passage: {
+                display: 'Romans 8:26–29',
+                books: ['Romans'],
+                segments: [
+                  {
+                    book: 'Romans',
+                    startChapter: 8,
+                    startVerse: 26,
+                    endChapter: 8,
+                    endVerse: 29,
+                  },
+                ],
+              },
               visibility: 'friends',
               content: '### 💡 Key Idea\nSpirit intercedes',
             }),
@@ -174,8 +184,15 @@ describe('Note Overlap Math & Discovery', () => {
       expect(overlaps).toHaveLength(1);
       expect(overlaps[0].friendProfile.display_name).toBe('Sarah Smith');
       expect(overlaps[0].note.id).toBe('note_sarah_1');
-      // Overlap of [28145, 28147] with [28143, 28146] is [28145, 28146]
-      expect(overlaps[0].overlapRange).toEqual([28145, 28146]);
+      expect(overlaps[0].overlapSegments).toEqual([
+        {
+          book: 'Romans',
+          startChapter: 8,
+          startVerse: 26,
+          endChapter: 8,
+          endVerse: 29,
+        },
+      ]);
     });
 
     test('ignores notes with no ordinal overlap', async () => {
@@ -199,13 +216,19 @@ describe('Note Overlap Math & Discovery', () => {
             id: 'note_sarah_romans1',
             data: () => ({
               user_id: 'friend_sarah',
-              book: 'Romans',
-              chapter_start: 1,
-              verse_start: 1,
-              chapter_end: 1,
-              verse_end: 5,
-              start_verse_id: 27931,
-              end_verse_id: 27935,
+              passage: {
+                display: 'Romans 1:1–5',
+                books: ['Romans'],
+                segments: [
+                  {
+                    book: 'Romans',
+                    startChapter: 1,
+                    startVerse: 1,
+                    endChapter: 1,
+                    endVerse: 5,
+                  },
+                ],
+              },
               visibility: 'friends',
               content: 'Paul a servant',
             }),
@@ -224,21 +247,18 @@ describe('Note Overlap Math & Discovery', () => {
         id: 'note_p1',
         userId: 'u1',
         user_id: 'u1',
-        book: 'John',
-        chapter_start: 3,
-        verse_start: 16,
-        chapter_end: 3,
-        verse_end: 16,
-        start_verse_id: 26137,
-        end_verse_id: 26137,
         passage: {
-          book: 'John',
-          startChapter: 3,
-          startVerse: 16,
-          endChapter: 3,
-          endVerse: 16,
-          startOrdinal: 26137,
-          endOrdinal: 26137,
+          display: 'John 3:16',
+          books: ['John'],
+          segments: [
+            {
+              book: 'John',
+              startChapter: 3,
+              startVerse: 16,
+              endChapter: 3,
+              endVerse: 16,
+            },
+          ],
         },
         lightContent: 'God so loved',
         questionContent: '',
@@ -277,13 +297,19 @@ describe('Note Overlap Math & Discovery', () => {
             id: 'mark_note_1',
             data: () => ({
               user_id: 'friend_mark',
-              book: 'John',
-              chapter_start: 3,
-              verse_start: 16,
-              chapter_end: 3,
-              verse_end: 17,
-              start_verse_id: 26137,
-              end_verse_id: 26138,
+              passage: {
+                display: 'John 3:16–17',
+                books: ['John'],
+                segments: [
+                  {
+                    book: 'John',
+                    startChapter: 3,
+                    startVerse: 16,
+                    endChapter: 3,
+                    endVerse: 17,
+                  },
+                ],
+              },
               visibility: 'friends',
             }),
           });
@@ -294,21 +320,18 @@ describe('Note Overlap Math & Discovery', () => {
         id: 'new_note_1',
         userId: 'u1',
         user_id: 'u1',
-        book: 'John',
-        chapter_start: 3,
-        verse_start: 16,
-        chapter_end: 3,
-        verse_end: 16,
-        start_verse_id: 26137,
-        end_verse_id: 26137,
         passage: {
-          book: 'John',
-          startChapter: 3,
-          startVerse: 16,
-          endChapter: 3,
-          endVerse: 16,
-          startOrdinal: 26137,
-          endOrdinal: 26137,
+          display: 'John 3:16',
+          books: ['John'],
+          segments: [
+            {
+              book: 'John',
+              startChapter: 3,
+              startVerse: 16,
+              endChapter: 3,
+              endVerse: 16,
+            },
+          ],
         },
         lightContent: 'John 3:16 note',
         questionContent: '',

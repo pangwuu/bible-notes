@@ -43,11 +43,107 @@ export const SUPPORTED_TRANSLATIONS: TranslationMetadata[] = [
 export interface VerseSegment {
   verseNumber: number;
   text: string;
+  heading?: string;
+}
+
+export interface MultiPassageSection {
+  title: string;
+  verses: VerseSegment[];
+  text: string;
+}
+
+/**
+ * Builds HTML document for Scripture rendering inside RenderHtml.
+ * Generates an intentional typography hierarchy:
+ * 1. Passage Reference Title (e.g. John 3:16, Luke 1:1–80) - larger, bold
+ * 2. Pericope Subheadings - bold, not significantly larger
+ * 3. Scripture Verse Text - normal serif text with clean superscript verse numbers
+ */
+export function buildScriptureHtml(
+  sectionsOrVerses: MultiPassageSection[] | VerseSegment[],
+  showVerseNumbers: boolean,
+  textColor: string,
+  verseNumColor: string,
+  fontSize: number,
+  lineHeight: number,
+  defaultTitle?: string
+): string {
+  const isSections = sectionsOrVerses.length > 0 && 'verses' in sectionsOrVerses[0];
+
+  const sections: MultiPassageSection[] = isSections
+    ? (sectionsOrVerses as MultiPassageSection[])
+    : [
+        {
+          title: defaultTitle || '',
+          verses: sectionsOrVerses as VerseSegment[],
+          text: '',
+        },
+      ];
+
+  const sectionsHtml = sections
+    .map((sec, idx) => {
+      const titleHtml = sec.title
+        ? `<div class="passage-header-title">${sec.title}</div>`
+        : '';
+
+      const dividerHtml =
+        idx > 0
+          ? `<div class="passage-divider"></div>`
+          : '';
+
+      const innerVerses = sec.verses
+        .map((v: VerseSegment) => {
+          const headingHtml = v.heading
+            ? `<div class="scripture-subheading">${v.heading}</div>`
+            : '';
+          const numSpan = showVerseNumbers
+            ? `<sup style="font-size:11px;font-weight:700;color:${verseNumColor};vertical-align:super;line-height:0;">${v.verseNumber}&nbsp;</sup>`
+            : '';
+          return `${headingHtml}${numSpan}<span>${v.text}&nbsp;</span>`;
+        })
+        .join('');
+
+      return `${dividerHtml}${titleHtml}<div class="passage-body">${innerVerses}</div>`;
+    })
+    .join('');
+
+  return `<div style="color:${textColor};font-size:${fontSize}px;line-height:${lineHeight}px;margin:0;padding:0;">
+    <style>
+      .passage-header-title {
+        font-family: 'SourceSerifPro';
+        font-size: ${fontSize + 6}px;
+        font-weight: 700;
+        color: #EDE7DD;
+        margin-top: 6px;
+        margin-bottom: 12px;
+        border-bottom: 1px solid rgba(227, 165, 61, 0.25);
+        padding-bottom: 6px;
+      }
+      .passage-divider {
+        height: 1px;
+        background-color: #332E27;
+        margin-top: 18px;
+        margin-bottom: 18px;
+      }
+      .scripture-subheading, .scripture-heading, h3, h4, b.heading {
+        font-family: 'SourceSerifPro';
+        font-weight: 700;
+        color: #EDE7DD;
+        display: block;
+        margin-top: 14px;
+        margin-bottom: 4px;
+        font-size: ${fontSize + 1}px;
+        line-height: ${Math.round((fontSize + 1) * 1.4)}px;
+      }
+    </style>
+    ${sectionsHtml}
+  </div>`;
 }
 
 export interface PassageFetchResult {
   verses: VerseSegment[];
   text: string;
+  sections?: MultiPassageSection[];
   translation: BibleTranslation;
   source: 'cache' | 'esv' | 'bolls' | 'web';
   cached: boolean;
@@ -85,9 +181,25 @@ export function getBookNumber(bookName: string): number {
  * Formats a passage query string e.g. "John 3:16-17" or "Romans 8:1".
  */
 export function formatPassageQuery(
-  passage: PassageReference | { book: string; startChapter: number; startVerse: number; endChapter: number; endVerse: number }
+  passage:
+    | PassageReference
+    | { book: string; startChapter: number; startVerse: number; endChapter: number; endVerse: number }
 ): string {
-  const { book, startChapter, startVerse, endChapter, endVerse } = passage;
+  const p = passage as any;
+  if (p.segments && p.segments.length === 1) {
+    const s = p.segments[0];
+    if (s.startChapter === s.endChapter) {
+      if (s.startVerse === s.endVerse) {
+        return `${s.book} ${s.startChapter}:${s.startVerse}`;
+      }
+      return `${s.book} ${s.startChapter}:${s.startVerse}-${s.endVerse}`;
+    }
+    return `${s.book} ${s.startChapter}:${s.startVerse}-${s.endChapter}:${s.endVerse}`;
+  }
+  if (p.display) return p.display.replace(/[—–]/g, '-');
+  if (p.displayString) return p.displayString.replace(/[—–]/g, '-');
+
+  const { book, startChapter, startVerse, endChapter, endVerse } = p;
   if (startChapter === endChapter) {
     if (startVerse === endVerse) {
       return `${book} ${startChapter}:${startVerse}`;
@@ -130,19 +242,56 @@ export function parsePassageQuery(query: string): {
 
 /**
  * Helper to parse raw text with [N] markers into structured VerseSegment[]
+ * Accurately extracts section headings preceding verse markers.
  */
 export function parseBracketVerses(rawText: string, fallbackStartVerse = 1): VerseSegment[] {
   if (!rawText) return [];
   const segments: VerseSegment[] = [];
-  const regex = /\[(\d+)\]\s*([^[]*)/g;
-  let match: RegExpExecArray | null;
 
-  while ((match = regex.exec(rawText)) !== null) {
-    const verseNumber = parseInt(match[1], 10);
-    const text = match[2].trim();
-    if (text.length > 0) {
-      segments.push({ verseNumber, text });
+  // Split by [N] verse markers while capturing verse numbers
+  const parts = rawText.split(/\[(\d+)\]/);
+  // Text preceding the first [N] is the chapter/first pericope heading
+  let pendingHeading = parts[0] ? parts[0].trim() : '';
+
+  for (let i = 1; i < parts.length; i += 2) {
+    const verseNumber = parseInt(parts[i], 10);
+    const content = parts[i + 1] || '';
+
+    // Split intermediate content into double-newline paragraphs
+    const paragraphs = content
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+
+    let verseText = '';
+    let nextHeading = '';
+
+    if (paragraphs.length > 1) {
+      // If there are multiple paragraphs before the next verse marker,
+      // the last paragraph may be a section heading for the upcoming verse
+      const lastP = paragraphs[paragraphs.length - 1];
+      if (lastP.length < 90 && !lastP.endsWith('.')) {
+        nextHeading = lastP;
+        verseText = paragraphs.slice(0, -1).join('\n\n');
+      } else {
+        verseText = paragraphs.join('\n\n');
+      }
+    } else {
+      verseText = paragraphs[0] || '';
     }
+
+    // Strip trailing translation copyright notices like (ESV) from last verse
+    verseText = verseText.replace(/\s*\([A-Z]+\)\s*$/, '').trim();
+
+    if (verseText.length > 0) {
+      segments.push({
+        verseNumber,
+        text: verseText,
+        heading: pendingHeading ? pendingHeading.replace(/<[^>]*>/g, '').trim() : undefined,
+      });
+    }
+
+    pendingHeading = nextHeading;
   }
 
   if (segments.length === 0) {
@@ -160,7 +309,7 @@ export function parseBracketVerses(rawText: string, fallbackStartVerse = 1): Ver
  */
 export async function fetchFromCrosswayEsv(passageQuery: string, customApiKey?: string): Promise<VerseSegment[]> {
   const token = customApiKey && customApiKey.trim() ? customApiKey.trim() : DEFAULT_ESV_API_TOKEN;
-  const url = `${ESV_API_BASE_URL}?q=${encodeURIComponent(passageQuery)}&include-footnotes=false&include-headings=false&include-passage-references=false&include-verse-numbers=true`;
+  const url = `${ESV_API_BASE_URL}?q=${encodeURIComponent(passageQuery)}&include-footnotes=false&include-headings=true&include-passage-references=false&include-verse-numbers=true`;
 
   console.log(`[BibleService] Fetching from Crossway ESV API: ${url} (Token: ${token.slice(0, 6)}...)`);
   let response: Response;
@@ -195,12 +344,54 @@ export async function fetchFromCrosswayEsv(passageQuery: string, customApiKey?: 
 }
 
 /**
- * Strips HTML tags from text returned by bolls.life.
+ * Helper to distinguish true section/pericope headings from broken poetry lines or clauses.
+ */
+export function isSectionHeading(candidate: string): boolean {
+  const trimmed = candidate.replace(/<[^>]*>/g, '').trim();
+  if (trimmed.length === 0 || trimmed.length > 75) return false;
+  // If it starts with lowercase or quotation/bracket punctuation, it's a continuing clause
+  if (/^[a-z“"‘'(\[]/.test(trimmed)) return false;
+  // If it ends with clause/sentence punctuation (.,;:!?—–-), it's part of a verse
+  if (/[.,;:!?—–-]$/.test(trimmed)) return false;
+  // Poetry lines typically lead with lower/upper connecting prepositions or pronouns
+  if (/^(for|because|to|and|that|with|from|he|she|they|you|we|i)\s+/i.test(trimmed)) return false;
+  return true;
+}
+
+/**
+ * Extracts pericope heading and clean verse text from bolls.life HTML string.
+ * Many bolls translations embed headings as: "Heading<br/>Verse text..."
+ */
+export function extractBollsHeadingAndText(raw: string): { heading?: string; text: string } {
+  if (!raw) return { text: '' };
+
+  // Match leading candidate preceding <br/> or <br>
+  const match = raw.match(/^([^<]+?)\s*<br\s*\/?>\s*([\s\S]+)$/i);
+  if (match) {
+    const candidate = match[1].replace(/<[^>]*>/g, '').trim();
+    if (isSectionHeading(candidate)) {
+      const rest = cleanHtml(match[2]);
+      return {
+        heading: candidate,
+        text: rest,
+      };
+    }
+  }
+
+  return {
+    text: cleanHtml(raw),
+  };
+}
+
+/**
+ * Processes HTML from multi-translation responses (bolls.life / APIs).
+ * Preserves section headings (h3, h4, b, div.s) while cleaning raw noise.
  */
 function cleanHtml(raw: string): string {
   if (!raw) return '';
   return raw
     .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<(?:h[1-6]|b|strong|div class="s[^"]*")[^>]*>(.*?)<\/(?:h[1-6]|b|strong|div)>/gi, '<b class="heading">$1</b><br/>')
     .replace(/<[^>]*>/g, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -244,41 +435,56 @@ export async function fetchFromBolls(
 ): Promise<VerseSegment[]> {
   const bookNum = getBookNumber(bookName);
   const slug = toBollsSlug(translation);
-  const url = `${BOLLS_LIFE_BASE_URL}get-chapter/${slug}/${bookNum}/${startChapter}/`;
+  const allSegments: VerseSegment[] = [];
 
-  console.log(`[BibleService] Fetching from bolls.life: ${url}`);
-  let response: Response;
-  try {
-    response = await fetch(url);
-  } catch (netErr: any) {
-    console.warn(`[BibleService] bolls.life network request failed for ${url}:`, netErr?.message || netErr);
-    throw new Error(`bolls.life network error: ${netErr?.message || 'Network unreachable'}`);
-  }
-
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => '');
-    console.warn(`[BibleService] bolls.life error status ${response.status}: ${errorBody.slice(0, 150)}`);
-    throw new Error(`bolls.life error status: ${response.status}`);
-  }
-
-  const verses: Array<{ verse: number; text: string }> = await response.json();
-  if (!Array.isArray(verses) || verses.length === 0) {
-    console.warn(`[BibleService] No verses returned from bolls.life for ${slug}`);
-    throw new Error(`No verses returned from bolls.life for ${slug}`);
-  }
-
-  // Filter verses within chapter boundaries
-  const matching = verses.filter((v) => {
-    if (startChapter === endChapter) {
-      return v.verse >= startVerse && v.verse <= endVerse;
+  for (let ch = startChapter; ch <= endChapter; ch++) {
+    const url = `${BOLLS_LIFE_BASE_URL}get-chapter/${slug}/${bookNum}/${ch}/`;
+    console.log(`[BibleService] Fetching from bolls.life: ${url}`);
+    let response: Response;
+    try {
+      response = await fetch(url);
+    } catch (netErr: any) {
+      console.warn(`[BibleService] bolls.life network request failed for ${url}:`, netErr?.message || netErr);
+      throw new Error(`bolls.life network error: ${netErr?.message || 'Network unreachable'}`);
     }
-    return v.verse >= startVerse;
-  });
 
-  return matching.map((v) => ({
-    verseNumber: v.verse,
-    text: cleanHtml(v.text),
-  }));
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '');
+      console.warn(`[BibleService] bolls.life error status ${response.status}: ${errorBody.slice(0, 150)}`);
+      throw new Error(`bolls.life error status: ${response.status}`);
+    }
+
+    const verses: Array<{ verse: number; text: string }> = await response.json();
+    if (!Array.isArray(verses) || verses.length === 0) {
+      console.warn(`[BibleService] No verses returned from bolls.life for ${slug}`);
+      throw new Error(`No verses returned from bolls.life for ${slug}`);
+    }
+
+    // Filter verses within chapter boundaries
+    const matching = verses.filter((v) => {
+      if (startChapter === endChapter) {
+        return v.verse >= startVerse && v.verse <= endVerse;
+      }
+      if (ch === startChapter) {
+        return v.verse >= startVerse;
+      }
+      if (ch === endChapter) {
+        return v.verse <= endVerse;
+      }
+      return true;
+    });
+
+    for (const v of matching) {
+      const parsed = extractBollsHeadingAndText(v.text);
+      allSegments.push({
+        verseNumber: v.verse,
+        text: parsed.text,
+        heading: parsed.heading,
+      });
+    }
+  }
+
+  return allSegments;
 }
 
 /**
@@ -320,16 +526,76 @@ export async function fetchFromBibleApi(translation: BibleTranslation, passageQu
   return parseBracketVerses(data.text, parsedRef.startVerse);
 }
 
+import { formatSegmentDisplay } from '../utils/passageParser';
+
 /**
  * Primary Unified Passage Fetcher.
  * Checks AsyncStorage cache first, resolves translation, executes provider query with graceful fallbacks,
- * and caches results.
+ * and caches results. Supports multi-segment compound references.
  */
 export async function fetchPassageText(
   passageInput: PassageReference | string,
   options: FetchPassageOptions = {}
 ): Promise<PassageFetchResult> {
   const translation: BibleTranslation = options.translation || 'ESV';
+
+  // Multi-segment handling:
+  if (typeof passageInput !== 'string' && passageInput.segments && passageInput.segments.length > 1) {
+    const combinedTitle = passageInput.displayString || formatPassageQuery(passageInput);
+    const compoundCacheKey = buildBibleCacheKey(translation, combinedTitle);
+
+    if (!options.forceRefresh) {
+      try {
+        const cached = await safeStorage.getItem(compoundCacheKey);
+        if (cached) {
+          return JSON.parse(cached) as PassageFetchResult;
+        }
+      } catch {}
+    }
+
+    try {
+      // Fetch each segment in parallel
+      const segmentResults = await Promise.all(
+        passageInput.segments.map(async (seg) => {
+          const segQuery = formatPassageQuery(seg);
+          const res = await fetchPassageText(segQuery, options);
+          return {
+            title: formatSegmentDisplay(seg),
+            verses: res.verses,
+            text: res.text,
+          };
+        })
+      );
+
+      const allVerses: VerseSegment[] = [];
+      const sections: MultiPassageSection[] = [];
+      const allTexts: string[] = [];
+
+      for (const sRes of segmentResults) {
+        sections.push(sRes);
+        allVerses.push(...sRes.verses);
+        if (sRes.text) allTexts.push(sRes.text);
+      }
+
+      const combinedResult: PassageFetchResult = {
+        verses: allVerses,
+        text: allTexts.join('\n\n'),
+        sections,
+        translation,
+        source: 'esv',
+        cached: false,
+      };
+
+      safeStorage
+        .setItem(compoundCacheKey, JSON.stringify(combinedResult))
+        .catch(() => {});
+
+      return combinedResult;
+    } catch (err: any) {
+      console.warn('[BibleService] Error fetching compound passages in parallel:', err);
+    }
+  }
+
   const query = typeof passageInput === 'string' ? passageInput : formatPassageQuery(passageInput);
   const cacheKey = buildBibleCacheKey(translation, query);
 
@@ -344,6 +610,7 @@ export async function fetchPassageText(
         return {
           verses,
           text,
+          sections: parsed.sections,
           translation,
           source: 'cache',
           cached: true,
@@ -354,7 +621,14 @@ export async function fetchPassageText(
     }
   }
 
-  const parsed = typeof passageInput === 'string' ? parsePassageQuery(passageInput) : passageInput;
+  const parsed: { book: string; startChapter: number; startVerse: number; endChapter: number; endVerse: number } =
+    typeof passageInput === 'string'
+      ? parsePassageQuery(passageInput)
+      : passageInput.segments && passageInput.segments.length > 0
+      ? passageInput.segments[0]
+      : (passageInput as any).book
+      ? (passageInput as any)
+      : parsePassageQuery(query);
   let verses: VerseSegment[] = [];
   let source: 'esv' | 'bolls' | 'web' = 'esv';
 

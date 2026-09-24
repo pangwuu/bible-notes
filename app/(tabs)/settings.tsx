@@ -156,7 +156,7 @@ export default function SettingsScreen() {
   const initialLetter = displayName.charAt(0).toUpperCase() || 'B';
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
       {/* Account Info Card */}
       <View style={styles.profileCard}>
         <View style={styles.avatarCircle}>
@@ -370,6 +370,10 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.bgBase,
+  },
   container: {
     padding: spacing.md,
     backgroundColor: colors.bgBase,

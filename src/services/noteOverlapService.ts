@@ -1,15 +1,37 @@
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
-import { Note, PassageReference, noteDocumentToNote } from '../types/note';
+import { Note, PassageReference, PassageSegment, noteDocumentToNote } from '../types/note';
 import { UserProfile } from '../types/user';
 import { getFriends } from './friendService';
-import { checkRangeOverlap, referenceToOrdinals, formatPassageSummary } from '../utils/bibleOrdinals';
 import { createNotification } from './notificationService';
 
 export interface FriendOverlapItem {
   friendProfile: UserProfile;
   note: Note;
-  overlapRange: [number, number];
+  overlapSegments: PassageSegment[];
+}
+
+/**
+ * Checks if two passage segments within the same book intersect in chapter/verse space.
+ */
+export function segmentsOverlap(a: PassageSegment, b: PassageSegment): boolean {
+  if (a.book.toLowerCase() !== b.book.toLowerCase()) {
+    return false;
+  }
+
+  // Segment A span: (startChapter, startVerse) to (endChapter, endVerse)
+  // Segment B span: (startChapter, startVerse) to (endChapter, endVerse)
+
+  // Compare tuples: [chapter, verse]
+  const aStartsAfterBEnds =
+    a.startChapter > b.endChapter ||
+    (a.startChapter === b.endChapter && a.startVerse > b.endVerse);
+
+  const bStartsAfterAEnds =
+    b.startChapter > a.endChapter ||
+    (b.startChapter === a.endChapter && b.startVerse > a.endVerse);
+
+  return !aStartsAfterBEnds && !bStartsAfterAEnds;
 }
 
 /**
@@ -20,7 +42,23 @@ export async function findFriendNoteOverlaps(
   currentUid: string,
   passage: PassageReference
 ): Promise<FriendOverlapItem[]> {
-  if (!currentUid || !passage || !passage.book) {
+  if (!currentUid || !passage) {
+    return [];
+  }
+
+  let segments = passage.segments || [];
+  if (segments.length === 0 && (passage as any).book) {
+    const rawP = passage as any;
+    segments = [{
+      book: rawP.book,
+      startChapter: rawP.startChapter ?? rawP.chapter_start ?? 1,
+      startVerse: rawP.startVerse ?? rawP.verse_start ?? 1,
+      endChapter: rawP.endChapter ?? rawP.chapter_end ?? 1,
+      endVerse: rawP.endVerse ?? rawP.verse_end ?? 1,
+    }];
+  }
+
+  if (segments.length === 0) {
     return [];
   }
 
@@ -30,56 +68,52 @@ export async function findFriendNoteOverlaps(
     return [];
   }
 
-  // 2. Compute canonical ordinal range for the target passage
-  let targetRange: [number, number];
-  if (passage.startOrdinal && passage.endOrdinal && passage.startOrdinal <= passage.endOrdinal) {
-    targetRange = [passage.startOrdinal, passage.endOrdinal];
-  } else {
-    try {
-      targetRange = referenceToOrdinals(
-        passage.book,
-        passage.startChapter,
-        passage.startVerse,
-        passage.endChapter,
-        passage.endVerse
-      );
-    } catch {
-      return [];
-    }
-  }
+  const targetBooks = passage.books && passage.books.length > 0
+    ? passage.books
+    : Array.from(new Set(segments.map((s) => s.book)));
 
   const results: FriendOverlapItem[] = [];
   const notesRef = collection(db, 'notes');
 
-  // 3. For each friend, query notes for this book that have visibility == 'friends'
+  // 2. For each friend, query notes where books array-contains target book
   for (const friend of friends) {
-    try {
-      const q = query(
-        notesRef,
-        where('user_id', '==', friend.friendUid),
-        where('book', '==', passage.book),
-        where('visibility', '==', 'friends')
-      );
-      const snap = await getDocs(q);
+    for (const book of targetBooks) {
+      try {
+        const q = query(
+          notesRef,
+          where('user_id', '==', friend.friendUid),
+          where('passage.books', 'array-contains', book),
+          where('visibility', '==', 'friends')
+        );
+        const snap = await getDocs(q);
 
-      snap.forEach((docSnap) => {
-        const friendNote = noteDocumentToNote(docSnap.data(), docSnap.id);
-        const friendStart = friendNote.start_verse_id || friendNote.passage.startOrdinal;
-        const friendEnd = friendNote.end_verse_id || friendNote.passage.endOrdinal;
+        snap.forEach((docSnap) => {
+          const friendNote = noteDocumentToNote(docSnap.data(), docSnap.id);
+          const intersectingSegments: PassageSegment[] = [];
 
-        if (friendStart && friendEnd) {
-          const overlap = checkRangeOverlap([friendStart, friendEnd], targetRange);
-          if (overlap.overlaps && overlap.overlapRange) {
-            results.push({
-              friendProfile: friend.friendProfile,
-              note: friendNote,
-              overlapRange: overlap.overlapRange,
-            });
+          for (const fSeg of friendNote.passage.segments) {
+            for (const tSeg of segments) {
+              if (segmentsOverlap(fSeg, tSeg)) {
+                intersectingSegments.push(fSeg);
+                break;
+              }
+            }
           }
-        }
-      });
-    } catch (err) {
-      console.warn(`Failed to query notes for friend ${friend.friendUid}:`, err);
+
+          if (intersectingSegments.length > 0) {
+            // Ensure note not already added
+            if (!results.some((r) => r.note.id === friendNote.id)) {
+              results.push({
+                friendProfile: friend.friendProfile,
+                note: friendNote,
+                overlapSegments: intersectingSegments,
+              });
+            }
+          }
+        });
+      } catch (err) {
+        console.warn(`Failed to query notes for friend ${friend.friendUid}:`, err);
+      }
     }
   }
 
@@ -104,13 +138,10 @@ export async function notifyFriendsOfNoteOverlap(
     return 0;
   }
 
-  const passageSummary = formatPassageSummary(
-    note.passage.book,
-    note.passage.startChapter,
-    note.passage.startVerse,
-    note.passage.endChapter,
-    note.passage.endVerse
-  );
+  const passageSummary =
+    note.passage.display ||
+    note.passage.displayString ||
+    (note.passage.segments ? note.passage.segments.map((s) => s.book).join(', ') : (note.passage as any).book || '');
 
   let notifiedCount = 0;
   // Deduplicate notifications by recipient UID

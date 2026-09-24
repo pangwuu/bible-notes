@@ -79,13 +79,18 @@ describe('NotesService Unit Tests', () => {
   });
 
   const samplePassage: PassageReference = {
-    book: 'John',
-    startChapter: 3,
-    startVerse: 16,
-    endChapter: 3,
-    endVerse: 17,
-    startOrdinal: 26136,
-    endOrdinal: 26137,
+    display: 'John 3:16–17',
+    displayString: 'John 3:16–17',
+    books: ['John'],
+    segments: [
+      {
+        book: 'John',
+        startChapter: 3,
+        startVerse: 16,
+        endChapter: 3,
+        endVerse: 17,
+      },
+    ],
   };
 
   const sampleInput: CreateNoteInput = {
@@ -110,15 +115,14 @@ describe('NotesService Unit Tests', () => {
     const note = await createNote(sampleInput);
 
     expect(note.id).toBe('generated_doc_id');
-    expect(note.book).toBe('John');
-    expect(note.start_verse_id).toBe(26136);
-    expect(note.end_verse_id).toBe(26137);
+    expect(note.passage.display).toBe('John 3:16–17');
+    expect(note.passage.books).toEqual(['John']);
     expect(note.tags).toEqual(['grace', 'salvation']);
     expect(mockSetDoc).toHaveBeenCalledTimes(1);
 
     const cached = await AsyncStorage.getItem('note_generated_doc_id');
     expect(cached).not.toBeNull();
-    expect(JSON.parse(cached!).book).toBe('John');
+    expect(JSON.parse(cached!).passage.display).toBe('John 3:16–17');
   });
 
   test('createNote queues write in AsyncStorage when offline', async () => {
@@ -208,7 +212,7 @@ describe('NotesService Unit Tests', () => {
 
     const note = await getNote('doc_read');
     expect(note).not.toBeNull();
-    expect(note?.book).toBe('Romans');
+    expect(note?.passage.books).toContain('Romans');
 
     const cached = await AsyncStorage.getItem('note_doc_read');
     expect(cached).not.toBeNull();
@@ -220,14 +224,13 @@ describe('NotesService Unit Tests', () => {
       'note_offline_doc',
       JSON.stringify({
         id: 'offline_doc',
-        book: 'Genesis',
-        passage: { book: 'Genesis', startChapter: 1, startVerse: 1, endChapter: 1, endVerse: 1 },
+        passage: { display: 'Genesis 1:1', books: ['Genesis'], segments: [{ book: 'Genesis', startChapter: 1, startVerse: 1, endChapter: 1, endVerse: 1 }] },
       })
     );
 
     const note = await getNote('offline_doc');
     expect(note).not.toBeNull();
-    expect(note?.book).toBe('Genesis');
+    expect(note?.passage.books).toContain('Genesis');
   });
 
   test('getUserNotes returns list sorted by updated_at desc and caches index', async () => {
@@ -236,7 +239,7 @@ describe('NotesService Unit Tests', () => {
         id: 'note_1',
         data: () => ({
           user_id: 'user_123',
-          book: 'Genesis',
+          passage: { display: 'Genesis 1:1', books: ['Genesis'], segments: [{ book: 'Genesis', start_chapter: 1, start_verse: 1, end_chapter: 1, end_verse: 1 }] },
           tags: ['creation'],
           updated_at: 1000,
           created_at: 1000,
@@ -246,7 +249,7 @@ describe('NotesService Unit Tests', () => {
         id: 'note_2',
         data: () => ({
           user_id: 'user_123',
-          book: 'John',
+          passage: { display: 'John 3:16', books: ['John'], segments: [{ book: 'John', start_chapter: 3, start_verse: 16, end_chapter: 3, end_verse: 16 }] },
           tags: ['love', 'grace'],
           updated_at: 2000,
           created_at: 1000,
@@ -267,17 +270,27 @@ describe('NotesService Unit Tests', () => {
     mockGetDocs.mockResolvedValueOnce([
       {
         id: 'note_1',
-        data: () => ({ user_id: 'user_123', book: 'Genesis', tags: [], updated_at: 1000 }),
+        data: () => ({
+          user_id: 'user_123',
+          passage: { display: 'Genesis 1:1', books: ['Genesis'], segments: [{ book: 'Genesis', start_chapter: 1, start_verse: 1, end_chapter: 1, end_verse: 1 }] },
+          tags: [],
+          updated_at: 1000,
+        }),
       },
       {
         id: 'note_2',
-        data: () => ({ user_id: 'user_123', book: 'John', tags: [], updated_at: 2000 }),
+        data: () => ({
+          user_id: 'user_123',
+          passage: { display: 'John 3:16', books: ['John'], segments: [{ book: 'John', start_chapter: 3, start_verse: 16, end_chapter: 3, end_verse: 16 }] },
+          tags: [],
+          updated_at: 2000,
+        }),
       },
     ]);
 
     const genesisNotes = await getNotesByBook('user_123', 'Genesis');
     expect(genesisNotes.length).toBe(1);
-    expect(genesisNotes[0].book).toBe('Genesis');
+    expect(genesisNotes[0].passage.books).toContain('Genesis');
   });
 
   test('getNotesByTag filters user notes by tag', async () => {
@@ -342,5 +355,37 @@ describe('NotesService Unit Tests', () => {
     const result = await getUserNotesPaginated('user_123', 10);
     expect(result.notes.length).toBe(1);
     expect(result.lastDoc).toEqual(mockSnapDocs[0]);
+  });
+
+  test('createNote writes valid Firestore schema and initializes user_notes cache', async () => {
+    mockSetDoc.mockResolvedValueOnce(undefined);
+
+    const inputWithoutContent: CreateNoteInput = {
+      userId: 'user_123',
+      passage: samplePassage,
+      tags: ['salvation'],
+      visibility: 'friends',
+    };
+
+    const note = await createNote(inputWithoutContent);
+    expect(mockSetDoc).toHaveBeenCalledTimes(1);
+
+    const payload = mockSetDoc.mock.calls[0][1];
+    expect(payload.passage.display).toBe('John 3:16–17');
+    expect(payload.passage.books).toEqual(['John']);
+    expect(payload.passage.segments).toHaveLength(1);
+    expect(payload.passage.segments[0].book).toBe('John');
+
+    // Verify string fields sanitized (not undefined)
+    expect(payload.light_content).toBe('');
+    expect(payload.question_content).toBe('');
+    expect(payload.arrow_content).toBe('');
+
+    // Verify user_notes cache was populated even when initially empty
+    const userNotesCache = await AsyncStorage.getItem('user_notes_user_123');
+    expect(userNotesCache).not.toBeNull();
+    const parsedList = JSON.parse(userNotesCache!);
+    expect(parsedList).toHaveLength(1);
+    expect(parsedList[0].id).toBe(note.id);
   });
 });
