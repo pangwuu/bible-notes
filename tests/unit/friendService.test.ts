@@ -287,14 +287,24 @@ describe('FriendService', () => {
   });
 
   describe('getFriendNotes', () => {
-    test('queries notes where user_id == friendUid and visibility == friends', async () => {
+    test('queries notes where user_id == friendUid and visibility == friends and normalizes domain Note', async () => {
       const mockNotes = [
         {
           id: 'note_123',
           data: () => ({
-            book: 'Genesis',
-            chapter_start: 1,
-            verse_start: 1,
+            passage: {
+              display: 'Genesis 1:1',
+              books: ['Genesis'],
+              segments: [
+                {
+                  book: 'Genesis',
+                  start_chapter: 1,
+                  start_verse: 1,
+                  end_chapter: 1,
+                  end_verse: 1,
+                },
+              ],
+            },
             content: 'In the beginning',
             visibility: 'friends',
             user_id: 'friend_uid',
@@ -312,6 +322,13 @@ describe('FriendService', () => {
       expect(mockWhere).toHaveBeenCalledWith('visibility', '==', 'friends');
       expect(notes).toHaveLength(1);
       expect(notes[0].id).toBe('note_123');
+      expect(notes[0].passage.segments[0]).toEqual({
+        book: 'Genesis',
+        startChapter: 1,
+        startVerse: 1,
+        endChapter: 1,
+        endVerse: 1,
+      });
     });
   });
 

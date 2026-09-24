@@ -15,7 +15,33 @@ export interface FriendOverlapItem {
  * Checks if two passage segments within the same book intersect in chapter/verse space.
  */
 export function segmentsOverlap(a: PassageSegment, b: PassageSegment): boolean {
+  if (!a || !b || !a.book || !b.book) {
+    return false;
+  }
+
   if (a.book.toLowerCase() !== b.book.toLowerCase()) {
+    return false;
+  }
+
+  // Defensive extraction supporting both domain (camelCase) and raw (snake_case)
+  const aRaw = a as any;
+  const bRaw = b as any;
+
+  const aStartCh = Number(a.startChapter ?? aRaw.start_chapter ?? aRaw.chapter_start);
+  const aStartV = Number(a.startVerse ?? aRaw.start_verse ?? aRaw.verse_start);
+  const aEndCh = Number(a.endChapter ?? aRaw.end_chapter ?? aRaw.chapter_end ?? aStartCh);
+  const aEndV = Number(a.endVerse ?? aRaw.end_verse ?? aRaw.verse_end ?? aStartV);
+
+  const bStartCh = Number(b.startChapter ?? bRaw.start_chapter ?? bRaw.chapter_start);
+  const bStartV = Number(b.startVerse ?? bRaw.start_verse ?? bRaw.verse_start);
+  const bEndCh = Number(b.endChapter ?? bRaw.end_chapter ?? bRaw.chapter_end ?? bStartCh);
+  const bEndV = Number(b.endVerse ?? bRaw.end_verse ?? bRaw.verse_end ?? bStartV);
+
+  // If any boundary is NaN / invalid, fail closed (no overlap)
+  if (
+    isNaN(aStartCh) || isNaN(aStartV) || isNaN(aEndCh) || isNaN(aEndV) ||
+    isNaN(bStartCh) || isNaN(bStartV) || isNaN(bEndCh) || isNaN(bEndV)
+  ) {
     return false;
   }
 
@@ -24,12 +50,12 @@ export function segmentsOverlap(a: PassageSegment, b: PassageSegment): boolean {
 
   // Compare tuples: [chapter, verse]
   const aStartsAfterBEnds =
-    a.startChapter > b.endChapter ||
-    (a.startChapter === b.endChapter && a.startVerse > b.endVerse);
+    aStartCh > bEndCh ||
+    (aStartCh === bEndCh && aStartV > bEndV);
 
   const bStartsAfterAEnds =
-    b.startChapter > a.endChapter ||
-    (b.startChapter === a.endChapter && b.startVerse > a.endVerse);
+    bStartCh > aEndCh ||
+    (bStartCh === aEndCh && bStartV > aEndV);
 
   return !aStartsAfterBEnds && !bStartsAfterAEnds;
 }

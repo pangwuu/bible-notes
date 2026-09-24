@@ -164,6 +164,89 @@ describe('dashboardService', () => {
       const result = checkNoteIntersection(friendNote, mockUserNotes);
       expect(result.isIntersecting).toBe(false);
     });
+
+    test('accurately distinguishes Matthew 6:24-34 from Matthew 24:24-25:4, Matthew 6:33-34, and Matthew 1:1', () => {
+      const myMatthewNote = createTestNote({
+        id: 'my_matthew_note',
+        passage: {
+          display: 'Matthew 6:24–34',
+          books: ['Matthew'],
+          segments: [
+            {
+              book: 'Matthew',
+              startChapter: 6,
+              startVerse: 24,
+              endChapter: 6,
+              endVerse: 34,
+            },
+          ],
+        },
+      });
+
+      // 1. Matthew 24:24-25:4 -> Should NOT overlap
+      const friendNoteCh24 = createTestNote({
+        id: 'friend_ch24',
+        passage: {
+          display: 'Matthew 24:24–25:4',
+          books: ['Matthew'],
+          segments: [
+            {
+              book: 'Matthew',
+              startChapter: 24,
+              startVerse: 24,
+              endChapter: 25,
+              endVerse: 4,
+            },
+          ],
+        },
+      });
+      expect(checkNoteIntersection(friendNoteCh24, [myMatthewNote]).isIntersecting).toBe(false);
+
+      // 2. Matthew 6:33-34 -> SHOULD overlap
+      const friendNoteCh6Sub = createTestNote({
+        id: 'friend_ch6_sub',
+        passage: {
+          display: 'Matthew 6:33–34, 2 Corinthians 2:1–10',
+          books: ['Matthew', '2 Corinthians'],
+          segments: [
+            {
+              book: 'Matthew',
+              startChapter: 6,
+              startVerse: 33,
+              endChapter: 6,
+              endVerse: 34,
+            },
+            {
+              book: '2 Corinthians',
+              startChapter: 2,
+              startVerse: 1,
+              endChapter: 2,
+              endVerse: 10,
+            },
+          ],
+        },
+      });
+      expect(checkNoteIntersection(friendNoteCh6Sub, [myMatthewNote]).isIntersecting).toBe(true);
+
+      // 3. Matthew 1:1 -> Should NOT overlap
+      const friendNoteCh1 = createTestNote({
+        id: 'friend_ch1',
+        passage: {
+          display: 'Matthew 1:1',
+          books: ['Matthew'],
+          segments: [
+            {
+              book: 'Matthew',
+              startChapter: 1,
+              startVerse: 1,
+              endChapter: 1,
+              endVerse: 1,
+            },
+          ],
+        },
+      });
+      expect(checkNoteIntersection(friendNoteCh1, [myMatthewNote]).isIntersecting).toBe(false);
+    });
   });
 
   describe('getDashboardFriendActivity', () => {

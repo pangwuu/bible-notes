@@ -14,7 +14,7 @@ import {
 import { db } from './firebase';
 import { UserProfile } from '../types/user';
 import { FriendshipDocument, FriendItem, PendingFriendRequests } from '../types/friendship';
-import { Note } from '../types/note';
+import { Note, noteDocumentToNote } from '../types/note';
 
 /**
  * Builds the canonical deterministic doc ID for a friendship between two users.
@@ -316,7 +316,7 @@ export async function getFriendNotes(friendUid: string): Promise<Note[]> {
   const notes: Note[] = [];
 
   snap.forEach((d) => {
-    notes.push({ id: d.id, ...(d.data() as any) });
+    notes.push(noteDocumentToNote(d.data(), d.id));
   });
 
   return notes;
