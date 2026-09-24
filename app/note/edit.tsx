@@ -20,6 +20,8 @@ import { colors, spacing, radii, typography } from '../../src/constants/theme';
 import SwedishEditor from '../../src/components/SwedishEditor';
 import PassagePicker, { PassageSelection } from '../../src/components/PassagePicker';
 import BibleReader from '../../src/components/BibleReader';
+import FontSizeControls from '../../src/components/FontSizeControls';
+import safeStorage from '../../src/utils/safeStorage';
 import { PassageReference, NoteVisibility, formatPassageDisplay } from '../../src/types/note';
 import * as notesService from '../../src/services/notesService';
 import { notifyFriendsOfNoteOverlap } from '../../src/services/noteOverlapService';
@@ -39,6 +41,7 @@ export default function NoteEditScreen() {
 
   // Note State - defaults to null for new notes so users choose their own passage
   const [passage, setPassage] = useState<PassageReference | null>(null);
+  const [readerFontSize, setReaderFontSize] = useState<number>(16);
 
   const [lightContent, setLightContent] = useState('');
   const [questionContent, setQuestionContent] = useState('');
@@ -52,6 +55,21 @@ export default function NoteEditScreen() {
   const [currentNoteId, setCurrentNoteId] = useState<string | undefined>(id);
   const currentNoteIdRef = useRef<string | undefined>(id);
   const isSavingRef = useRef(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    safeStorage.getItem('bible_font_size').then((stored) => {
+      if (isMounted && stored !== null) {
+        const parsed = parseInt(stored, 10);
+        if (!isNaN(parsed) && parsed >= 12 && parsed <= 26) {
+          setReaderFontSize(parsed);
+        }
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Load user tag history for autocomplete
   useEffect(() => {
@@ -239,17 +257,29 @@ export default function NoteEditScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Passage Selector Trigger Card */}
-        <Pressable
-          onPress={() => setShowPicker(true)}
-          style={[styles.pickerTrigger, !passage && styles.pickerTriggerEmpty]}
-          accessibilityRole="button"
-          accessibilityLabel="Select passage reference"
-        >
-          <Text style={styles.pickerLabel}>Passage Reference</Text>
-          <Text style={[styles.pickerValue, !passage && styles.pickerValueEmpty]}>
-            {passage ? formatPassageDisplay(passage) : 'Tap to select passage...'}
-          </Text>
-        </Pressable>
+        <View style={styles.passageCardRow}>
+          <Pressable
+            onPress={() => setShowPicker(true)}
+            style={[styles.pickerTrigger, !passage && styles.pickerTriggerEmpty]}
+            accessibilityRole="button"
+            accessibilityLabel="Select passage reference"
+          >
+            <View style={styles.pickerTextColumn}>
+              <Text style={styles.pickerLabel}>Passage Reference</Text>
+              <Text style={[styles.pickerValue, !passage && styles.pickerValueEmpty]}>
+                {passage ? formatPassageDisplay(passage) : 'Tap to select passage...'}
+              </Text>
+            </View>
+          </Pressable>
+
+          {passage ? (
+            <FontSizeControls
+              initialSize={readerFontSize}
+              onSizeChange={setReaderFontSize}
+              style={styles.editFontSizeControls}
+            />
+          ) : null}
+        </View>
 
         {/* Live Scripture Reader with Translation Switcher - only rendered when a passage is selected */}
         {passage && (
@@ -258,6 +288,7 @@ export default function NoteEditScreen() {
             preferredTranslation={profile?.settings?.preferred_translation || 'ESV'}
             customApiKey={profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key}
             initiallyCollapsed={false}
+            fontSize={readerFontSize}
           />
         )}
 
@@ -340,17 +371,31 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: typography.body.fontSize,
   },
+  passageCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
   pickerTrigger: {
+    flex: 1,
     backgroundColor: colors.bg.surface,
     borderRadius: radii.content,
     padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border.hairline,
-    marginBottom: spacing.md,
   },
   pickerTriggerEmpty: {
     borderStyle: 'dashed',
     borderColor: colors.accent.keyIdea,
+  },
+  pickerTextColumn: {
+    flex: 1,
+  },
+  editFontSizeControls: {
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
   pickerLabel: {
     fontSize: typography.caption.fontSize,

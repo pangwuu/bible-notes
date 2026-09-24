@@ -62,9 +62,13 @@ export default function NotesBrowserScreen() {
   const filteredNotes = useMemo(() => {
     return notes.filter((n) => {
       const q = searchQuery.trim().toLowerCase();
+      const passageText = (n.passage?.display || n.passage?.displayString || '').toLowerCase();
+      const booksMatch = n.passage?.books?.some((b) => b.toLowerCase().includes(q));
+
       const matchesSearch =
         !q ||
-        n.book.toLowerCase().includes(q) ||
+        passageText.includes(q) ||
+        booksMatch ||
         n.content.toLowerCase().includes(q) ||
         n.tags.some((t) => t.toLowerCase().includes(q));
 
@@ -78,9 +82,17 @@ export default function NotesBrowserScreen() {
   const notesByBook = useMemo(() => {
     const map = new Map<string, Note[]>();
     for (const n of filteredNotes) {
-      const existing = map.get(n.book) || [];
-      existing.push(n);
-      map.set(n.book, existing);
+      const noteBooks = n.passage?.books && n.passage.books.length > 0
+        ? n.passage.books
+        : n.passage?.segments && n.passage.segments.length > 0
+        ? Array.from(new Set(n.passage.segments.map((s) => s.book)))
+        : ['Other'];
+
+      for (const b of noteBooks) {
+        const existing = map.get(b) || [];
+        existing.push(n);
+        map.set(b, existing);
+      }
     }
     return Array.from(map.entries()).sort(([bookA], [bookB]) => bookA.localeCompare(bookB));
   }, [filteredNotes]);

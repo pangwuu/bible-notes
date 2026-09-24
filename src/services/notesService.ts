@@ -58,24 +58,47 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
 
   const content =
     input.content ||
-    assembleSwedishMarkdown(input.lightContent, input.questionContent, input.arrowContent);
+    assembleSwedishMarkdown(input.lightContent || '', input.questionContent || '', input.arrowContent || '');
+
+  let segments = input.passage?.segments || [];
+  if (segments.length === 0 && (input.passage as any)?.book) {
+    const rawP = input.passage as any;
+    segments = [{
+      book: rawP.book,
+      startChapter: rawP.startChapter ?? rawP.chapter_start ?? 1,
+      startVerse: rawP.startVerse ?? rawP.verse_start ?? 1,
+      endChapter: rawP.endChapter ?? rawP.chapter_end ?? 1,
+      endVerse: rawP.endVerse ?? rawP.verse_end ?? 1,
+    }];
+  }
+
+  const passageDisplay =
+    input.passage?.display ||
+    input.passage?.displayString ||
+    (segments.length > 0 ? segments.map((s) => s.book).join(', ') : 'Romans 8');
+
+  const books = input.passage?.books || Array.from(new Set(segments.map((s) => s.book)));
 
   const notePayload: NoteDocument = {
     id: noteId,
     user_id: currentUid,
     author_username: input.authorUsername || auth.currentUser?.displayName || '',
     author_display_name: input.authorDisplayName || auth.currentUser?.displayName || '',
-    book: input.passage.book,
-    chapter_start: input.passage.startChapter,
-    verse_start: input.passage.startVerse,
-    chapter_end: input.passage.endChapter,
-    verse_end: input.passage.endVerse,
-    start_verse_id: input.passage.startOrdinal,
-    end_verse_id: input.passage.endOrdinal,
+    passage: {
+      display: passageDisplay,
+      books,
+      segments: segments.map((s) => ({
+        book: s.book,
+        start_chapter: s.startChapter,
+        start_verse: s.startVerse,
+        end_chapter: s.endChapter,
+        end_verse: s.endVerse,
+      })),
+    },
     content,
-    light_content: input.lightContent,
-    question_content: input.questionContent,
-    arrow_content: input.arrowContent,
+    light_content: input.lightContent || '',
+    question_content: input.questionContent || '',
+    arrow_content: input.arrowContent || '',
     tags: (input.tags || []).slice(0, 5).map((t) => t.trim().toLowerCase()),
     visibility: input.visibility || 'friends',
     created_at: serverTimestamp(),
@@ -94,6 +117,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
   try {
     await setDoc(newDocRef, notePayload);
   } catch (error) {
+    console.error('Firestore createNote failed, queuing offline write:', error);
     // If offline or network drop, queue write locally
     await safeStorage.setItem(
       `pending_offline_save_${noteId}`,
@@ -103,6 +127,18 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
 
   // Cache note locally in safeStorage
   await safeStorage.setItem(`note_${noteId}`, JSON.stringify(createdNote));
+
+  // Sync user_notes cache
+  try {
+    const cachedUserNotes = await safeStorage.getItem(`user_notes_${currentUid}`);
+    if (cachedUserNotes) {
+      const list = JSON.parse(cachedUserNotes) as Note[];
+      const updatedList = [createdNote, ...list.filter((n) => n.id !== noteId)];
+      await safeStorage.setItem(`user_notes_${currentUid}`, JSON.stringify(updatedList));
+    } else {
+      await safeStorage.setItem(`user_notes_${currentUid}`, JSON.stringify([createdNote]));
+    }
+  } catch {}
 
   return createdNote;
 }
@@ -120,13 +156,22 @@ export async function updateNote(noteId: string, updates: UpdateNoteInput): Prom
 
   if (updates.passage) {
     const p = updates.passage;
-    if (p.book !== undefined) firestoreUpdates.book = p.book;
-    if (p.startChapter !== undefined) firestoreUpdates.chapter_start = p.startChapter;
-    if (p.startVerse !== undefined) firestoreUpdates.verse_start = p.startVerse;
-    if (p.endChapter !== undefined) firestoreUpdates.chapter_end = p.endChapter;
-    if (p.endVerse !== undefined) firestoreUpdates.verse_end = p.endVerse;
-    if (p.startOrdinal !== undefined) firestoreUpdates.start_verse_id = p.startOrdinal;
-    if (p.endOrdinal !== undefined) firestoreUpdates.end_verse_id = p.endOrdinal;
+    const passageDisplay =
+      p.display ||
+      p.displayString ||
+      p.segments.map((s) => s.book).join(', ');
+
+    firestoreUpdates.passage = {
+      display: passageDisplay,
+      books: p.books || Array.from(new Set(p.segments.map((s) => s.book))),
+      segments: p.segments.map((s) => ({
+        book: s.book,
+        start_chapter: s.startChapter,
+        start_verse: s.startVerse,
+        end_chapter: s.endChapter,
+        end_verse: s.endVerse,
+      })),
+    };
   }
 
   if (updates.tags !== undefined) {
@@ -183,19 +228,30 @@ export async function updateNote(noteId: string, updates: UpdateNoteInput): Prom
     ...existing,
     ...updates,
     passage: mergedPassage,
-    book: mergedPassage.book,
-    chapter_start: mergedPassage.startChapter,
-    verse_start: mergedPassage.startVerse,
-    chapter_end: mergedPassage.endChapter,
-    verse_end: mergedPassage.endVerse,
-    start_verse_id: mergedPassage.startOrdinal,
-    end_verse_id: mergedPassage.endOrdinal,
     tags: updates.tags ? updates.tags.slice(0, 5).map((t) => t.trim().toLowerCase()) : existing.tags,
     updatedAt: Date.now(),
     updated_at: Date.now(),
   };
 
   await safeStorage.setItem(`note_${validId}`, JSON.stringify(updatedNote));
+
+  // Sync user_notes cache
+  try {
+    const currentUid = existing.userId || existing.user_id || auth.currentUser?.uid;
+    if (currentUid) {
+      const cachedUserNotes = await safeStorage.getItem(`user_notes_${currentUid}`);
+      if (cachedUserNotes) {
+        const list = JSON.parse(cachedUserNotes) as Note[];
+        const idx = list.findIndex((n) => n.id === validId);
+        if (idx >= 0) {
+          list[idx] = updatedNote;
+        } else {
+          list.unshift(updatedNote);
+        }
+        await safeStorage.setItem(`user_notes_${currentUid}`, JSON.stringify(list));
+      }
+    }
+  } catch {}
 
   return updatedNote;
 }
@@ -207,6 +263,9 @@ export async function deleteNote(noteId: string): Promise<void> {
   const validId = parseNoteId(noteId);
   const noteRef = doc(db, 'notes', validId);
 
+  // Retrieve existing note to identify user for user_notes sync
+  const existing = await getNote(validId);
+
   try {
     await deleteDoc(noteRef);
   } catch (err) {
@@ -215,6 +274,19 @@ export async function deleteNote(noteId: string): Promise<void> {
 
   await safeStorage.removeItem(`note_${validId}`);
   await safeStorage.removeItem(`pending_offline_save_${validId}`);
+
+  // Sync user_notes cache
+  try {
+    const currentUid = existing?.userId || existing?.user_id || auth.currentUser?.uid;
+    if (currentUid) {
+      const cachedUserNotes = await safeStorage.getItem(`user_notes_${currentUid}`);
+      if (cachedUserNotes) {
+        const list = JSON.parse(cachedUserNotes) as Note[];
+        const filtered = list.filter((n) => n.id !== validId);
+        await safeStorage.setItem(`user_notes_${currentUid}`, JSON.stringify(filtered));
+      }
+    }
+  } catch {}
 }
 
 /**
@@ -291,8 +363,11 @@ export async function getUserNotes(userId: string): Promise<Note[]> {
  * Retrieve notes for a user filtered by book.
  */
 export async function getNotesByBook(userId: string, book: string): Promise<Note[]> {
+  const target = book.trim().toLowerCase();
   const allNotes = await getUserNotes(userId);
-  return allNotes.filter((n) => n.book.toLowerCase() === book.trim().toLowerCase());
+  return allNotes.filter((n) =>
+    (n.passage.books || []).some((b) => b.toLowerCase() === target)
+  );
 }
 
 /**

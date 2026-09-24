@@ -35,6 +35,14 @@ import {
   CanonicalBook,
 } from '../constants/bibleData';
 import { referenceToOrdinals } from '../utils/bibleOrdinals';
+import { PassageSegment, PassageReference } from '../types/note';
+import {
+  parsePassageReferenceString,
+  formatSegmentDisplay,
+  formatCompoundDisplay,
+  buildSegment,
+  createPassageReference,
+} from '../utils/passageParser';
 
 export {
   CANONICAL_BOOKS,
@@ -49,7 +57,7 @@ export {
 // ============================================================================
 
 /**
- * Validates that end verse is not less than start verse.
+ * Validates that end verse is not less than start verse when within the same chapter.
  * Throws explicit descriptive error if violated (Test 17.1 boundary).
  */
 export function validateVerseRange(start: number, end: number): boolean {
@@ -142,42 +150,34 @@ export function getChapterVerseCount(bookName: string, chapter: number): number 
 // ============================================================================
 
 export interface PassageSelection {
+  display: string;
+  displayString: string;
+  books: string[];
+  segments: PassageSegment[];
+  // Convenience properties referencing first segment
   book: string;
   startChapter: number;
   startVerse: number;
   endChapter: number;
   endVerse: number;
-  startOrdinal: number;
-  endOrdinal: number;
-  referenceString: string;
-  // Backward compatibility / schema aliases matching specs.md
-  chapter_start: number;
-  verse_start: number;
-  chapter_end: number;
-  verse_end: number;
-  start_verse_id: number;
-  end_verse_id: number;
 }
 
 export interface PassagePickerProps {
   visible: boolean;
   onClose?: () => void;
   onDismiss?: () => void;
-  initialPassage?: {
+  initialPassage?: PassageReference | {
     book?: string;
     startChapter?: number;
     startVerse?: number;
     endChapter?: number;
     endVerse?: number;
-    chapter_start?: number;
-    verse_start?: number;
-    chapter_end?: number;
-    verse_end?: number;
+    segments?: PassageSegment[];
   };
   onSelect: (passage: PassageSelection) => void;
 }
 
-export type PickerStep = 'book' | 'chapter' | 'verse';
+export type PickerStep = 'book' | 'start_chapter' | 'start_verse' | 'end_chapter' | 'end_verse';
 
 // ============================================================================
 // 3. PassagePicker Component Implementation
@@ -207,50 +207,89 @@ export default function PassagePicker({
   // Step state machine: 'book' to 'chapter' to 'verse'
   const [step, setStep] = useState<PickerStep>('book');
 
-  // Active selections
-  const [selectedBook, setSelectedBook] = useState<string>('Romans');
-  const [selectedChapter, setSelectedChapter] = useState<number>(8);
-  const [selectedVerseStart, setSelectedVerseStart] = useState<number>(1);
-  const [selectedVerseEnd, setSelectedVerseEnd] = useState<number>(11);
+  // Multi-segment state for compound passages
+  const [segments, setSegments] = useState<PassageSegment[]>([]);
+
+  // Active single-segment selections (nullable for clean-slate initial state)
+  const [selectedBook, setSelectedBook] = useState<string | null>(null);
+  const [selectedChapter, setSelectedChapter] = useState<number | null>(null);
+  const [selectedChapterEnd, setSelectedChapterEnd] = useState<number | null>(null);
+  const [chapterAnchor, setChapterAnchor] = useState<number | null>(null);
+  const [selectedVerseStart, setSelectedVerseStart] = useState<number | null>(null);
+  const [selectedVerseEnd, setSelectedVerseEnd] = useState<number | null>(null);
   const [selectionAnchor, setSelectionAnchor] = useState<number | null>(null);
 
   // Search filter and testament segmentation
   const [testamentTab, setTestamentTab] = useState<'OT' | 'NT'>('NT');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [smartParseError, setSmartParseError] = useState<string | null>(null);
 
   // Sync state whenever modal opens or initialPassage changes
   useEffect(() => {
     if (visible) {
-      const book = initialPassage?.book || 'Romans';
-      const startCh = initialPassage?.startChapter ?? initialPassage?.chapter_start ?? 8;
-      const startV = initialPassage?.startVerse ?? initialPassage?.verse_start ?? 1;
-      const endCh = initialPassage?.endChapter ?? initialPassage?.chapter_end ?? startCh;
-      const endV = initialPassage?.endVerse ?? initialPassage?.verse_end ?? 11;
+      const initPassage = initialPassage as any;
+      if (initPassage?.segments && Array.isArray(initPassage.segments) && initPassage.segments.length > 0) {
+        setSegments(initPassage.segments);
+        const first = initPassage.segments[0];
+        setSelectedBook(first.book);
+        setSelectedChapter(first.startChapter);
+        setSelectedChapterEnd(first.endChapter);
+        setSelectedVerseStart(first.startVerse);
+        setSelectedVerseEnd(first.endVerse);
+        const bookMeta = findCanonicalBook(first.book);
+        if (bookMeta) setTestamentTab(bookMeta.testament);
+      } else if (initPassage?.book) {
+        const book = initPassage.book;
+        const bookMeta = findCanonicalBook(book) || CANONICAL_BOOKS[44];
+        const safeStartCh = Math.max(1, Math.min(initPassage?.startChapter ?? initPassage?.chapter_start ?? 1, bookMeta.chapters));
+        const safeEndCh = Math.max(safeStartCh, Math.min(initPassage?.endChapter ?? initPassage?.chapter_end ?? safeStartCh, bookMeta.chapters));
+        const maxStartV = bookMeta.versesPerChapter[safeStartCh - 1];
+        const maxEndV = bookMeta.versesPerChapter[safeEndCh - 1];
+        const safeStartV = initPassage?.startVerse ?? initPassage?.verse_start ? Math.max(1, Math.min(initPassage?.startVerse ?? initPassage?.verse_start, maxStartV)) : null;
+        const rawEndV = initPassage?.endVerse ?? initPassage?.verse_end;
+        const safeEndV = rawEndV ? Math.max(safeStartCh === safeEndCh ? (safeStartV ?? 1) : 1, Math.min(rawEndV, maxEndV)) : safeStartV;
 
-      setSelectedBook(book);
-      setSelectedChapter(startCh);
-      setSelectedVerseStart(startV);
-      setSelectedVerseEnd(endV);
-      setSelectionAnchor(null);
-
-      const bookMeta = findCanonicalBook(book);
-      if (bookMeta) {
+        setSelectedBook(bookMeta.name);
+        setSelectedChapter(safeStartCh);
+        setSelectedChapterEnd(safeEndCh);
+        setSelectedVerseStart(safeStartV);
+        setSelectedVerseEnd(safeEndV);
+        setSegments([]);
         setTestamentTab(bookMeta.testament);
+      } else {
+        // Clean slate: no verse or chapter preselected
+        setSelectedBook(null);
+        setSelectedChapter(null);
+        setSelectedChapterEnd(null);
+        setSelectedVerseStart(null);
+        setSelectedVerseEnd(null);
+        setSegments([]);
+        setTestamentTab('NT');
       }
+
+      setSelectionAnchor(null);
+      setChapterAnchor(null);
       setStep('book');
       setSearchQuery('');
+      setSmartParseError(null);
     }
   }, [visible, initialPassage]);
 
   // Current book metadata
   const currentBookMeta = useMemo(() => {
-    return findCanonicalBook(selectedBook) || CANONICAL_BOOKS[44]; // default Romans
+    return selectedBook ? findCanonicalBook(selectedBook) || CANONICAL_BOOKS[44] : CANONICAL_BOOKS[44];
   }, [selectedBook]);
 
-  // Total verses for current chapter
-  const currentChapterVerses = useMemo(() => {
+  const startChapterVerses = useMemo(() => {
+    if (!selectedBook || !selectedChapter) return 30;
     return getChapterVerseCount(selectedBook, selectedChapter);
   }, [selectedBook, selectedChapter]);
+
+  const endChapterVerses = useMemo(() => {
+    if (!selectedBook) return 30;
+    const targetEndCh = selectedChapterEnd ?? selectedChapter ?? 1;
+    return getChapterVerseCount(selectedBook, targetEndCh);
+  }, [selectedBook, selectedChapter, selectedChapterEnd]);
 
   // Filtered books for Step 1
   const filteredBooks = useMemo(() => {
@@ -263,147 +302,234 @@ export default function PassagePicker({
     });
   }, [testamentTab, searchQuery]);
 
+  // Current active draft segment (only valid when book, start chapter and start verse are chosen)
+  const activeDraftSegment = useMemo((): PassageSegment | null => {
+    if (!selectedBook || selectedChapter === null || selectedVerseStart === null) {
+      return null;
+    }
+    const endCh = selectedChapterEnd ?? selectedChapter;
+    const endV = selectedVerseEnd ?? selectedVerseStart;
+    return buildSegment(
+      selectedBook,
+      selectedChapter,
+      selectedVerseStart,
+      endCh,
+      endV
+    );
+  }, [selectedBook, selectedChapter, selectedVerseStart, selectedChapterEnd, selectedVerseEnd]);
+
+  // --------------------------------------------------------------------------
+  // Smart Direct Text Parsing
+  // --------------------------------------------------------------------------
+  const handleSmartParseInput = useCallback((raw: string) => {
+    setSearchQuery(raw);
+    setSmartParseError(null);
+
+    const parsed = parsePassageReferenceString(raw);
+    if (parsed.length > 0) {
+      setSegments(parsed);
+      const first = parsed[0];
+      setSelectedBook(first.book);
+      setSelectedChapter(first.startChapter);
+      setSelectedChapterEnd(first.endChapter);
+      setSelectedVerseStart(first.startVerse);
+      setSelectedVerseEnd(first.endVerse);
+    }
+  }, []);
+
   // --------------------------------------------------------------------------
   // Step Transitions & Boundary Resets
   // --------------------------------------------------------------------------
 
   const handleSelectBook = useCallback((book: CanonicalBook) => {
     setSelectedBook(book.name);
-    // Boundary 17.2: Changing book resets previously selected chapter and verse
-    setSelectedChapter(1);
-    setSelectedVerseStart(1);
-    setSelectedVerseEnd(1);
-    setSelectionAnchor(null);
+    setSelectedChapter(book.chapters === 1 ? 1 : null);
+    setSelectedChapterEnd(book.chapters === 1 ? 1 : null);
+    setSelectedVerseStart(null);
+    setSelectedVerseEnd(null);
 
     if (book.chapters === 1) {
-      // Boundary 17.4: Single-chapter book picker defaults chapter to 1
-      setStep('verse');
+      setStep('start_verse');
     } else {
-      setStep('chapter');
+      setStep('start_chapter');
     }
   }, []);
 
-  const handleSelectChapter = useCallback((chapterNum: number) => {
-    // Boundary 17.3: Changing chapter resets previously selected verse range
-    setSelectedChapter(chapterNum);
-    setSelectedVerseStart(1);
-    setSelectedVerseEnd(1);
-    setSelectionAnchor(null);
-    setStep('verse');
+  const handleSelectStartChapter = useCallback((ch: number) => {
+    setSelectedChapter(ch);
+    setSelectedChapterEnd(ch);
+    setSelectedVerseStart(null);
+    setSelectedVerseEnd(null);
+    setStep('start_verse');
   }, []);
 
-  const handleSelectVerse = useCallback((verseNum: number) => {
-    setSelectionAnchor((currentAnchor) => {
-      if (currentAnchor === null) {
-        // First tap: anchor start of range, select single verse
-        setSelectedVerseStart(verseNum);
-        setSelectedVerseEnd(verseNum);
-        return verseNum;
-      } else {
-        // Second tap: set range endpoints and complete selection
-        if (verseNum === currentAnchor) {
-          setSelectedVerseStart(verseNum);
-          setSelectedVerseEnd(verseNum);
-        } else if (verseNum > currentAnchor) {
-          setSelectedVerseStart(currentAnchor);
-          setSelectedVerseEnd(verseNum);
-        } else {
-          setSelectedVerseStart(verseNum);
-          setSelectedVerseEnd(currentAnchor);
-        }
-        return null;
-      }
-    });
+  const handleSelectStartVerse = useCallback((v: number) => {
+    setSelectedVerseStart(v);
+    setSelectedVerseEnd(v);
+    // Standard fast path: advance directly to end_verse (same chapter)
+    setStep('end_verse');
   }, []);
+
+  const handleSelectEndChapter = useCallback((ch: number) => {
+    if (selectedChapter === null) return;
+    const safeEndCh = Math.max(selectedChapter, ch);
+    setSelectedChapterEnd(safeEndCh);
+    const maxV = selectedBook ? getChapterVerseCount(selectedBook, safeEndCh) : 30;
+    const safeEndV = safeEndCh === selectedChapter ? Math.max(selectedVerseStart ?? 1, selectedVerseEnd ?? 1) : maxV;
+    setSelectedVerseEnd(safeEndV);
+    setStep('end_verse');
+  }, [selectedBook, selectedChapter, selectedVerseStart, selectedVerseEnd]);
+
+  const handleSelectEndVerse = useCallback((v: number) => {
+    if (selectedVerseStart === null) {
+      setSelectedVerseStart(v);
+      setSelectedVerseEnd(v);
+      return;
+    }
+    if (selectedChapter === selectedChapterEnd) {
+      const safeV = Math.max(selectedVerseStart, v);
+      setSelectedVerseEnd(safeV);
+    } else {
+      setSelectedVerseEnd(v);
+    }
+  }, [selectedChapter, selectedChapterEnd, selectedVerseStart]);
 
   const handleSelectEntireChapter = useCallback(() => {
+    if (selectedChapter === null) return;
+    setSelectedChapterEnd(selectedChapter);
     setSelectedVerseStart(1);
-    setSelectedVerseEnd(currentChapterVerses);
-    setSelectionAnchor(null);
-  }, [currentChapterVerses]);
+    setSelectedVerseEnd(startChapterVerses);
+    setStep('end_verse');
+  }, [selectedChapter, startChapterVerses]);
+
+  // Multi-Segment (Compound) Segment Actions
+  const handleAddCurrentSegment = useCallback(() => {
+    if (!activeDraftSegment) return;
+    setSegments((prev) => [...prev, activeDraftSegment]);
+    // Reset picker step to book for next segment addition
+    setSelectedBook(null);
+    setSelectedChapter(null);
+    setSelectedChapterEnd(null);
+    setSelectedVerseStart(null);
+    setSelectedVerseEnd(null);
+    setStep('book');
+  }, [activeDraftSegment]);
+
+  const handleRemoveSegment = useCallback((index: number) => {
+    setSegments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
 
   const handleBackStep = useCallback(() => {
-    if (step === 'verse') {
+    if (step === 'end_verse') {
+      // If user came from end_chapter (multi-chapter selection)
+      if (selectedChapter !== selectedChapterEnd) {
+        setStep('end_chapter');
+      } else {
+        setStep('start_verse');
+      }
+    } else if (step === 'end_chapter') {
+      setStep('end_verse');
+    } else if (step === 'start_verse') {
       if (currentBookMeta.chapters === 1) {
         setStep('book');
       } else {
-        setStep('chapter');
+        setStep('start_chapter');
       }
-    } else if (step === 'chapter') {
+    } else if (step === 'start_chapter') {
       setStep('book');
     } else {
       handleDismiss();
     }
-  }, [step, currentBookMeta, handleDismiss]);
+  }, [step, selectedChapter, selectedChapterEnd, currentBookMeta.chapters, handleDismiss]);
 
   const handleReset = useCallback(() => {
-    setSelectedBook('Romans');
-    setSelectedChapter(8);
-    setSelectedVerseStart(1);
-    setSelectedVerseEnd(11);
-    setSelectionAnchor(null);
+    setSelectedBook(null);
+    setSelectedChapter(null);
+    setSelectedChapterEnd(null);
+    setSelectedVerseStart(null);
+    setSelectedVerseEnd(null);
+    setSegments([]);
     setTestamentTab('NT');
     setStep('book');
     setSearchQuery('');
+    setSmartParseError(null);
   }, []);
 
+  const canConfirm = useMemo(() => {
+    return segments.length > 0 || activeDraftSegment !== null;
+  }, [segments, activeDraftSegment]);
+
   const handleConfirm = useCallback(() => {
-    // Boundary 17.1: Selecting end verse before start verse is prevented
-    validateVerseRange(selectedVerseStart, selectedVerseEnd);
+    let finalSegments: PassageSegment[] = [];
 
-    const [startOrd, endOrd] = computeCanonicalOrdinals(
-      selectedBook,
-      selectedChapter,
-      selectedVerseStart,
-      selectedChapter,
-      selectedVerseEnd
-    );
+    if (segments.length > 0) {
+      if (activeDraftSegment) {
+        const alreadyInList = segments.some(
+          (s) =>
+            s.book === activeDraftSegment.book &&
+            s.startChapter === activeDraftSegment.startChapter &&
+            s.endChapter === activeDraftSegment.endChapter &&
+            s.startVerse === activeDraftSegment.startVerse &&
+            s.endVerse === activeDraftSegment.endVerse
+        );
+        finalSegments = alreadyInList ? [...segments] : [...segments, activeDraftSegment];
+      } else {
+        finalSegments = [...segments];
+      }
+    } else if (activeDraftSegment) {
+      finalSegments = [activeDraftSegment];
+    } else {
+      return;
+    }
 
-    const referenceString = formatPassageReference(
-      selectedBook,
-      selectedChapter,
-      selectedVerseStart,
-      selectedChapter,
-      selectedVerseEnd
-    );
+    const passageRef = createPassageReference(finalSegments);
 
     const payload: PassageSelection = {
-      book: selectedBook,
-      startChapter: selectedChapter,
-      startVerse: selectedVerseStart,
-      endChapter: selectedChapter,
-      endVerse: selectedVerseEnd,
-      startOrdinal: startOrd,
-      endOrdinal: endOrd,
-      referenceString,
-      chapter_start: selectedChapter,
-      verse_start: selectedVerseStart,
-      chapter_end: selectedChapter,
-      verse_end: selectedVerseEnd,
-      start_verse_id: startOrd,
-      end_verse_id: endOrd,
+      display: passageRef.display,
+      displayString: passageRef.display,
+      books: passageRef.books,
+      segments: passageRef.segments,
+      book: passageRef.segments[0].book,
+      startChapter: passageRef.segments[0].startChapter,
+      startVerse: passageRef.segments[0].startVerse,
+      endChapter: passageRef.segments[passageRef.segments.length - 1].endChapter,
+      endVerse: passageRef.segments[passageRef.segments.length - 1].endVerse,
     };
 
     onSelect(payload);
     handleDismiss();
   }, [
-    selectedBook,
-    selectedChapter,
-    selectedVerseStart,
-    selectedVerseEnd,
+    segments,
+    activeDraftSegment,
     onSelect,
     handleDismiss,
   ]);
 
   const currentSummary = useMemo(() => {
-    return formatPassageReference(
-      selectedBook,
-      selectedChapter,
-      selectedVerseStart,
-      selectedChapter,
-      selectedVerseEnd
-    );
-  }, [selectedBook, selectedChapter, selectedVerseStart, selectedVerseEnd]);
+    if (segments.length > 0) {
+      if (activeDraftSegment) {
+        const alreadyInList = segments.some(
+          (s) =>
+            s.book === activeDraftSegment.book &&
+            s.startChapter === activeDraftSegment.startChapter &&
+            s.endChapter === activeDraftSegment.endChapter &&
+            s.startVerse === activeDraftSegment.startVerse &&
+            s.endVerse === activeDraftSegment.endVerse
+        );
+        const all = alreadyInList ? segments : [...segments, activeDraftSegment];
+        return formatCompoundDisplay(all);
+      }
+      return formatCompoundDisplay(segments);
+    }
+    if (activeDraftSegment) {
+      return formatSegmentDisplay(activeDraftSegment);
+    }
+    return selectedBook
+      ? selectedChapter
+        ? `${selectedBook} ${selectedChapter}`
+        : selectedBook
+      : 'No passage selected';
+  }, [segments, activeDraftSegment, selectedBook, selectedChapter]);
 
   // --------------------------------------------------------------------------
   // Render Helpers for Steps
@@ -457,16 +583,19 @@ export default function PassagePicker({
         <View style={styles.searchContainer}>
           <TextInput
             value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search book name..."
+            onChangeText={handleSmartParseInput}
+            placeholder="Type book or passage (e.g. Gen 1:1-3, Rom 8)..."
             placeholderTextColor={colors.textSecondary}
             style={styles.searchInput}
-            autoCapitalize="words"
+            autoCapitalize="sentences"
             autoCorrect={false}
           />
           {searchQuery.length > 0 && (
             <Pressable
-              onPress={() => setSearchQuery('')}
+              onPress={() => {
+                setSearchQuery('');
+                setSmartParseError(null);
+              }}
               style={styles.searchClearButton}
             >
               <Text style={styles.searchClearText}>✕</Text>
@@ -511,7 +640,7 @@ export default function PassagePicker({
     </View>
   );
 
-  const renderChapterStep = () => {
+  const renderStartChapterStep = () => {
     const chaptersArray = Array.from(
       { length: currentBookMeta.chapters },
       (_, i) => i + 1
@@ -521,7 +650,7 @@ export default function PassagePicker({
       <View style={styles.stepContainer}>
         <View style={styles.stepHeaderNotice}>
           <Text style={styles.stepHeaderNoticeText}>
-            Select chapter for {selectedBook}
+            Select start chapter for {selectedBook}
           </Text>
         </View>
 
@@ -540,7 +669,7 @@ export default function PassagePicker({
                     { width: squareTileSize, height: squareTileSize },
                     isSelected && styles.chapterTileSelected,
                   ]}
-                  onPress={() => handleSelectChapter(ch)}
+                  onPress={() => handleSelectStartChapter(ch)}
                 >
                   <Text
                     style={[
@@ -559,9 +688,9 @@ export default function PassagePicker({
     );
   };
 
-  const renderVerseStep = () => {
+  const renderStartVerseStep = () => {
     const versesArray = Array.from(
-      { length: currentChapterVerses },
+      { length: startChapterVerses },
       (_, i) => i + 1
     );
 
@@ -569,16 +698,14 @@ export default function PassagePicker({
       <View style={styles.stepContainer}>
         <View style={styles.verseActionHeader}>
           <Text style={styles.stepHeaderNoticeText}>
-            {selectionAnchor !== null
-              ? `Select end verse (or confirm verse ${selectionAnchor})`
-              : 'Select start and end verse'}
+            Select start verse for {selectedBook} {selectedChapter}
           </Text>
           <Pressable
             style={styles.wholeChapterChip}
             onPress={handleSelectEntireChapter}
           >
             <Text style={styles.wholeChapterChipText}>
-              Entire chapter ({currentChapterVerses} v)
+              Entire chapter ({startChapterVerses} v)
             </Text>
           </Pressable>
         </View>
@@ -589,26 +716,155 @@ export default function PassagePicker({
         >
           <View style={styles.verseGrid}>
             {versesArray.map((v) => {
-              const isStart = v === selectedVerseStart;
-              const isEnd = v === selectedVerseEnd;
-              const inRange = v > selectedVerseStart && v < selectedVerseEnd;
-
+              const isSelected = v === selectedVerseStart;
               return (
                 <Pressable
                   key={v}
                   style={[
                     styles.verseTile,
                     { width: squareTileSize, height: squareTileSize },
-                    inRange && styles.verseTileInRange,
-                    (isStart || isEnd) && styles.verseTileEndpoint,
+                    isSelected && styles.verseTileEndpoint,
                   ]}
-                  onPress={() => handleSelectVerse(v)}
+                  onPress={() => handleSelectStartVerse(v)}
+                >
+                  <Text
+                    style={[
+                      styles.verseTileText,
+                      isSelected && styles.verseTileTextEndpoint,
+                    ]}
+                  >
+                    {v}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderEndChapterStep = () => {
+    const startCh = selectedChapter ?? 1;
+    const endCh = selectedChapterEnd ?? startCh;
+    const chaptersArray = Array.from(
+      { length: currentBookMeta.chapters },
+      (_, i) => i + 1
+    );
+
+    return (
+      <View style={styles.stepContainer}>
+        <View style={styles.verseActionHeader}>
+          <Text style={styles.stepHeaderNoticeText}>
+            Select end chapter (starts at ch. {startCh})
+          </Text>
+          <Pressable
+            style={styles.wholeChapterChip}
+            onPress={() => handleSelectEndChapter(startCh)}
+          >
+            <Text style={styles.wholeChapterChipText}>
+              Same chapter ({startCh})
+            </Text>
+          </Pressable>
+        </View>
+
+        <ScrollView
+          contentContainerStyle={styles.gridContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.chapterGrid}>
+            {chaptersArray.map((ch) => {
+              const isDisabled = ch < startCh;
+              const isSelected = ch === endCh;
+              const inRange = ch >= startCh && ch <= endCh;
+
+              return (
+                <Pressable
+                  key={ch}
+                  disabled={isDisabled}
+                  style={[
+                    styles.chapterTile,
+                    { width: squareTileSize, height: squareTileSize },
+                    isDisabled && { opacity: 0.3 },
+                    inRange && styles.chapterTileInRange,
+                    isSelected && styles.chapterTileSelected,
+                  ]}
+                  onPress={() => handleSelectEndChapter(ch)}
+                >
+                  <Text
+                    style={[
+                      styles.chapterTileText,
+                      inRange && styles.chapterTileTextInRange,
+                      isSelected && styles.chapterTileTextSelected,
+                    ]}
+                  >
+                    {ch}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderEndVerseStep = () => {
+    const versesArray = Array.from(
+      { length: endChapterVerses },
+      (_, i) => i + 1
+    );
+
+    const startV = selectedVerseStart ?? 1;
+    const endV = selectedVerseEnd ?? startV;
+
+    return (
+      <View style={styles.stepContainer}>
+        <View style={styles.verseActionHeader}>
+          <Text style={styles.stepHeaderNoticeText}>
+            Select end verse for {selectedBook} {selectedChapterEnd ?? selectedChapter}
+          </Text>
+          {currentBookMeta.chapters > 1 && (
+            <Pressable
+              style={styles.wholeChapterChip}
+              onPress={() => setStep('end_chapter')}
+            >
+              <Text style={styles.wholeChapterChipText}>
+                Span multiple chapters ›
+              </Text>
+            </Pressable>
+          )}
+        </View>
+
+        <ScrollView
+          contentContainerStyle={styles.gridContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.verseGrid}>
+            {versesArray.map((v) => {
+              const isSameChapter = (selectedChapter ?? 1) === (selectedChapterEnd ?? selectedChapter ?? 1);
+              const isDisabled = isSameChapter && selectedVerseStart !== null && v < selectedVerseStart;
+              const isSelected = selectedVerseEnd !== null ? v === selectedVerseEnd : v === selectedVerseStart;
+              const inRange = isSameChapter && selectedVerseStart !== null && selectedVerseEnd !== null && v > selectedVerseStart && v < selectedVerseEnd;
+
+              return (
+                <Pressable
+                  key={v}
+                  disabled={isDisabled}
+                  style={[
+                    styles.verseTile,
+                    { width: squareTileSize, height: squareTileSize },
+                    isDisabled && { opacity: 0.3 },
+                    inRange && styles.verseTileInRange,
+                    isSelected && styles.verseTileEndpoint,
+                  ]}
+                  onPress={() => handleSelectEndVerse(v)}
                 >
                   <Text
                     style={[
                       styles.verseTileText,
                       inRange && styles.verseTileTextInRange,
-                      (isStart || isEnd) && styles.verseTileTextEndpoint,
+                      isSelected && styles.verseTileTextEndpoint,
                     ]}
                   >
                     {v}
@@ -648,9 +904,13 @@ export default function PassagePicker({
                 <Text style={styles.navBarTitle}>
                   {step === 'book'
                     ? 'Select Book'
-                    : step === 'chapter'
-                    ? selectedBook
-                    : `${selectedBook} ${selectedChapter}`}
+                    : step === 'start_chapter'
+                    ? `${selectedBook}: Start Chapter`
+                    : step === 'start_verse'
+                    ? `${selectedBook} ${selectedChapter}: Start Verse`
+                    : step === 'end_chapter'
+                    ? `${selectedBook}: End Chapter`
+                    : `${selectedBook} ${selectedChapterEnd ?? selectedChapter}: End Verse`}
                 </Text>
 
                 <Pressable onPress={handleReset} style={styles.navBarButton}>
@@ -681,17 +941,23 @@ export default function PassagePicker({
                 <Pressable
                   style={[
                     styles.breadcrumbChip,
-                    step === 'chapter' && styles.breadcrumbChipActive,
+                    (step === 'start_chapter' || step === 'end_chapter') && styles.breadcrumbChipActive,
                   ]}
-                  onPress={() => setStep('chapter')}
+                  onPress={() => {
+                    if (selectedBook) setStep('start_chapter');
+                  }}
                 >
                   <Text
                     style={[
                       styles.breadcrumbText,
-                      step === 'chapter' && styles.breadcrumbTextActive,
+                      (step === 'start_chapter' || step === 'end_chapter') && styles.breadcrumbTextActive,
                     ]}
                   >
-                    Ch {selectedChapter || 1}
+                    {selectedChapter === null
+                      ? 'Chapter'
+                      : selectedChapter === selectedChapterEnd
+                      ? `Ch ${selectedChapter}`
+                      : `Ch ${selectedChapter}–${selectedChapterEnd ?? selectedChapter}`}
                   </Text>
                 </Pressable>
 
@@ -700,19 +966,25 @@ export default function PassagePicker({
                 <Pressable
                   style={[
                     styles.breadcrumbChip,
-                    step === 'verse' && styles.breadcrumbChipActive,
+                    (step === 'start_verse' || step === 'end_verse') && styles.breadcrumbChipActive,
                   ]}
-                  onPress={() => setStep('verse')}
+                  onPress={() => {
+                    if (selectedBook && selectedChapter !== null) setStep('start_verse');
+                  }}
                 >
                   <Text
                     style={[
                       styles.breadcrumbText,
-                      step === 'verse' && styles.breadcrumbTextActive,
+                      (step === 'start_verse' || step === 'end_verse') && styles.breadcrumbTextActive,
                     ]}
                   >
-                    {selectedVerseStart === selectedVerseEnd
+                    {selectedVerseStart === null
+                      ? 'Verse'
+                      : selectedChapter === selectedChapterEnd && selectedVerseStart === selectedVerseEnd
                       ? `v. ${selectedVerseStart}`
-                      : `v. ${selectedVerseStart}–${selectedVerseEnd}`}
+                      : selectedChapter === selectedChapterEnd
+                      ? `v. ${selectedVerseStart}–${selectedVerseEnd ?? selectedVerseStart}`
+                      : `${selectedChapter}:${selectedVerseStart}–${selectedChapterEnd ?? selectedChapter}:${selectedVerseEnd ?? selectedVerseStart}`}
                   </Text>
                 </Pressable>
               </View>
@@ -721,23 +993,66 @@ export default function PassagePicker({
 
               <View style={styles.bodyContainer}>
                 {step === 'book' && renderBookStep()}
-                {step === 'chapter' && renderChapterStep()}
-                {step === 'verse' && renderVerseStep()}
+                {step === 'start_chapter' && renderStartChapterStep()}
+                {step === 'start_verse' && renderStartVerseStep()}
+                {step === 'end_chapter' && renderEndChapterStep()}
+                {step === 'end_verse' && renderEndVerseStep()}
               </View>
 
               <View style={styles.footerContainer}>
+                {/* Compound Segment Chips */}
+                {segments.length > 0 && (
+                  <View style={styles.stagedSegmentsContainer}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stagedSegmentsList}>
+                      {segments.map((seg, idx) => (
+                        <View key={idx} style={styles.stagedSegmentChip}>
+                          <Text style={styles.stagedSegmentText}>
+                            {formatSegmentDisplay(seg)}
+                          </Text>
+                          <Pressable
+                            hitSlop={6}
+                            onPress={() => handleRemoveSegment(idx)}
+                            style={styles.removeSegmentButton}
+                          >
+                            <Text style={styles.removeSegmentIcon}>✕</Text>
+                          </Pressable>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
                 <View style={styles.summaryRow}>
                   <View style={styles.summaryTextColumn}>
                     <Text style={styles.summaryLabel}>Selected Passage</Text>
-                    <Text style={styles.summaryReference}>{currentSummary}</Text>
+                    <Text style={styles.summaryReference} numberOfLines={2}>
+                      {currentSummary}
+                    </Text>
                   </View>
 
-                  <Pressable
-                    style={styles.confirmButton}
-                    onPress={handleConfirm}
-                  >
-                    <Text style={styles.confirmButtonText}>Confirm</Text>
-                  </Pressable>
+                  <View style={styles.actionButtonGroup}>
+                    <Pressable
+                      style={[
+                        styles.addSegmentButton,
+                        !activeDraftSegment && { opacity: 0.4 },
+                      ]}
+                      disabled={!activeDraftSegment}
+                      onPress={handleAddCurrentSegment}
+                    >
+                      <Text style={styles.addSegmentButtonText}>+ Add</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={[
+                        styles.confirmButton,
+                        !canConfirm && { opacity: 0.4 },
+                      ]}
+                      disabled={!canConfirm}
+                      onPress={handleConfirm}
+                    >
+                      <Text style={styles.confirmButtonText}>Confirm</Text>
+                    </Pressable>
+                  </View>
                 </View>
               </View>
             </View>
@@ -1083,11 +1398,72 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textPrimary,
   },
+  stagedSegmentsContainer: {
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderColor: colors.borderHairline,
+    marginBottom: spacing.xs,
+  },
+  stagedSegmentsList: {
+    gap: spacing.xs,
+    alignItems: 'center',
+  },
+  stagedSegmentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.bgSurfaceRaised,
+    borderRadius: radii.controls,
+    borderWidth: 1,
+    borderColor: colors.borderHairline,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    gap: 6,
+  },
+  stagedSegmentText: {
+    fontSize: 12,
+    color: colors.textPrimary,
+    fontWeight: '500',
+  },
+  removeSegmentButton: {
+    padding: 2,
+  },
+  removeSegmentIcon: {
+    fontSize: 11,
+    color: colors.textDisabled,
+    fontWeight: '700',
+  },
+  chapterTileInRange: {
+    backgroundColor: 'rgba(227, 165, 61, 0.15)',
+    borderColor: colors.accentKeyIdea,
+  },
+  chapterTileTextInRange: {
+    color: colors.accentKeyIdea,
+  },
+  actionButtonGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  addSegmentButton: {
+    backgroundColor: colors.bgSurfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.borderHairline,
+    borderRadius: radii.controls,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addSegmentButtonText: {
+    color: colors.accentKeyIdea,
+    fontSize: 14,
+    fontWeight: '600',
+  },
   confirmButton: {
     backgroundColor: colors.accentKeyIdea,
     borderRadius: radii.controls,
     paddingVertical: 10,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1097,3 +1473,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+

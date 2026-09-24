@@ -114,6 +114,56 @@ describe('PassagePicker Selection Logic & State Machine', () => {
     });
   });
 
+  describe('Two-Tap Cross-Chapter Range State Machine Simulation', () => {
+    interface ChapterSelectionState {
+      startChapter: number;
+      endChapter: number;
+      anchor: number | null;
+    }
+
+    const selectChapter = (state: ChapterSelectionState, chapterNum: number): ChapterSelectionState => {
+      if (state.anchor === null) {
+        return {
+          startChapter: chapterNum,
+          endChapter: chapterNum,
+          anchor: chapterNum,
+        };
+      } else {
+        const start = Math.min(state.anchor, chapterNum);
+        const end = Math.max(state.anchor, chapterNum);
+        return {
+          startChapter: start,
+          endChapter: end,
+          anchor: null,
+        };
+      }
+    };
+
+    test('first tap on chapter 1 sets anchor and selects chapter 1', () => {
+      const initial: ChapterSelectionState = { startChapter: 8, endChapter: 8, anchor: null };
+      const s1 = selectChapter(initial, 1);
+      expect(s1.startChapter).toBe(1);
+      expect(s1.endChapter).toBe(1);
+      expect(s1.anchor).toBe(1);
+    });
+
+    test('second tap on chapter 2 forms range 1 to 2 and clears anchor', () => {
+      const s1: ChapterSelectionState = { startChapter: 1, endChapter: 1, anchor: 1 };
+      const s2 = selectChapter(s1, 2);
+      expect(s2.startChapter).toBe(1);
+      expect(s2.endChapter).toBe(2);
+      expect(s2.anchor).toBeNull();
+    });
+
+    test('second tap backwards on lower chapter 1 from anchor 3 forms range 1 to 3', () => {
+      const s1: ChapterSelectionState = { startChapter: 3, endChapter: 3, anchor: 3 };
+      const s2 = selectChapter(s1, 1);
+      expect(s2.startChapter).toBe(1);
+      expect(s2.endChapter).toBe(3);
+      expect(s2.anchor).toBeNull();
+    });
+  });
+
   describe('computeCanonicalOrdinals & verse counts', () => {
     test('computes valid ordinal range for Romans 8:14–18', () => {
       const [startOrd, endOrd] = computeCanonicalOrdinals('Romans', 8, 14, 8, 18);
@@ -128,4 +178,98 @@ describe('PassagePicker Selection Logic & State Machine', () => {
       expect(getChapterVerseCount('Genesis', 1)).toBe(31);
     });
   });
+
+  describe('Streamlined Single-Chapter Flow & Clean Slate Selection', () => {
+    interface PickerFlowState {
+      step: 'book' | 'start_chapter' | 'start_verse' | 'end_chapter' | 'end_verse';
+      book: string | null;
+      startChapter: number | null;
+      endChapter: number | null;
+      startVerse: number | null;
+      endVerse: number | null;
+    }
+
+    const initCleanPicker = (): PickerFlowState => ({
+      step: 'book',
+      book: null,
+      startChapter: null,
+      endChapter: null,
+      startVerse: null,
+      endVerse: null,
+    });
+
+    const selectBook = (state: PickerFlowState, book: string, chapters: number): PickerFlowState => ({
+      ...state,
+      book,
+      startChapter: chapters === 1 ? 1 : null,
+      endChapter: chapters === 1 ? 1 : null,
+      startVerse: null,
+      endVerse: null,
+      step: chapters === 1 ? 'start_verse' : 'start_chapter',
+    });
+
+    const selectStartChapter = (state: PickerFlowState, ch: number): PickerFlowState => ({
+      ...state,
+      startChapter: ch,
+      endChapter: ch,
+      startVerse: null,
+      endVerse: null,
+      step: 'start_verse',
+    });
+
+    const selectStartVerse = (state: PickerFlowState, v: number): PickerFlowState => ({
+      ...state,
+      startVerse: v,
+      endVerse: v,
+      step: 'end_verse', // Streamlined fast-path: advances directly to end_verse
+    });
+
+    test('initial state has null selections and cannot confirm', () => {
+      const state = initCleanPicker();
+      expect(state.book).toBeNull();
+      expect(state.startChapter).toBeNull();
+      expect(state.startVerse).toBeNull();
+      const canConfirm = state.book !== null && state.startChapter !== null && state.startVerse !== null;
+      expect(canConfirm).toBe(false);
+    });
+
+    test('streamlined single-chapter flow: Book -> Start Ch -> Start Verse -> End Verse', () => {
+      let state = initCleanPicker();
+      state = selectBook(state, 'Romans', 16);
+      expect(state.step).toBe('start_chapter');
+      expect(state.book).toBe('Romans');
+
+      state = selectStartChapter(state, 8);
+      expect(state.step).toBe('start_verse');
+      expect(state.startChapter).toBe(8);
+      expect(state.endChapter).toBe(8);
+
+      state = selectStartVerse(state, 1);
+      expect(state.step).toBe('end_verse');
+      expect(state.startVerse).toBe(1);
+      expect(state.endVerse).toBe(1);
+      expect(state.endChapter).toBe(8);
+
+      const canConfirm = state.book !== null && state.startChapter !== null && state.startVerse !== null;
+      expect(canConfirm).toBe(true);
+    });
+
+    test('multi-chapter opt-in: clicking span multiple chapters switches step to end_chapter', () => {
+      let state = initCleanPicker();
+      state = selectBook(state, 'Romans', 16);
+      state = selectStartChapter(state, 8);
+      state = selectStartVerse(state, 28);
+      expect(state.step).toBe('end_verse');
+
+      // User clicks "Span multiple chapters ›"
+      state = { ...state, step: 'end_chapter' };
+      expect(state.step).toBe('end_chapter');
+
+      // User selects end chapter 9
+      state = { ...state, endChapter: 9, endVerse: 33, step: 'end_verse' };
+      expect(state.endChapter).toBe(9);
+      expect(state.step).toBe('end_verse');
+    });
+  });
 });
+

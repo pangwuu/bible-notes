@@ -45,8 +45,8 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onPress, style }) => {
   const previewSnippet = cleanSnippet(rawSnippet);
 
   const passageDisplay = note.passage
-    ? formatPassageDisplay(note.passage)
-    : `${note.book} ${note.chapter_start}:${note.verse_start}`;
+    ? note.passage.display || note.passage.displayString || formatPassageDisplay(note.passage)
+    : 'Scripture Note';
 
   return (
     <Pressable
@@ -60,7 +60,9 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onPress, style }) => {
       accessibilityLabel={`Note on ${passageDisplay}`}
     >
       <View style={styles.headerRow}>
-        <Text style={styles.passageRef}>{passageDisplay}</Text>
+        <Text style={styles.passageRef} numberOfLines={2} ellipsizeMode="tail">
+          {passageDisplay}
+        </Text>
         <View style={styles.indicators}>
           {/* Visibility indicator pill showing whether note is shared with friends or private */}
           <View style={styles.visBadge}>
@@ -90,7 +92,11 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onPress, style }) => {
         <Text numberOfLines={2} style={styles.snippet}>
           {previewSnippet}
         </Text>
-      ) : null}
+      ) : (
+        <Text numberOfLines={1} style={styles.emptySnippet}>
+          No reflection written yet
+        </Text>
+      )}
 
       {note.tags && note.tags.length > 0 ? (
         <View style={styles.tagRow}>
@@ -124,11 +130,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.textPrimary,
+    flex: 1,
+    marginRight: spacing.sm,
   },
   indicators: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+    flexShrink: 0,
   },
   indicatorSymbol: {
     fontSize: 14,
@@ -138,6 +147,14 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontFamily: 'SourceSerifPro',
     lineHeight: 20,
+    marginBottom: spacing.xs,
+  },
+  emptySnippet: {
+    fontSize: 13,
+    color: colors.textDisabled,
+    fontFamily: 'SourceSerifPro',
+    fontStyle: 'italic',
+    lineHeight: 18,
     marginBottom: spacing.xs,
   },
   tagRow: {

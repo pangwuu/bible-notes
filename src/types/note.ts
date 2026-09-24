@@ -5,20 +5,30 @@
 
 export type NoteVisibility = 'friends' | 'private' | 'public';
 
-export interface PassageReference {
+/**
+ * A discrete contiguous passage segment.
+ */
+export interface PassageSegment {
   book: string;
   startChapter: number;
   startVerse: number;
   endChapter: number;
   endVerse: number;
-  startOrdinal: number;
-  endOrdinal: number;
+}
+
+/**
+ * First-Class Passage Reference model.
+ * Clean slate: display title, books list, and discrete segments.
+ */
+export interface PassageReference {
+  display: string;           // e.g. "John 3:16, Romans 8:1–8"
+  displayString?: string;     // alias for convenience
+  books: string[];           // ["John", "Romans"]
+  segments: PassageSegment[];
 }
 
 /**
  * Rich client-side domain entity.
- * Supports both modern TypeScript camelCase and Firestore snake_case properties
- * for seamless integration across UI screens and database layers.
  */
 export interface Note {
   id: string;
@@ -29,17 +39,7 @@ export interface Note {
   author_username?: string;
   author_display_name?: string;
 
-  // Structured passage reference
   passage: PassageReference;
-
-  // Flat passage fields matching specs.md and firestore.indexes.json
-  book: string;
-  chapter_start: number;
-  verse_start: number;
-  chapter_end: number;
-  verse_end: number;
-  start_verse_id: number;
-  end_verse_id: number;
 
   // Swedish Method section contents
   lightContent: string;     // 💡 Key Idea
@@ -59,25 +59,30 @@ export interface Note {
 }
 
 /**
- * Firestore document schema directly mapped to Cloud Firestore collection `notes/{noteId}`.
- * Enforces `request.resource.data.user_id == request.auth.uid`.
+ * Clean Firestore document schema directly mapped to Cloud Firestore collection `notes/{noteId}`.
  */
 export interface NoteDocument {
   id: string;
   user_id: string;
   author_username?: string;
   author_display_name?: string;
-  book: string;
-  chapter_start: number;
-  verse_start: number;
-  chapter_end: number;
-  verse_end: number;
-  start_verse_id: number;
-  end_verse_id: number;
+
+  passage: {
+    display: string;
+    books: string[];
+    segments: Array<{
+      book: string;
+      start_chapter: number;
+      start_verse: number;
+      end_chapter: number;
+      end_verse: number;
+    }>;
+  };
+
   content: string;
-  light_content?: string;
-  question_content?: string;
-  arrow_content?: string;
+  light_content: string;
+  question_content: string;
+  arrow_content: string;
   tags: string[];
   visibility: NoteVisibility;
   created_at: any;
@@ -89,16 +94,16 @@ export interface CreateNoteInput {
   authorUsername?: string;
   authorDisplayName?: string;
   passage: PassageReference;
-  lightContent: string;
-  questionContent: string;
-  arrowContent: string;
+  lightContent?: string;
+  questionContent?: string;
+  arrowContent?: string;
   content?: string;
   tags: string[];
   visibility?: NoteVisibility;
 }
 
 export interface UpdateNoteInput {
-  passage?: Partial<PassageReference>;
+  passage?: PassageReference;
   lightContent?: string;
   questionContent?: string;
   arrowContent?: string;
@@ -187,16 +192,36 @@ ${arrowContent || ''}
 }
 
 /**
+ * Formats a passage reference into standard reading format (e.g. "John 3:16–17", "Romans 8:1–11", "Genesis 1:1–3, 3:2–6").
+ */
+/**
  * Formats a passage reference into standard reading format (e.g. "John 3:16–17", "Romans 8:1–11").
  */
 export function formatPassageDisplay(ref: {
-  book: string;
-  startChapter: number;
-  startVerse: number;
-  endChapter: number;
-  endVerse: number;
+  book?: string;
+  startChapter?: number;
+  startVerse?: number;
+  endChapter?: number;
+  endVerse?: number;
+  display?: string;
+  displayString?: string;
+  segments?: PassageSegment[];
 }): string {
-  const { book, startChapter, startVerse, endChapter, endVerse } = ref;
+  if (ref.display) {
+    return ref.display;
+  }
+  if (ref.displayString) {
+    return ref.displayString;
+  }
+  if (ref.segments && ref.segments.length > 0) {
+    return ref.segments.map((s) => formatPassageDisplay(s)).join(', ');
+  }
+  const book = ref.book || '';
+  const startChapter = ref.startChapter || 1;
+  const startVerse = ref.startVerse || 1;
+  const endChapter = ref.endChapter || startChapter;
+  const endVerse = ref.endVerse || startVerse;
+
   if (startChapter === endChapter) {
     if (startVerse === endVerse) {
       return `${book} ${startChapter}:${startVerse}`;
@@ -218,15 +243,51 @@ export function noteDocumentToNote(data: any, id: string): Note {
         arrowContent: data.arrow_content || '',
       };
 
-  const passage: PassageReference = {
-    book: data.book || '',
-    startChapter: Number(data.chapter_start || 1),
-    startVerse: Number(data.verse_start || 1),
-    endChapter: Number(data.chapter_end || data.chapter_start || 1),
-    endVerse: Number(data.verse_end || data.verse_start || 1),
-    startOrdinal: Number(data.start_verse_id || 1),
-    endOrdinal: Number(data.end_verse_id || 1),
-  };
+  let passage: PassageReference;
+
+  if (data.passage && Array.isArray(data.passage.segments) && data.passage.segments.length > 0) {
+    const rawSegs = data.passage.segments;
+    const segments: PassageSegment[] = rawSegs.map((s: any) => ({
+      book: s.book || '',
+      startChapter: Number(s.start_chapter ?? s.chapter_start ?? s.startChapter ?? 1),
+      startVerse: Number(s.start_verse ?? s.verse_start ?? s.startVerse ?? 1),
+      endChapter: Number(s.end_chapter ?? s.chapter_end ?? s.endChapter ?? 1),
+      endVerse: Number(s.end_verse ?? s.verse_end ?? s.endVerse ?? 1),
+    }));
+
+    const books: string[] = Array.isArray(data.passage.books)
+      ? data.passage.books
+      : Array.from(new Set(segments.map((s) => s.book)));
+
+    const display =
+      data.passage.display ||
+      data.passage.displayString ||
+      formatPassageDisplay({ segments });
+
+    passage = {
+      display,
+      displayString: display,
+      books,
+      segments,
+    };
+  } else {
+    // Basic fallback if missing
+    const book = data.book || 'Romans';
+    const singleSegment: PassageSegment = {
+      book,
+      startChapter: Number(data.chapter_start || 8),
+      startVerse: Number(data.verse_start || 1),
+      endChapter: Number(data.chapter_end || 8),
+      endVerse: Number(data.verse_end || 11),
+    };
+    const display = formatPassageDisplay(singleSegment);
+    passage = {
+      display,
+      displayString: display,
+      books: [book],
+      segments: [singleSegment],
+    };
+  }
 
   const userId = data.user_id || data.userId || '';
   const authorUsername = data.author_username || data.authorUsername || '';
@@ -252,13 +313,6 @@ export function noteDocumentToNote(data: any, id: string): Note {
     author_username: authorUsername,
     author_display_name: authorDisplayName,
     passage,
-    book: passage.book,
-    chapter_start: passage.startChapter,
-    verse_start: passage.startVerse,
-    chapter_end: passage.endChapter,
-    verse_end: passage.endVerse,
-    start_verse_id: passage.startOrdinal,
-    end_verse_id: passage.endOrdinal,
     lightContent: data.light_content ?? parsedSections.lightContent,
     questionContent: data.question_content ?? parsedSections.questionContent,
     arrowContent: data.arrow_content ?? parsedSections.arrowContent,

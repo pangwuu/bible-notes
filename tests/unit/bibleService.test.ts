@@ -18,6 +18,9 @@ import {
   DEFAULT_ESV_API_TOKEN,
   SUPPORTED_TRANSLATIONS,
   parseBracketVerses,
+  extractBollsHeadingAndText,
+  isSectionHeading,
+  buildScriptureHtml,
 } from '../../src/services/bibleService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PassageReference } from '../../src/types/note';
@@ -58,13 +61,17 @@ describe('BibleService Unit Tests', () => {
   });
 
   const passageJohn316: PassageReference = {
-    book: 'John',
-    startChapter: 3,
-    startVerse: 16,
-    endChapter: 3,
-    endVerse: 16,
-    startOrdinal: 26137,
-    endOrdinal: 26137,
+    display: 'John 3:16',
+    books: ['John'],
+    segments: [
+      {
+        book: 'John',
+        startChapter: 3,
+        startVerse: 16,
+        endChapter: 3,
+        endVerse: 16,
+      },
+    ],
   };
 
   test('buildBibleCacheKey conforms to specs.md format', () => {
@@ -292,5 +299,83 @@ describe('BibleService Unit Tests', () => {
 
     expect(parsed).toHaveLength(1);
     expect(parsed[0]).toEqual({ verseNumber: 16, text: 'For God so loved the world, that he gave his only Son.' });
+  });
+
+  describe('Section Heading Extraction & Typography Hierarchy', () => {
+    test('isSectionHeading correctly identifies section titles and rejects poetic lines', () => {
+      expect(isSectionHeading('Introduction')).toBe(true);
+      expect(isSectionHeading('The Birth of John the Baptist Foretold')).toBe(true);
+      expect(isSectionHeading('Jesus Teaches Nicodemus')).toBe(true);
+
+      // Rejects poetic continuations or lowercase clauses
+      expect(isSectionHeading('for he has been mindful')).toBe(false);
+      expect(isSectionHeading('He makes me lie down in green pastures,')).toBe(false);
+      expect(isSectionHeading('For God so loved the world')).toBe(false);
+      expect(isSectionHeading('“Praise be to the Lord, the God of Israel,')).toBe(false);
+    });
+
+    test('extractBollsHeadingAndText extracts leading heading and leaves clean verse text', () => {
+      const rawV1 = 'Introduction<br/>Many have undertaken to draw up an account of the things that have been fulfilled among us,';
+      const extractedV1 = extractBollsHeadingAndText(rawV1);
+      expect(extractedV1.heading).toBe('Introduction');
+      expect(extractedV1.text).toBe('Many have undertaken to draw up an account of the things that have been fulfilled among us,');
+
+      const rawV5 = 'The Birth of John the Baptist Foretold<br/>In the time of Herod king of Judea there was a priest...';
+      const extractedV5 = extractBollsHeadingAndText(rawV5);
+      expect(extractedV5.heading).toBe('The Birth of John the Baptist Foretold');
+      expect(extractedV5.text).toBe('In the time of Herod king of Judea there was a priest...');
+
+      // Normal verse without heading remains pure text
+      const rawV2 = 'just as they were handed down to us by those who from the first were eyewitnesses...';
+      const extractedV2 = extractBollsHeadingAndText(rawV2);
+      expect(extractedV2.heading).toBeUndefined();
+      expect(extractedV2.text).toBe('just as they were handed down to us by those who from the first were eyewitnesses...');
+    });
+
+    test('parseBracketVerses extracts initial and intermediate section headings in ESV text', () => {
+      const esvRaw = `Dedication to Theophilus\n\n  [1] Inasmuch as many have undertaken to compile a narrative... [2] just as those who from the beginning...\n\nBirth of John the Baptist Foretold\n\n  [5] In the days of Herod, king of Judea... (ESV)`;
+      const parsed = parseBracketVerses(esvRaw, 1);
+
+      expect(parsed).toHaveLength(3);
+      expect(parsed[0].verseNumber).toBe(1);
+      expect(parsed[0].heading).toBe('Dedication to Theophilus');
+      expect(parsed[0].text).toContain('Inasmuch as many have undertaken');
+
+      expect(parsed[1].verseNumber).toBe(2);
+      expect(parsed[1].heading).toBeUndefined();
+
+      expect(parsed[2].verseNumber).toBe(5);
+      expect(parsed[2].heading).toBe('Birth of John the Baptist Foretold');
+      expect(parsed[2].text).toBe('In the days of Herod, king of Judea...');
+      expect(parsed[2].text).not.toContain('(ESV)');
+    });
+
+    test('buildScriptureHtml renders distinct hierarchy: reference title, subheadings, and verse numbers', () => {
+      const verses = [
+        {
+          verseNumber: 1,
+          heading: 'Introduction',
+          text: 'Many have undertaken to compile a narrative...',
+        },
+        {
+          verseNumber: 2,
+          text: 'just as those who from the beginning were eyewitnesses...',
+        },
+      ];
+
+      const html = buildScriptureHtml(verses, true, '#EDE7DD', '#E3A53D', 16, 24, 'Luke 1:1–2');
+
+      // Reference Title
+      expect(html).toContain('<div class="passage-header-title">Luke 1:1–2</div>');
+      expect(html).toContain('.passage-header-title');
+
+      // Subheading
+      expect(html).toContain('<div class="scripture-subheading">Introduction</div>');
+      expect(html).toContain('.scripture-subheading');
+
+      // Verse Number (superscript) attached before verse text
+      expect(html).toContain('<sup style="font-size:11px;font-weight:700;color:#E3A53D;vertical-align:super;line-height:0;">1&nbsp;</sup>');
+      expect(html).toContain('<span>Many have undertaken to compile a narrative...&nbsp;</span>');
+    });
   });
 });
