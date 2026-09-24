@@ -35,54 +35,32 @@ import {
   formatPassageQuery,
   PassageFetchResult,
   VerseSegment,
+  MultiPassageSection,
+  buildScriptureHtml,
 } from '../services/bibleService';
+
+export { buildScriptureHtml };
+
+export const SYSTEM_FONTS = [typography.body.fontFamily];
 
 export interface BibleReaderProps {
   passage: PassageReference;
+  activeSegment?: PassageReference | null;
   preferredTranslation?: BibleTranslation;
   customApiKey?: string;
   initiallyCollapsed?: boolean;
   style?: any;
+  fontSize?: number;
 }
 
-export function buildScriptureHtml(
-  verses: VerseSegment[],
-  showVerseNumbers: boolean,
-  textColor: string,
-  verseNumColor: string,
-  fontSize: number,
-  lineHeight: number
-): string {
-  const innerHtml = verses
-    .map((v) => {
-      const numSpan = showVerseNumbers
-        ? `<sup style="font-size:10px;font-weight:600;color:${verseNumColor};vertical-align:super;line-height:0;">${v.verseNumber}&nbsp;</sup>`
-        : '';
-      return `${numSpan}<span>${v.text}&nbsp;</span>`;
-    })
-    .join('');
-
-  return `<div style="color:${textColor};font-size:${fontSize}px;line-height:${lineHeight}px;margin:0;padding:0;">
-    <style>
-      .scripture-heading, h3, h4, b.heading {
-        font-weight: 700;
-        color: #EDE7DD;
-        display: block;
-        margin-top: 10px;
-        margin-bottom: 4px;
-        font-size: ${fontSize + 1}px;
-      }
-    </style>
-    ${innerHtml}
-  </div>`;
-}
-
-export const BibleReader: React.FC<BibleReaderProps> = ({
+const BibleReaderComponent: React.FC<BibleReaderProps> = ({
   passage,
+  activeSegment,
   preferredTranslation = 'ESV',
   customApiKey,
   initiallyCollapsed = false,
   style,
+  fontSize: propFontSize,
 }) => {
   const { width: windowWidth } = useWindowDimensions();
   const [selectedTranslation, setSelectedTranslation] = useState<BibleTranslation>(preferredTranslation);
@@ -90,7 +68,17 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [collapsed, setCollapsed] = useState<boolean>(initiallyCollapsed);
   const [showVerseNumbers, setShowVerseNumbers] = useState<boolean>(true);
-  const [fontSize, setFontSize] = useState<number>(16);
+  const [fontSize, setFontSize] = useState<number>(propFontSize || 16);
+
+  const targetPassage = useMemo(() => {
+    return activeSegment || passage;
+  }, [activeSegment, passage]);
+
+  useEffect(() => {
+    if (propFontSize) {
+      setFontSize(propFontSize);
+    }
+  }, [propFontSize]);
 
   // Read verse number preference and font size from safeStorage
   useEffect(() => {
@@ -137,8 +125,8 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
     async (trans: BibleTranslation, force = false) => {
       setLoading(true);
       try {
-        console.log(`[BibleReader] Requesting scripture: ${formatPassageQuery(passage)} in ${trans} (force: ${force})`);
-        const result = await fetchPassageText(passage, {
+        console.log(`[BibleReader] Requesting scripture: ${formatPassageQuery(targetPassage)} in ${trans} (force: ${force})`);
+        const result = await fetchPassageText(targetPassage, {
           translation: trans,
           esvApiKey: customApiKey,
           forceRefresh: force,
@@ -162,7 +150,7 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
         setLoading(false);
       }
     },
-    [passage, customApiKey]
+    [targetPassage, customApiKey]
   );
 
   useEffect(() => {
@@ -176,84 +164,75 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
   };
 
   const passageDisplay = useMemo(() => {
-    return formatPassageQuery(passage);
-  }, [passage]);
+    return targetPassage?.display || targetPassage?.displayString || formatPassageQuery(targetPassage);
+  }, [targetPassage]);
 
   const isOfflineEmpty = Boolean((passageResult?.error || (!passageResult?.text && (!passageResult?.verses || passageResult.verses.length === 0))) && !loading);
 
   const scriptureHtml = useMemo(() => {
+    const sections = passageResult?.sections;
     const verses = passageResult?.verses || [];
-    if (verses.length > 0) {
+    const title = targetPassage?.displayString || targetPassage?.display || formatPassageQuery(targetPassage);
+
+    if (sections && sections.length > 0) {
       return buildScriptureHtml(
-        verses,
+        sections,
         showVerseNumbers,
         colors.textPrimary,
         colors.accentKeyIdea,
         fontSize,
         Math.round(fontSize * 1.5)
       );
+    } else if (verses.length > 0) {
+      return buildScriptureHtml(
+        verses,
+        showVerseNumbers,
+        colors.textPrimary,
+        colors.accentKeyIdea,
+        fontSize,
+        Math.round(fontSize * 1.5),
+        title
+      );
     }
     return '';
-  }, [passageResult?.verses, showVerseNumbers, fontSize]);
+  }, [passageResult?.sections, passageResult?.verses, targetPassage, showVerseNumbers, fontSize]);
 
   const contentWidth = Math.max(windowWidth - spacing.md * 4, 280);
 
+  const htmlSource = useMemo(() => ({ html: scriptureHtml }), [scriptureHtml]);
+
+  const baseStyle = useMemo(
+    () => ({
+      fontFamily: typography.body.fontFamily,
+      fontSize: fontSize,
+      lineHeight: Math.round(fontSize * 1.5),
+      color: colors.textPrimary,
+    }),
+    [fontSize]
+  );
+
   return (
     <View style={[styles.container, style]}>
-      {/* Header bar with Title, Font Size Controls, Version Pill, and Collapse Toggle */}
-      <View style={styles.headerRow}>
-        <Pressable
-          style={styles.headerLeft}
-          onPress={() => setCollapsed(!collapsed)}
-          accessibilityRole="button"
-          accessibilityLabel={`Toggle Scripture text. Currently ${collapsed ? 'collapsed' : 'expanded'}`}
-        >
-          <Ionicons
-            name="book"
-            size={16}
-            color={colors.accentKeyIdea}
-            style={styles.bookIcon}
-          />
-          <Text style={styles.passageTitle}>{passageDisplay}</Text>
-          <Ionicons
-            name={collapsed ? 'chevron-down' : 'chevron-up'}
-            size={16}
-            color={colors.textSecondary}
-          />
-        </Pressable>
-
-        <View style={styles.headerRightControls}>
-          {/* Font Size Selector Pills */}
-          <View style={styles.fontSizeControls}>
-            <Pressable
-              onPress={handleDecreaseFontSize}
-              style={styles.fontBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Decrease Bible font size"
-              hitSlop={6}
-            >
-              <Text style={styles.fontBtnText}>A-</Text>
-            </Pressable>
-            <Text style={styles.fontSizeLabel}>{fontSize}</Text>
-            <Pressable
-              onPress={handleIncreaseFontSize}
-              style={styles.fontBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Increase Bible font size"
-              hitSlop={6}
-            >
-              <Text style={styles.fontBtnText}>A+</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.activeBadge}>
-            <Text style={styles.activeBadgeText}>{selectedTranslation}</Text>
-            {passageResult?.cached ? (
-              <Ionicons name="cloud-offline-outline" size={12} color={colors.textSecondary} style={{ marginLeft: 3 }} />
-            ) : null}
-          </View>
+      {/* Header bar with Collapse Toggle */}
+      <Pressable
+        style={styles.headerRow}
+        onPress={() => setCollapsed(!collapsed)}
+        accessibilityRole="button"
+        accessibilityLabel={`Toggle Scripture text. Currently ${collapsed ? 'collapsed' : 'expanded'}`}
+      >
+        <View style={styles.headerLeft}>
+          <Ionicons name="book-outline" size={17} color={colors.accentKeyIdea} style={styles.bookIcon} />
+          <Text style={styles.scriptureHeaderLabel} numberOfLines={2} ellipsizeMode="tail">
+            {passageDisplay}
+          </Text>
         </View>
-      </View>
+        <Ionicons
+          name={collapsed ? 'chevron-down' : 'chevron-up'}
+          size={16}
+          color={colors.textSecondary}
+          style={styles.collapseIcon}
+        />
+      </Pressable>
 
       {!collapsed && (
         <View style={styles.contentBody}>
@@ -286,7 +265,7 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
           </View>
 
           {/* Passage Content / Loading / Offline states */}
-          {loading ? (
+          {loading && !passageResult?.text && (!passageResult?.verses || passageResult.verses.length === 0) ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color={colors.accentKeyIdea} />
               <Text style={styles.loadingText}>Fetching Scripture...</Text>
@@ -312,25 +291,35 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
               </Pressable>
             </View>
           ) : (
-            <View>
+            <View style={styles.contentWrapper}>
               {scriptureHtml ? (
-                <View style={styles.scriptureContainer}>
+                <View style={[styles.scriptureContainer, loading && styles.scriptureDimmed]}>
                   <RenderHtml
                     contentWidth={contentWidth}
-                    source={{ html: scriptureHtml }}
-                    systemFonts={[typography.body.fontFamily]}
-                    baseStyle={{
-                      fontFamily: typography.body.fontFamily,
-                      fontSize: fontSize,
-                      lineHeight: Math.round(fontSize * 1.5),
-                      color: colors.textPrimary,
-                    }}
+                    source={htmlSource}
+                    systemFonts={SYSTEM_FONTS}
+                    baseStyle={baseStyle}
                   />
                 </View>
               ) : (
-                <Text style={[styles.scriptureText, { fontSize: fontSize, lineHeight: Math.round(fontSize * 1.5) }]}>
-                  {passageResult?.text}
-                </Text>
+                <View style={[styles.scriptureContainer, loading && styles.scriptureDimmed]}>
+                  {passage?.displayString ? (
+                    <Text style={[styles.fallbackTitleText, { fontSize: fontSize + 4 }]}>
+                      {passage.displayString}
+                    </Text>
+                  ) : null}
+                  <Text style={[styles.scriptureText, { fontSize: fontSize, lineHeight: Math.round(fontSize * 1.5) }]}>
+                    {passageResult?.text}
+                  </Text>
+                </View>
+              )}
+
+              {/* Seamless Stale-While-Revalidate Loading Overlay */}
+              {loading && (
+                <View style={styles.reloadingOverlay}>
+                  <ActivityIndicator size="small" color={colors.accentKeyIdea} />
+                  <Text style={styles.reloadingText}>Updating Scripture...</Text>
+                </View>
               )}
 
               {/* Attribution Line */}
@@ -368,11 +357,20 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
     flex: 1,
+    marginRight: spacing.sm,
   },
   bookIcon: {
-    marginRight: 2,
+    marginRight: spacing.xs,
+  },
+  scriptureHeaderLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  collapseIcon: {
+    flexShrink: 0,
   },
   passageTitle: {
     fontSize: 15,
@@ -462,8 +460,40 @@ const styles = StyleSheet.create({
     color: colors.accentKeyIdea,
     fontWeight: '600',
   },
+  contentWrapper: {
+    position: 'relative',
+    minHeight: 120,
+  },
   scriptureContainer: {
     marginVertical: spacing.xs,
+    minHeight: 100,
+  },
+  scriptureDimmed: {
+    opacity: 0.45,
+  },
+  reloadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(24, 21, 16, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
+    zIndex: 10,
+    borderRadius: radius.control,
+  },
+  reloadingText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  fallbackTitleText: {
+    fontFamily: typography.body.fontFamily,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
   },
   scriptureText: {
     fontSize: typography.body.fontSize,
@@ -528,4 +558,5 @@ const styles = StyleSheet.create({
   },
 });
 
+export const BibleReader = React.memo(BibleReaderComponent);
 export default BibleReader;
