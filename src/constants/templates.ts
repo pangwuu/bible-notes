@@ -14,14 +14,14 @@ export const BUILT_IN_TEMPLATES: NoteTemplate[] = [
         title: 'Key Idea',
         icon: 'bulb-outline',
         color: '#E3A53D',
-        placeholder: 'What light or main truth shines out from this passage?',
+        placeholder: 'What is a new thing you have learned from this passage?',
       },
       {
         id: 'question',
         title: 'Question',
         icon: 'help-circle-outline',
         color: '#5B93C4',
-        placeholder: 'What is unclear, difficult, or invites deeper inquiry?',
+        placeholder: 'What is unclear, difficult, or challenging to understand?',
       },
       {
         id: 'arrow',
@@ -43,24 +43,28 @@ export const BUILT_IN_TEMPLATES: NoteTemplate[] = [
         id: 'scripture',
         title: 'Scripture',
         icon: 'book-outline',
-        placeholder: 'Which key verse or phrase stood out to you?',
+        color: '#E3A53D',
+        placeholder: 'Which verse(s) stood out to you?',
       },
       {
         id: 'observation',
         title: 'Observation',
         icon: 'search-outline',
+        color: '#5B93C4',
         placeholder: 'What is happening in this text? Who is speaking, and what is the context?',
       },
       {
         id: 'application',
         title: 'Application',
         icon: 'footsteps-outline',
+        color: '#7BA05B',
         placeholder: 'How does this apply personally to your life and relationships?',
       },
       {
         id: 'prayer',
         title: 'Prayer',
         icon: 'heart-outline',
+        color: '#B4789E',
         placeholder: 'Write a response prayer asking God to help you live this out.',
       },
     ],
@@ -68,7 +72,7 @@ export const BUILT_IN_TEMPLATES: NoteTemplate[] = [
   {
     id: 'inductive',
     name: 'Inductive Method',
-    description: 'Observation, faithful interpretation, and personal application.',
+    description: 'Observation, interpretation, application.',
     icon: 'search-outline',
     isBuiltIn: true,
     sections: [
@@ -76,18 +80,21 @@ export const BUILT_IN_TEMPLATES: NoteTemplate[] = [
         id: 'observation',
         title: 'Observation',
         icon: 'eye-outline',
+        color: '#5B93C4',
         placeholder: 'What does the passage say? Notice repeated words, contrasts, and structure.',
       },
       {
         id: 'interpretation',
         title: 'Interpretation',
         icon: 'bulb-outline',
+        color: '#E3A53D',
         placeholder: 'What did the passage mean to the original author and audience?',
       },
       {
         id: 'application',
         title: 'Application',
         icon: 'footsteps-outline',
+        color: '#7BA05B',
         placeholder: 'What does this passage mean for me today?',
       },
     ],
@@ -103,19 +110,22 @@ export const BUILT_IN_TEMPLATES: NoteTemplate[] = [
         id: 'head',
         title: 'Head (Mind)',
         icon: 'bulb-outline',
-        placeholder: 'What did I learn about God, Christ, and human nature?',
+        color: '#E3A53D',
+        placeholder: 'What did I learn?',
       },
       {
         id: 'heart',
-        title: 'Heart (Affections)',
+        title: 'Heart (Impact)',
         icon: 'heart-outline',
-        placeholder: 'What convictions, desires, or worship did this stir in me?',
+        color: '#B4789E',
+        placeholder: 'What convictions did this stir in me?',
       },
       {
         id: 'hands',
         title: 'Hands (Action)',
         icon: 'hand-right-outline',
-        placeholder: 'What concrete action or repentance am I called to take?',
+        color: '#7BA05B',
+        placeholder: 'How can I repent in light of this passage?',
       },
     ],
   },
@@ -130,6 +140,7 @@ export const BUILT_IN_TEMPLATES: NoteTemplate[] = [
         id: 'notes',
         title: 'Notes',
         icon: 'pencil-outline',
+        color: '#E3A53D',
         placeholder: 'Write your thoughts, reflections, or sermon notes here...',
       },
     ],
@@ -137,6 +148,34 @@ export const BUILT_IN_TEMPLATES: NoteTemplate[] = [
 ];
 
 export const DEFAULT_TEMPLATE = BUILT_IN_TEMPLATES[0]; // Swedish Method
+
+/**
+ * Resolves a purposeful accent color for a template section.
+ * Falls back to semantic colors based on section role rather than plain grey.
+ */
+export function getSectionColor(secId: string, customColor?: string): string {
+  if (customColor) return customColor;
+  switch (secId.toLowerCase()) {
+    case 'light':
+    case 'scripture':
+    case 'head':
+    case 'interpretation':
+    case 'notes':
+      return '#E3A53D'; // colors.accentKeyIdea
+    case 'question':
+    case 'observation':
+      return '#5B93C4'; // colors.accentQuestion
+    case 'arrow':
+    case 'application':
+    case 'hands':
+      return '#7BA05B'; // colors.accentApplication
+    case 'prayer':
+    case 'heart':
+      return '#B4789E'; // colors.accentSocial
+    default:
+      return '#E3A53D';
+  }
+}
 
 /**
  * Find a template by id from built-ins or user custom templates.
