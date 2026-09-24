@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { TemplateIcon } from './TemplateIcon';
 import { colors, spacing, radius } from '../constants/theme';
 import { Note, formatPassageDisplay } from '../types/note';
+import { getSectionColor } from '../constants/templates';
 
 export interface NoteCardProps {
   note: Note;
@@ -32,15 +33,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onPress, style }) => {
     const firstNonEmpty = note.sections.find((s) => s.content && cleanSnippet(s.content));
     if (firstNonEmpty) {
       rawSnippet = firstNonEmpty.content;
-      leftBorderColor =
-        firstNonEmpty.color ||
-        (firstNonEmpty.id === 'light'
-          ? colors.accentKeyIdea
-          : firstNonEmpty.id === 'question'
-          ? colors.accentQuestion
-          : firstNonEmpty.id === 'arrow'
-          ? colors.accentApplication
-          : colors.accentKeyIdea);
+      leftBorderColor = getSectionColor(firstNonEmpty.id, firstNonEmpty.color);
     }
   } else if (note.lightContent && cleanSnippet(note.lightContent)) {
     rawSnippet = note.lightContent;
@@ -108,16 +101,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onPress, style }) => {
                   key={sec.id}
                   name={sec.icon || 'document-text-outline'}
                   size={13}
-                  color={
-                    sec.color ||
-                    (sec.id === 'light'
-                      ? colors.accentKeyIdea
-                      : sec.id === 'question'
-                      ? colors.accentQuestion
-                      : sec.id === 'arrow'
-                      ? colors.accentApplication
-                      : colors.textSecondary)
-                  }
+                  color={getSectionColor(sec.id, sec.color)}
                 />
               ) : null
             )

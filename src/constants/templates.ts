@@ -1,5 +1,6 @@
 import { NoteTemplate } from '../types/template';
 import { NoteSectionValue } from '../types/note';
+import { colors } from './theme';
 
 export const BUILT_IN_TEMPLATES: NoteTemplate[] = [
   {
@@ -13,21 +14,21 @@ export const BUILT_IN_TEMPLATES: NoteTemplate[] = [
         id: 'light',
         title: 'Key Idea',
         icon: 'bulb-outline',
-        color: '#E3A53D',
+        color: colors.accent.keyIdea,
         placeholder: 'What is a new thing you have learned from this passage?',
       },
       {
         id: 'question',
         title: 'Question',
         icon: 'help-circle-outline',
-        color: '#5B93C4',
+        color: colors.accent.question,
         placeholder: 'What is unclear, difficult, or challenging to understand?',
       },
       {
         id: 'arrow',
         title: 'Application',
         icon: 'footsteps-outline',
-        color: '#7BA05B',
+        color: colors.accent.application,
         placeholder: 'How does this truth strike your personal walk today?',
       },
     ],
@@ -43,28 +44,28 @@ export const BUILT_IN_TEMPLATES: NoteTemplate[] = [
         id: 'scripture',
         title: 'Scripture',
         icon: 'book-outline',
-        color: '#E3A53D',
+        color: colors.accent.keyIdea,
         placeholder: 'Which verse(s) stood out to you?',
       },
       {
         id: 'observation',
         title: 'Observation',
         icon: 'search-outline',
-        color: '#5B93C4',
+        color: colors.accent.question,
         placeholder: 'What is happening in this text? Who is speaking, and what is the context?',
       },
       {
         id: 'application',
         title: 'Application',
         icon: 'footsteps-outline',
-        color: '#7BA05B',
+        color: colors.accent.application,
         placeholder: 'How does this apply personally to your life and relationships?',
       },
       {
         id: 'prayer',
         title: 'Prayer',
         icon: 'heart-outline',
-        color: '#B4789E',
+        color: colors.accent.social,
         placeholder: 'Write a response prayer asking God to help you live this out.',
       },
     ],
@@ -80,21 +81,21 @@ export const BUILT_IN_TEMPLATES: NoteTemplate[] = [
         id: 'observation',
         title: 'Observation',
         icon: 'eye-outline',
-        color: '#5B93C4',
+        color: colors.accent.question,
         placeholder: 'What does the passage say? Notice repeated words, contrasts, and structure.',
       },
       {
         id: 'interpretation',
         title: 'Interpretation',
         icon: 'bulb-outline',
-        color: '#E3A53D',
+        color: colors.accent.keyIdea,
         placeholder: 'What did the passage mean to the original author and audience?',
       },
       {
         id: 'application',
         title: 'Application',
         icon: 'footsteps-outline',
-        color: '#7BA05B',
+        color: colors.accent.application,
         placeholder: 'What does this passage mean for me today?',
       },
     ],
@@ -110,21 +111,21 @@ export const BUILT_IN_TEMPLATES: NoteTemplate[] = [
         id: 'head',
         title: 'Head (Mind)',
         icon: 'bulb-outline',
-        color: '#E3A53D',
+        color: colors.accent.keyIdea,
         placeholder: 'What did I learn?',
       },
       {
         id: 'heart',
         title: 'Heart (Impact)',
         icon: 'heart-outline',
-        color: '#B4789E',
+        color: colors.accent.social,
         placeholder: 'What convictions did this stir in me?',
       },
       {
         id: 'hands',
         title: 'Hands (Action)',
         icon: 'hand-right-outline',
-        color: '#7BA05B',
+        color: colors.accent.application,
         placeholder: 'How can I repent in light of this passage?',
       },
     ],
@@ -140,7 +141,7 @@ export const BUILT_IN_TEMPLATES: NoteTemplate[] = [
         id: 'notes',
         title: 'Notes',
         icon: 'pencil-outline',
-        color: '#E3A53D',
+        color: colors.accent.keyIdea,
         placeholder: 'Write your thoughts, reflections, or sermon notes here...',
       },
     ],
@@ -161,19 +162,19 @@ export function getSectionColor(secId: string, customColor?: string): string {
     case 'head':
     case 'interpretation':
     case 'notes':
-      return '#E3A53D'; // colors.accentKeyIdea
+      return colors.accent.keyIdea;
     case 'question':
     case 'observation':
-      return '#5B93C4'; // colors.accentQuestion
+      return colors.accent.question;
     case 'arrow':
     case 'application':
     case 'hands':
-      return '#7BA05B'; // colors.accentApplication
+      return colors.accent.application;
     case 'prayer':
     case 'heart':
-      return '#B4789E'; // colors.accentSocial
+      return colors.accent.social;
     default:
-      return '#E3A53D';
+      return colors.accent.keyIdea;
   }
 }
 

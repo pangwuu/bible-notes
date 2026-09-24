@@ -194,6 +194,26 @@ export default function NoteEditScreen() {
   );
 
   // Template CRUD actions
+  const applyTemplatePreservingContent = useCallback(
+    (template: NoteTemplate, currentSections: NoteSectionValue[]) => {
+      const newSections: NoteSectionValue[] = template.sections.map((sec, idx) => {
+        // Try matching by section id first; fallback to index position
+        const existing = currentSections.find((s) => s.id === sec.id) || currentSections[idx];
+        return {
+          id: sec.id,
+          title: sec.title,
+          icon: sec.icon,
+          color: sec.color,
+          content: existing?.content || '',
+        };
+      });
+      setActiveTemplate(template);
+      setSections(newSections);
+      setIsDirty(true);
+    },
+    []
+  );
+
   const handleSaveCustomTemplate = useCallback(
     async (template: NoteTemplate) => {
       if (!user?.uid) return;
@@ -209,13 +229,46 @@ export default function NoteEditScreen() {
 
       try {
         await updateUserProfile(user.uid, { custom_templates: updated });
-        setActiveTemplate(template);
-        setSections(initializeSectionValues(template));
+
+        // If editing the active template or activating this template
+        if (activeTemplate.id === template.id) {
+          // Detect if any section with non-empty content was removed or reordered
+          const existingWithContent = sections.filter((s) => s.content.trim().length > 0);
+          const newIds = template.sections.map((s) => s.id);
+
+          const hasRemovedSections = existingWithContent.some(
+            (s) => !newIds.includes(s.id)
+          );
+
+          // Check if the relative ordering of persisting sections with content has changed
+          const persistingIds = existingWithContent
+            .map((s) => s.id)
+            .filter((id) => newIds.includes(id));
+          const newIndices = persistingIds.map((id) => newIds.indexOf(id));
+          const hasReordered = newIndices.some((pos, idx) => idx > 0 && pos < newIndices[idx - 1]);
+
+          if (hasRemovedSections || hasReordered) {
+            Alert.alert(
+              'Section Changes',
+              'Some sections with text were removed or reordered. Existing text will be preserved where possible.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Keep My Text',
+                  onPress: () => applyTemplatePreservingContent(template, sections),
+                },
+              ]
+            );
+          } else {
+            // No sections with text were removed or reordered (e.g. icon, color, title, or new section added)
+            applyTemplatePreservingContent(template, sections);
+          }
+        }
       } catch (err) {
         Alert.alert('Error', 'Failed to save custom template.');
       }
     },
-    [user?.uid, profile?.custom_templates]
+    [user?.uid, profile?.custom_templates, activeTemplate.id, sections, applyTemplatePreservingContent]
   );
 
   const handleDeleteCustomTemplate = useCallback(
@@ -227,14 +280,28 @@ export default function NoteEditScreen() {
       try {
         await updateUserProfile(user.uid, { custom_templates: filtered });
         if (activeTemplate.id === templateId) {
-          setActiveTemplate(DEFAULT_TEMPLATE);
-          setSections(initializeSectionValues(DEFAULT_TEMPLATE));
+          const hasContent = sections.some((s) => s.content.trim().length > 0);
+          if (hasContent) {
+            Alert.alert(
+              'Template Deleted',
+              'The active template was deleted. Your note has been switched to the default template with your text preserved.',
+              [
+                {
+                  text: 'Keep My Text',
+                  onPress: () => applyTemplatePreservingContent(DEFAULT_TEMPLATE, sections),
+                },
+              ]
+            );
+          } else {
+            setActiveTemplate(DEFAULT_TEMPLATE);
+            setSections(initializeSectionValues(DEFAULT_TEMPLATE));
+          }
         }
       } catch (err) {
         Alert.alert('Error', 'Failed to delete custom template.');
       }
     },
-    [user?.uid, profile?.custom_templates, activeTemplate.id]
+    [user?.uid, profile?.custom_templates, activeTemplate.id, sections, applyTemplatePreservingContent]
   );
 
   // Master Save Handler

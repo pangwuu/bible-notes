@@ -13,6 +13,7 @@ export interface UserSettings {
   default_visibility?: NoteVisibility;
   custom_esv_api_key?: string;
   preferred_translation?: BibleTranslation;
+  default_font_size?: number;
 }
 
 export interface UserDocument {

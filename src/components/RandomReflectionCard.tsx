@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius } from '../constants/theme';
 import { Note, formatPassageDisplay } from '../types/note';
 import { TemplateIcon } from './TemplateIcon';
+import { getSectionColor } from '../constants/templates';
 
 export interface RandomReflectionCardProps {
   note: Note;
@@ -24,15 +25,7 @@ export const RandomReflectionCard: React.FC<RandomReflectionCardProps> = ({
   if (note.sections && note.sections.length > 0) {
     const firstSec = note.sections.find((s) => s.content?.trim());
     if (firstSec) {
-      indicatorColor =
-        firstSec.color ||
-        (firstSec.id === 'light'
-          ? colors.accentKeyIdea
-          : firstSec.id === 'question'
-          ? colors.accentQuestion
-          : firstSec.id === 'arrow'
-          ? colors.accentApplication
-          : colors.accentKeyIdea);
+      indicatorColor = getSectionColor(firstSec.id, firstSec.color);
     }
   } else if (note.lightContent?.trim()) {
     indicatorColor = colors.accentKeyIdea;
@@ -88,16 +81,7 @@ export const RandomReflectionCard: React.FC<RandomReflectionCardProps> = ({
                   key={sec.id}
                   name={sec.icon || 'document-text-outline'}
                   size={14}
-                  color={
-                    sec.color ||
-                    (sec.id === 'light'
-                      ? colors.accentKeyIdea
-                      : sec.id === 'question'
-                      ? colors.accentQuestion
-                      : sec.id === 'arrow'
-                      ? colors.accentApplication
-                      : colors.textSecondary)
-                  }
+                  color={getSectionColor(sec.id, sec.color)}
                 />
               ) : null
             )

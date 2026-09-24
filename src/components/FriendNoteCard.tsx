@@ -6,6 +6,7 @@ import { colors, spacing, radius } from '../constants/theme';
 import { FriendActivityItem } from '../services/dashboardService';
 import { formatPassageDisplay } from '../types/note';
 import { TemplateIcon } from './TemplateIcon';
+import { getSectionColor } from '../constants/templates';
 
 export interface FriendNoteCardProps {
   item: FriendActivityItem;
@@ -71,16 +72,7 @@ export const FriendNoteCard: React.FC<FriendNoteCardProps> = ({ item, onPress, s
                   key={sec.id}
                   name={sec.icon || 'document-text-outline'}
                   size={14}
-                  color={
-                    sec.color ||
-                    (sec.id === 'light'
-                      ? colors.accentKeyIdea
-                      : sec.id === 'question'
-                      ? colors.accentQuestion
-                      : sec.id === 'arrow'
-                      ? colors.accentApplication
-                      : colors.textSecondary)
-                  }
+                  color={getSectionColor(sec.id, sec.color)}
                 />
               ) : null
             )

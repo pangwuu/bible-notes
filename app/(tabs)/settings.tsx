@@ -10,10 +10,11 @@ import {
   Dialog,
   Switch,
 } from 'react-native-paper';
-import { colors, spacing, radius } from '../../src/constants/theme';
+import { colors, spacing, radius, typography } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/AuthContext';
 import { updateUserProfile } from '../../src/services/authService';
 import { clearPassageCache, SUPPORTED_TRANSLATIONS } from '../../src/services/bibleService';
+import FontSizeControls from '../../src/components/FontSizeControls';
 import safeStorage from '../../src/utils/safeStorage';
 import type { NoteVisibility, BibleTranslation } from '../../src/types/user';
 
@@ -24,6 +25,7 @@ export default function SettingsScreen() {
   const [defaultVisibility, setDefaultVisibility] = useState<NoteVisibility>('friends');
   const [preferredTranslation, setPreferredTranslation] = useState<BibleTranslation>('ESV');
   const [showVerseNumbers, setShowVerseNumbers] = useState<boolean>(true);
+  const [defaultFontSize, setDefaultFontSize] = useState<number>(16);
   const [esvKey, setEsvKey] = useState('');
   const [isSavingKey, setIsSavingKey] = useState(false);
   const [keySavedMessage, setKeySavedMessage] = useState<string | null>(null);
@@ -45,12 +47,16 @@ export default function SettingsScreen() {
       if (profile.preferred_translation || profile.settings?.preferred_translation) {
         setPreferredTranslation(profile.preferred_translation || profile.settings?.preferred_translation || 'ESV');
       }
+      if (profile.settings?.default_font_size) {
+        setDefaultFontSize(profile.settings.default_font_size);
+        safeStorage.setItem('bible_font_size', String(profile.settings.default_font_size)).catch(() => {});
+      }
       const existingKey = profile.settings?.custom_esv_api_key || profile.custom_esv_api_key || '';
       setEsvKey(existingKey);
     }
   }, [profile]);
 
-  // Read verse numbers preference from safeStorage
+  // Read verse numbers and font size preferences from safeStorage
   useEffect(() => {
     safeStorage.getItem('bible_show_verse_numbers').then((val) => {
       if (val !== null) {
@@ -61,11 +67,38 @@ export default function SettingsScreen() {
         }
       }
     });
+
+    safeStorage.getItem('bible_font_size').then((stored) => {
+      if (stored !== null) {
+        const parsed = parseInt(stored, 10);
+        if (!isNaN(parsed) && parsed >= 12 && parsed <= 26) {
+          setDefaultFontSize(parsed);
+        }
+      }
+    });
   }, []);
 
   const handleToggleVerseNumbers = async (value: boolean) => {
     setShowVerseNumbers(value);
     await safeStorage.setItem('bible_show_verse_numbers', JSON.stringify(value));
+  };
+
+  const handleFontSizeChange = async (newSize: number) => {
+    const clamped = Math.max(12, Math.min(26, newSize));
+    setDefaultFontSize(clamped);
+    await safeStorage.setItem('bible_font_size', String(clamped));
+    if (user?.uid) {
+      try {
+        await updateUserProfile(user.uid, {
+          settings: {
+            ...profile?.settings,
+            default_font_size: clamped,
+          },
+        });
+      } catch (err) {
+        console.warn('Failed to update default font size in profile:', err);
+      }
+    }
   };
 
   const handleTranslationChange = async (trans: BibleTranslation) => {
@@ -228,6 +261,39 @@ export default function SettingsScreen() {
             onValueChange={handleToggleVerseNumbers}
             color={colors.accentKeyIdea}
           />
+        </View>
+
+        <Divider style={styles.innerDivider} />
+
+        {/* Default Scripture Font Size */}
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleTextContainer}>
+            <Text style={styles.cardTitle}>Default text size</Text>
+            <Text style={styles.cardDescription}>
+              Base font size for reading Scripture across note reflections.
+            </Text>
+          </View>
+          <FontSizeControls
+            value={defaultFontSize}
+            onSizeChange={handleFontSizeChange}
+          />
+        </View>
+
+        {/* Live John 3:16 Preview */}
+        <View style={styles.previewContainer}>
+          <Text style={styles.previewHeaderLabel}>Preview (John 3:16)</Text>
+          <Text
+            style={[
+              styles.previewScriptureText,
+              {
+                fontSize: defaultFontSize,
+                lineHeight: Math.round(defaultFontSize * 1.5),
+              },
+            ]}
+          >
+            {showVerseNumbers && <Text style={styles.previewVerseNum}>16 </Text>}
+            For God so loved the world, that he gave his only Son, that whoever believes in him should not perish but have eternal life.
+          </Text>
         </View>
       </View>
 
@@ -465,6 +531,33 @@ const styles = StyleSheet.create({
   toggleTextContainer: {
     flex: 1,
     marginRight: spacing.sm,
+  },
+  innerDivider: {
+    backgroundColor: colors.borderHairline,
+    marginVertical: spacing.md,
+  },
+  previewContainer: {
+    backgroundColor: colors.bgBase,
+    borderRadius: radius.control,
+    padding: spacing.md,
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.borderHairline,
+  },
+  previewHeaderLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  previewScriptureText: {
+    fontFamily: typography.body.fontFamily,
+    color: colors.textPrimary,
+  },
+  previewVerseNum: {
+    fontFamily: typography.body.fontFamily,
+    color: colors.accentKeyIdea,
+    fontWeight: '700',
   },
   saveKeyRow: {
     flexDirection: 'row',

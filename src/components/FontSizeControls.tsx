@@ -11,18 +11,27 @@ import safeStorage from '../utils/safeStorage';
 
 interface FontSizeControlsProps {
   initialSize?: number;
+  value?: number;
   onSizeChange?: (size: number) => void;
   style?: any;
 }
 
 export const FontSizeControls: React.FC<FontSizeControlsProps> = ({
   initialSize = 16,
+  value,
   onSizeChange,
   style,
 }) => {
-  const [fontSize, setFontSize] = useState<number>(initialSize);
+  const [fontSize, setFontSize] = useState<number>(value ?? initialSize);
 
   useEffect(() => {
+    if (value !== undefined) {
+      setFontSize(value);
+    }
+  }, [value]);
+
+  useEffect(() => {
+    if (value !== undefined) return;
     let isMounted = true;
     safeStorage.getItem('bible_font_size').then((stored) => {
       if (isMounted && stored !== null) {
@@ -37,7 +46,7 @@ export const FontSizeControls: React.FC<FontSizeControlsProps> = ({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [value]);
 
   const updateSize = (newSize: number) => {
     const clamped = Math.max(12, Math.min(26, newSize));

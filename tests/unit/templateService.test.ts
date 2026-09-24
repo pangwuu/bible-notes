@@ -43,6 +43,7 @@ describe('Note Templates Constants & Helpers', () => {
       id: 'scripture',
       title: 'Scripture',
       icon: 'book-outline',
+      color: '#E3A53D',
       content: '',
     });
     expect(values[1].title).toBe('Observation');
