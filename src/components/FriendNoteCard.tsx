@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius } from '../constants/theme';
 import { FriendActivityItem } from '../services/dashboardService';
 import { formatPassageDisplay } from '../types/note';
+import { TemplateIcon } from './TemplateIcon';
 
 export interface FriendNoteCardProps {
   item: FriendActivityItem;
@@ -13,30 +14,7 @@ export interface FriendNoteCardProps {
 }
 
 export const FriendNoteCard: React.FC<FriendNoteCardProps> = ({ item, onPress, style }) => {
-  const { note, author, isIntersecting, overlappingPassageSummary } = item;
-
-  // Clean Swedish emojis / markdown headers
-  const cleanSnippet = (raw: string): string => {
-    if (!raw) return '';
-    return raw
-      .replace(/###?\s*(?:[💡❓🏹]\s*)?(?:Key Idea(?:\(s\))?|Question(?:\(s\))?|Application(?:\(s\))?)/gi, '')
-      .replace(/[💡❓🏹]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  };
-
-  let rawSnippet = '';
-  if (note.lightContent && cleanSnippet(note.lightContent)) {
-    rawSnippet = note.lightContent;
-  } else if (note.questionContent && cleanSnippet(note.questionContent)) {
-    rawSnippet = note.questionContent;
-  } else if (note.arrowContent && cleanSnippet(note.arrowContent)) {
-    rawSnippet = note.arrowContent;
-  } else if (note.content) {
-    rawSnippet = note.content;
-  }
-
-  const snippet = cleanSnippet(rawSnippet);
+  const { note, author, isIntersecting } = item;
 
   const passageDisplay = note.passage
     ? note.passage.display || note.passage.displayString || formatPassageDisplay(note.passage)
@@ -73,31 +51,61 @@ export const FriendNoteCard: React.FC<FriendNoteCardProps> = ({ item, onPress, s
 
         {isIntersecting ? (
           <View style={styles.overlapBadge}>
-            <Ionicons name="git-merge-outline" size={12} color={colors.accentSocial} />
+            <Ionicons name="people-outline" size={13} color={colors.accentSocial} />
             <Text style={styles.overlapBadgeText}>Mutual Passage</Text>
           </View>
         ) : null}
       </View>
 
-      <Text style={styles.passageRef} numberOfLines={1}>
-        {passageDisplay}
-      </Text>
+      <View style={styles.passageRow}>
+        <Text style={styles.passageRef} numberOfLines={1}>
+          {passageDisplay}
+        </Text>
 
-      {isIntersecting && overlappingPassageSummary ? (
-        <Text style={styles.overlapContextText} numberOfLines={1}>
-          You also noted {overlappingPassageSummary}
+        {/* Section indicator icons on the right */}
+        <View style={styles.sectionIndicators}>
+          {note.sections && note.sections.length > 0 ? (
+            note.sections.map((sec) =>
+              sec.content?.trim() ? (
+                <TemplateIcon
+                  key={sec.id}
+                  name={sec.icon || 'document-text-outline'}
+                  size={14}
+                  color={
+                    sec.color ||
+                    (sec.id === 'light'
+                      ? colors.accentKeyIdea
+                      : sec.id === 'question'
+                      ? colors.accentQuestion
+                      : sec.id === 'arrow'
+                      ? colors.accentApplication
+                      : colors.textSecondary)
+                  }
+                />
+              ) : null
+            )
+          ) : (
+            <>
+              {note.lightContent ? (
+                <Ionicons name="bulb-outline" size={14} color={colors.accentKeyIdea} />
+              ) : null}
+              {note.questionContent ? (
+                <Ionicons name="help-circle-outline" size={14} color={colors.accentQuestion} />
+              ) : null}
+              {note.arrowContent ? (
+                <Ionicons name="footsteps-outline" size={14} color={colors.accentApplication} />
+              ) : null}
+            </>
+          )}
+        </View>
+      </View>
+
+      {/* For intersecting notes: Display "You also noted this verse" */}
+      {isIntersecting ? (
+        <Text style={styles.overlapContextText}>
+          You also noted this verse
         </Text>
       ) : null}
-
-      {snippet ? (
-        <Text numberOfLines={2} style={styles.snippet}>
-          {snippet}
-        </Text>
-      ) : (
-        <Text numberOfLines={1} style={styles.emptySnippet}>
-          No reflection snippet
-        </Text>
-      )}
 
       {note.tags && note.tags.length > 0 ? (
         <View style={styles.tagRow}>
@@ -167,35 +175,35 @@ const styles = StyleSheet.create({
     borderColor: colors.accentSocial,
     borderRadius: radius.control,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
+    paddingVertical: 3,
   },
   overlapBadgeText: {
     fontSize: 11,
     fontWeight: '600',
     color: colors.accentSocial,
   },
+  passageRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
   passageRef: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.textPrimary,
-    marginBottom: 2,
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  sectionIndicators: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   overlapContextText: {
     fontSize: 12,
     color: colors.accentSocial,
-    marginBottom: spacing.xs,
-  },
-  snippet: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    fontFamily: 'SourceSerifPro',
-    lineHeight: 20,
-    marginBottom: spacing.xs,
-  },
-  emptySnippet: {
-    fontSize: 13,
-    color: colors.textDisabled,
-    fontStyle: 'italic',
+    marginTop: 2,
     marginBottom: spacing.xs,
   },
   tagRow: {

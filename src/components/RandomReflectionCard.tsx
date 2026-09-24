@@ -4,6 +4,7 @@ import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius } from '../constants/theme';
 import { Note, formatPassageDisplay } from '../types/note';
+import { TemplateIcon } from './TemplateIcon';
 
 export interface RandomReflectionCardProps {
   note: Note;
@@ -18,32 +19,28 @@ export const RandomReflectionCard: React.FC<RandomReflectionCardProps> = ({
   onShuffle,
   style,
 }) => {
-  const cleanSnippet = (raw: string): string => {
-    if (!raw) return '';
-    return raw
-      .replace(/###?\s*(?:[💡❓🏹]\s*)?(?:Key Idea(?:\(s\))?|Question(?:\(s\))?|Application(?:\(s\))?)/gi, '')
-      .replace(/[💡❓🏹]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  };
-
-  let rawSnippet = '';
   let indicatorColor: string = colors.accentKeyIdea;
 
-  if (note.lightContent && cleanSnippet(note.lightContent)) {
-    rawSnippet = note.lightContent;
+  if (note.sections && note.sections.length > 0) {
+    const firstSec = note.sections.find((s) => s.content?.trim());
+    if (firstSec) {
+      indicatorColor =
+        firstSec.color ||
+        (firstSec.id === 'light'
+          ? colors.accentKeyIdea
+          : firstSec.id === 'question'
+          ? colors.accentQuestion
+          : firstSec.id === 'arrow'
+          ? colors.accentApplication
+          : colors.accentKeyIdea);
+    }
+  } else if (note.lightContent?.trim()) {
     indicatorColor = colors.accentKeyIdea;
-  } else if (note.questionContent && cleanSnippet(note.questionContent)) {
-    rawSnippet = note.questionContent;
+  } else if (note.questionContent?.trim()) {
     indicatorColor = colors.accentQuestion;
-  } else if (note.arrowContent && cleanSnippet(note.arrowContent)) {
-    rawSnippet = note.arrowContent;
+  } else if (note.arrowContent?.trim()) {
     indicatorColor = colors.accentApplication;
-  } else if (note.content) {
-    rawSnippet = note.content;
   }
-
-  const snippet = cleanSnippet(rawSnippet);
 
   const passageDisplay = note.passage
     ? note.passage.display || note.passage.displayString || formatPassageDisplay(note.passage)
@@ -77,19 +74,48 @@ export const RandomReflectionCard: React.FC<RandomReflectionCardProps> = ({
         </Pressable>
       </View>
 
-      <Text style={styles.passageRef} numberOfLines={1}>
-        {passageDisplay}
-      </Text>
+      <View style={styles.passageRow}>
+        <Text style={styles.passageRef} numberOfLines={1}>
+          {passageDisplay}
+        </Text>
 
-      {snippet ? (
-        <Text numberOfLines={3} style={styles.snippet}>
-          {snippet}
-        </Text>
-      ) : (
-        <Text numberOfLines={1} style={styles.emptySnippet}>
-          No reflection snippet recorded
-        </Text>
-      )}
+        {/* Section indicator icons on the right */}
+        <View style={styles.sectionIndicators}>
+          {note.sections && note.sections.length > 0 ? (
+            note.sections.map((sec) =>
+              sec.content?.trim() ? (
+                <TemplateIcon
+                  key={sec.id}
+                  name={sec.icon || 'document-text-outline'}
+                  size={14}
+                  color={
+                    sec.color ||
+                    (sec.id === 'light'
+                      ? colors.accentKeyIdea
+                      : sec.id === 'question'
+                      ? colors.accentQuestion
+                      : sec.id === 'arrow'
+                      ? colors.accentApplication
+                      : colors.textSecondary)
+                  }
+                />
+              ) : null
+            )
+          ) : (
+            <>
+              {note.lightContent ? (
+                <Ionicons name="bulb-outline" size={14} color={colors.accentKeyIdea} />
+              ) : null}
+              {note.questionContent ? (
+                <Ionicons name="help-circle-outline" size={14} color={colors.accentQuestion} />
+              ) : null}
+              {note.arrowContent ? (
+                <Ionicons name="footsteps-outline" size={14} color={colors.accentApplication} />
+              ) : null}
+            </>
+          )}
+        </View>
+      </View>
 
       {note.tags && note.tags.length > 0 ? (
         <View style={styles.tagRow}>
@@ -118,7 +144,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.xs + 2,
+    marginBottom: spacing.xs + 4,
   },
   titleGroup: {
     flexDirection: 'row',
@@ -147,30 +173,28 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: colors.textSecondary,
   },
+  passageRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   passageRef: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.textPrimary,
-    marginBottom: spacing.xs,
+    flex: 1,
+    marginRight: spacing.sm,
   },
-  snippet: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    fontFamily: 'SourceSerifPro',
-    lineHeight: 20,
-    marginBottom: spacing.xs,
-  },
-  emptySnippet: {
-    fontSize: 13,
-    color: colors.textDisabled,
-    fontStyle: 'italic',
-    marginBottom: spacing.xs,
+  sectionIndicators: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   tagRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,
-    marginTop: spacing.xs,
+    marginTop: spacing.sm,
   },
   tagChip: {
     backgroundColor: colors.bgSurfaceRaised,

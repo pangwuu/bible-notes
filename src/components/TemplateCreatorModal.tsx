@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.bg.surfaceRaised,
     borderRadius: radii.controls,
-    padding: spacing.md,
+    padding: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border.hairline,
     marginBottom: spacing.md,
@@ -502,8 +502,8 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border.hairline,
-    marginBottom: spacing.xs,
-  },
+    marginTop: spacing.sm,
+  }, 
   secCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -154,7 +154,7 @@ export default function DashboardScreen() {
             {friendActivity.intersectingNotes.length > 0 ? (
               <View style={styles.subSectionContainer}>
                 <View style={styles.subSectionHeader}>
-                  <Ionicons name="git-merge-outline" size={14} color={colors.accentSocial} />
+                  <Ionicons name="people-outline" size={15} color={colors.accentSocial} />
                   <Text style={styles.subSectionTitle}>Shared Passages</Text>
                 </View>
                 {friendActivity.intersectingNotes.map((item) => (
