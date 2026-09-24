@@ -30,6 +30,7 @@ import {
   noteDocumentToNote,
   assembleSwedishMarkdown,
 } from '../types/note';
+import { compileSectionsToMarkdown } from '../constants/templates';
 
 /**
  * Validates note ID parameter per tier2_boundaries.test.ts:208.
@@ -56,9 +57,23 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
   const newDocRef = doc(notesCollection);
   const noteId = newDocRef.id;
 
+  const sections = input.sections && input.sections.length > 0
+    ? input.sections
+    : [
+        { id: 'light', title: 'Key Idea', icon: 'bulb-outline', content: input.lightContent || '' },
+        { id: 'question', title: 'Question', icon: 'help-circle-outline', content: input.questionContent || '' },
+        { id: 'arrow', title: 'Application', icon: 'footsteps-outline', content: input.arrowContent || '' },
+      ];
+
+  const lightContent = input.lightContent || sections.find((s) => s.id === 'light')?.content || '';
+  const questionContent = input.questionContent || sections.find((s) => s.id === 'question')?.content || '';
+  const arrowContent = input.arrowContent || sections.find((s) => s.id === 'arrow')?.content || '';
+
   const content =
     input.content ||
-    assembleSwedishMarkdown(input.lightContent || '', input.questionContent || '', input.arrowContent || '');
+    (input.sections && input.sections.length > 0
+      ? compileSectionsToMarkdown(input.sections)
+      : assembleSwedishMarkdown(lightContent, questionContent, arrowContent));
 
   let segments = input.passage?.segments || [];
   if (segments.length === 0 && (input.passage as any)?.book) {
@@ -95,10 +110,18 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
         end_verse: s.endVerse,
       })),
     },
+    template_id: input.templateId || 'swedish',
+    template_name: input.templateName || 'Swedish Method',
+    sections: sections.map((s) => ({
+      id: s.id,
+      title: s.title,
+      icon: s.icon,
+      content: s.content || '',
+    })),
     content,
-    light_content: input.lightContent || '',
-    question_content: input.questionContent || '',
-    arrow_content: input.arrowContent || '',
+    light_content: lightContent,
+    question_content: questionContent,
+    arrow_content: arrowContent,
     tags: (input.tags || []).slice(0, 5).map((t) => t.trim().toLowerCase()),
     visibility: input.visibility || 'friends',
     created_at: serverTimestamp(),
@@ -182,6 +205,27 @@ export async function updateNote(noteId: string, updates: UpdateNoteInput): Prom
     firestoreUpdates.visibility = updates.visibility;
   }
 
+  if (updates.templateId !== undefined) firestoreUpdates.template_id = updates.templateId;
+  if (updates.templateName !== undefined) firestoreUpdates.template_name = updates.templateName;
+
+  if (updates.sections !== undefined) {
+    firestoreUpdates.sections = updates.sections.map((s) => ({
+      id: s.id,
+      title: s.title,
+      icon: s.icon,
+      content: s.content || '',
+    }));
+    if (updates.content === undefined) {
+      firestoreUpdates.content = compileSectionsToMarkdown(updates.sections);
+    }
+    const light = updates.sections.find((s) => s.id === 'light')?.content;
+    const question = updates.sections.find((s) => s.id === 'question')?.content;
+    const arrow = updates.sections.find((s) => s.id === 'arrow')?.content;
+    if (light !== undefined) firestoreUpdates.light_content = light;
+    if (question !== undefined) firestoreUpdates.question_content = question;
+    if (arrow !== undefined) firestoreUpdates.arrow_content = arrow;
+  }
+
   if (updates.lightContent !== undefined) firestoreUpdates.light_content = updates.lightContent;
   if (updates.questionContent !== undefined) firestoreUpdates.question_content = updates.questionContent;
   if (updates.arrowContent !== undefined) firestoreUpdates.arrow_content = updates.arrowContent;
@@ -189,9 +233,10 @@ export async function updateNote(noteId: string, updates: UpdateNoteInput): Prom
   if (updates.content !== undefined) {
     firestoreUpdates.content = updates.content;
   } else if (
-    updates.lightContent !== undefined ||
-    updates.questionContent !== undefined ||
-    updates.arrowContent !== undefined
+    updates.sections === undefined &&
+    (updates.lightContent !== undefined ||
+      updates.questionContent !== undefined ||
+      updates.arrowContent !== undefined)
   ) {
     // Read current note to merge content
     const existing = await getNote(validId);

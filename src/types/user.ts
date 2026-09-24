@@ -3,6 +3,8 @@
  * Reconciles specs.md, firestore.rules, and Milestone 2 requirements.
  */
 
+import { NoteTemplate } from './template';
+
 export type NoteVisibility = 'private' | 'friends';
 
 export type BibleTranslation = 'ESV' | 'WEB' | 'KJV' | 'ASV' | 'BBE' | 'NIV' | 'CSB' | 'NLT';
@@ -24,6 +26,7 @@ export interface UserDocument {
   preferred_translation?: BibleTranslation;
   settings?: UserSettings;
   custom_esv_api_key?: string;
+  custom_templates?: NoteTemplate[];
   search_tokens?: string[];
   created_at: any; // FieldValue.serverTimestamp() or Timestamp
   updated_at: any; // FieldValue.serverTimestamp() or Timestamp

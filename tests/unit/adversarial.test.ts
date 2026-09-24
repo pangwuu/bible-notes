@@ -29,6 +29,7 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: () => null,
+  MaterialCommunityIcons: () => null,
 }));
 
 jest.mock('expo-splash-screen', () => ({

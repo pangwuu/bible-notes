@@ -844,7 +844,9 @@ export default function PassagePicker({
             {versesArray.map((v) => {
               const isSameChapter = (selectedChapter ?? 1) === (selectedChapterEnd ?? selectedChapter ?? 1);
               const isDisabled = isSameChapter && selectedVerseStart !== null && v < selectedVerseStart;
-              const isSelected = selectedVerseEnd !== null ? v === selectedVerseEnd : v === selectedVerseStart;
+              const isStart = isSameChapter && selectedVerseStart !== null && v === selectedVerseStart;
+              const isEnd = selectedVerseEnd !== null && v === selectedVerseEnd;
+              const isSelected = isStart || isEnd;
               const inRange = isSameChapter && selectedVerseStart !== null && selectedVerseEnd !== null && v > selectedVerseStart && v < selectedVerseEnd;
 
               return (

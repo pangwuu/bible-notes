@@ -16,6 +16,7 @@ import {
 import { Text } from 'react-native-paper';
 import { useLocalSearchParams, useNavigation, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { TemplateIcon } from '../../src/components/TemplateIcon';
 import Markdown from 'react-native-markdown-display';
 import { colors, spacing, radii, typography, markdownStyles } from '../../src/constants/theme';
 import * as notesService from '../../src/services/notesService';
@@ -154,9 +155,11 @@ export default function NoteDetailScreen() {
   }
 
   const hasAnyReflection =
-    Boolean(note.lightContent?.trim()) ||
-    Boolean(note.questionContent?.trim()) ||
-    Boolean(note.arrowContent?.trim());
+    note.sections && note.sections.length > 0
+      ? note.sections.some((s) => Boolean(s.content?.trim()))
+      : Boolean(note.lightContent?.trim()) ||
+        Boolean(note.questionContent?.trim()) ||
+        Boolean(note.arrowContent?.trim());
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
@@ -273,42 +276,75 @@ export default function NoteDetailScreen() {
         initiallyCollapsed={false}
       />
 
-      {/* Swedish Method Sections */}
-      {note.lightContent?.trim() ? (
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Ionicons name="bulb-outline" size={15} color={colors.accent.keyIdea} />
-            <Text style={[styles.sectionLabel, { color: colors.accent.keyIdea }]}>
-              Key Idea
-            </Text>
-          </View>
-          <Markdown style={markdownStyles}>{note.lightContent.trim()}</Markdown>
-        </View>
-      ) : null}
+      {/* Note Template Sections */}
+      {note.sections && note.sections.length > 0 ? (
+        note.sections.map((sec) => {
+          if (!sec.content?.trim()) return null;
+          const secColor =
+            sec.color ||
+            (sec.id === 'light'
+              ? colors.accent.keyIdea
+              : sec.id === 'question'
+              ? colors.accent.question
+              : sec.id === 'arrow'
+              ? colors.accent.application
+              : colors.accent.keyIdea);
 
-      {note.questionContent?.trim() ? (
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Ionicons name="help-circle-outline" size={15} color={colors.accent.question} />
-            <Text style={[styles.sectionLabel, { color: colors.accent.question }]}>
-              Question
-            </Text>
-          </View>
-          <Markdown style={markdownStyles}>{note.questionContent.trim()}</Markdown>
-        </View>
-      ) : null}
+          return (
+            <View key={sec.id} style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <TemplateIcon
+                  name={sec.icon || 'document-text-outline'}
+                  size={15}
+                  color={secColor}
+                />
+                <Text style={[styles.sectionLabel, { color: secColor }]}>
+                  {sec.title}
+                </Text>
+              </View>
+              <Markdown style={markdownStyles}>{sec.content.trim()}</Markdown>
+            </View>
+          );
+        })
+      ) : (
+        <>
+          {note.lightContent?.trim() ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="bulb-outline" size={15} color={colors.accent.keyIdea} />
+                <Text style={[styles.sectionLabel, { color: colors.accent.keyIdea }]}>
+                  Key Idea
+                </Text>
+              </View>
+              <Markdown style={markdownStyles}>{note.lightContent.trim()}</Markdown>
+            </View>
+          ) : null}
 
-      {note.arrowContent?.trim() ? (
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Ionicons name="footsteps-outline" size={15} color={colors.accent.application} />
-            <Text style={[styles.sectionLabel, { color: colors.accent.application }]}>
-              Application
-            </Text>
-          </View>
-          <Markdown style={markdownStyles}>{note.arrowContent.trim()}</Markdown>
-        </View>
-      ) : null}
+          {note.questionContent?.trim() ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="help-circle-outline" size={15} color={colors.accent.question} />
+                <Text style={[styles.sectionLabel, { color: colors.accent.question }]}>
+                  Question
+                </Text>
+              </View>
+              <Markdown style={markdownStyles}>{note.questionContent.trim()}</Markdown>
+            </View>
+          ) : null}
+
+          {note.arrowContent?.trim() ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="footsteps-outline" size={15} color={colors.accent.application} />
+                <Text style={[styles.sectionLabel, { color: colors.accent.application }]}>
+                  Application
+                </Text>
+              </View>
+              <Markdown style={markdownStyles}>{note.arrowContent.trim()}</Markdown>
+            </View>
+          ) : null}
+        </>
+      )}
 
       {/* Empty reflections fallback */}
       {!hasAnyReflection && (

@@ -1,11 +1,12 @@
 /**
  * Note Edit Screen
- * Day One unbordered editor with Swedish Method headers,
+ * Day One unbordered editor with dynamic Note Templates (Swedish, SOAP, Inductive, Custom),
+ * quick-selector pill bar, template manager & creator modals,
  * YouVersion-style passage picker drill-down, auto-save,
  * and dirty-state back confirmation modal.
  */
 
-import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -17,13 +18,24 @@ import {
 import { Text } from 'react-native-paper';
 import { useNavigation, useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, spacing, radii, typography } from '../../src/constants/theme';
-import SwedishEditor from '../../src/components/SwedishEditor';
+import DynamicNoteEditor from '../../src/components/DynamicNoteEditor';
+import TemplateQuickSelector from '../../src/components/TemplateQuickSelector';
+import TemplateManagerModal from '../../src/components/TemplateManagerModal';
+import TemplateCreatorModal from '../../src/components/TemplateCreatorModal';
 import PassagePicker, { PassageSelection } from '../../src/components/PassagePicker';
 import BibleReader from '../../src/components/BibleReader';
 import FontSizeControls from '../../src/components/FontSizeControls';
 import safeStorage from '../../src/utils/safeStorage';
-import { PassageReference, NoteVisibility, formatPassageDisplay } from '../../src/types/note';
+import { PassageReference, NoteVisibility, NoteSectionValue, formatPassageDisplay } from '../../src/types/note';
+import { NoteTemplate } from '../../src/types/template';
+import {
+  BUILT_IN_TEMPLATES,
+  DEFAULT_TEMPLATE,
+  getTemplateById,
+  initializeSectionValues,
+} from '../../src/constants/templates';
 import * as notesService from '../../src/services/notesService';
+import { updateUserProfile } from '../../src/services/authService';
 import { notifyFriendsOfNoteOverlap } from '../../src/services/noteOverlapService';
 import { useAuth } from '../../src/context/AuthContext';
 
@@ -39,13 +51,27 @@ export default function NoteEditScreen() {
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState<boolean>(false);
 
+  // Template Modals State
+  const [showTemplateManager, setShowTemplateManager] = useState<boolean>(false);
+  const [showTemplateCreator, setShowTemplateCreator] = useState<boolean>(false);
+  const [editingTemplate, setEditingTemplate] = useState<NoteTemplate | null>(null);
+
+  // All combined templates: built-ins + user custom templates
+  const allTemplates = useMemo<NoteTemplate[]>(() => {
+    const custom = profile?.custom_templates || [];
+    return [...BUILT_IN_TEMPLATES, ...custom];
+  }, [profile?.custom_templates]);
+
   // Note State - defaults to null for new notes so users choose their own passage
   const [passage, setPassage] = useState<PassageReference | null>(null);
   const [readerFontSize, setReaderFontSize] = useState<number>(16);
 
-  const [lightContent, setLightContent] = useState('');
-  const [questionContent, setQuestionContent] = useState('');
-  const [arrowContent, setArrowContent] = useState('');
+  // Active Template & Dynamic Sections
+  const [activeTemplate, setActiveTemplate] = useState<NoteTemplate>(DEFAULT_TEMPLATE);
+  const [sections, setSections] = useState<NoteSectionValue[]>(() =>
+    initializeSectionValues(DEFAULT_TEMPLATE)
+  );
+
   const [tags, setTags] = useState<string[]>([]);
   const [userSuggestions, setUserSuggestions] = useState<string[]>([]);
   const [visibility, setVisibility] = useState<NoteVisibility>(
@@ -90,9 +116,20 @@ export default function NoteEditScreen() {
         const existing = await notesService.getNote(id);
         if (existing && isMounted) {
           setPassage(existing.passage);
-          setLightContent(existing.lightContent);
-          setQuestionContent(existing.questionContent);
-          setArrowContent(existing.arrowContent);
+          const tpl = getTemplateById(existing.templateId, profile?.custom_templates);
+          setActiveTemplate(tpl);
+
+          if (existing.sections && existing.sections.length > 0) {
+            setSections(existing.sections);
+          } else {
+            // Synthesize from legacy Swedish fields
+            setSections([
+              { id: 'light', title: 'Key Idea', icon: 'bulb-outline', content: existing.lightContent || '' },
+              { id: 'question', title: 'Question', icon: 'help-circle-outline', content: existing.questionContent || '' },
+              { id: 'arrow', title: 'Application', icon: 'footsteps-outline', content: existing.arrowContent || '' },
+            ]);
+          }
+
           setTags(existing.tags);
           setVisibility(existing.visibility);
           setIsDirty(false);
@@ -107,7 +144,98 @@ export default function NoteEditScreen() {
     return () => {
       isMounted = false;
     };
-  }, [id]);
+  }, [id, profile?.custom_templates]);
+
+  // Template switching logic with dirty state handling
+  const handleSelectTemplate = useCallback(
+    (targetTemplate: NoteTemplate) => {
+      if (targetTemplate.id === activeTemplate.id) return;
+
+      const hasText = sections.some((s) => s.content.trim().length > 0);
+      if (!hasText) {
+        setActiveTemplate(targetTemplate);
+        setSections(initializeSectionValues(targetTemplate));
+        setIsDirty(true);
+        return;
+      }
+
+      Alert.alert(
+        'Switch Template?',
+        'Do you want to keep your current text in the new template or discard it?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () => {
+              setActiveTemplate(targetTemplate);
+              setSections(initializeSectionValues(targetTemplate));
+              setIsDirty(true);
+            },
+          },
+          {
+            text: 'Keep Text',
+            onPress: () => {
+              const newSections = targetTemplate.sections.map((sec, idx) => ({
+                id: sec.id,
+                title: sec.title,
+                icon: sec.icon,
+                content: sections[idx]?.content || '',
+              }));
+              setActiveTemplate(targetTemplate);
+              setSections(newSections);
+              setIsDirty(true);
+            },
+          },
+        ]
+      );
+    },
+    [activeTemplate.id, sections]
+  );
+
+  // Template CRUD actions
+  const handleSaveCustomTemplate = useCallback(
+    async (template: NoteTemplate) => {
+      if (!user?.uid) return;
+      const existingCustom = profile?.custom_templates || [];
+      const index = existingCustom.findIndex((t) => t.id === template.id);
+      let updated: NoteTemplate[];
+      if (index >= 0) {
+        updated = [...existingCustom];
+        updated[index] = template;
+      } else {
+        updated = [...existingCustom, template];
+      }
+
+      try {
+        await updateUserProfile(user.uid, { custom_templates: updated });
+        setActiveTemplate(template);
+        setSections(initializeSectionValues(template));
+      } catch (err) {
+        Alert.alert('Error', 'Failed to save custom template.');
+      }
+    },
+    [user?.uid, profile?.custom_templates]
+  );
+
+  const handleDeleteCustomTemplate = useCallback(
+    async (templateId: string) => {
+      if (!user?.uid) return;
+      const existingCustom = profile?.custom_templates || [];
+      const filtered = existingCustom.filter((t) => t.id !== templateId);
+
+      try {
+        await updateUserProfile(user.uid, { custom_templates: filtered });
+        if (activeTemplate.id === templateId) {
+          setActiveTemplate(DEFAULT_TEMPLATE);
+          setSections(initializeSectionValues(DEFAULT_TEMPLATE));
+        }
+      } catch (err) {
+        Alert.alert('Error', 'Failed to delete custom template.');
+      }
+    },
+    [user?.uid, profile?.custom_templates, activeTemplate.id]
+  );
 
   // Master Save Handler
   const handleSave = useCallback(async (): Promise<boolean> => {
@@ -122,11 +250,19 @@ export default function NoteEditScreen() {
 
     const targetId = currentNoteIdRef.current || id;
 
+    // Extract Swedish fields for backwards compatibility
+    const lightContent = sections.find((s) => s.id === 'light')?.content || '';
+    const questionContent = sections.find((s) => s.id === 'question')?.content || '';
+    const arrowContent = sections.find((s) => s.id === 'arrow')?.content || '';
+
     try {
       let savedNote;
       if (targetId) {
         savedNote = await notesService.updateNote(targetId, {
           passage,
+          templateId: activeTemplate.id,
+          templateName: activeTemplate.name,
+          sections,
           lightContent,
           questionContent,
           arrowContent,
@@ -139,6 +275,9 @@ export default function NoteEditScreen() {
           authorUsername: profile?.username || user?.displayName || '',
           authorDisplayName: profile?.display_name || user?.displayName || '',
           passage,
+          templateId: activeTemplate.id,
+          templateName: activeTemplate.name,
+          sections,
           lightContent,
           questionContent,
           arrowContent,
@@ -169,7 +308,7 @@ export default function NoteEditScreen() {
       isSavingRef.current = false;
       setIsSaving(false);
     }
-  }, [id, user, profile, passage, lightContent, questionContent, arrowContent, tags, visibility]);
+  }, [id, user, profile, passage, activeTemplate, sections, tags, visibility]);
 
   // Explicit Save
   const handleExplicitSave = useCallback(async () => {
@@ -281,7 +420,7 @@ export default function NoteEditScreen() {
           ) : null}
         </View>
 
-        {/* Live Scripture Reader with Translation Switcher - only rendered when a passage is selected */}
+        {/* Live Scripture Reader with Translation Switcher */}
         {passage && (
           <BibleReader
             passage={passage}
@@ -292,23 +431,24 @@ export default function NoteEditScreen() {
           />
         )}
 
-        {/* Day One Unbordered Swedish Editor */}
-        <SwedishEditor
-          lightContent={lightContent}
-          questionContent={questionContent}
-          arrowContent={arrowContent}
+        {/* Dynamic Multi-Section Note Editor */}
+        <DynamicNoteEditor
+          template={activeTemplate}
+          sections={sections}
           tags={tags}
           visibility={visibility}
-          onChangeLight={(val) => {
-            setLightContent(val);
-            setIsDirty(true);
-          }}
-          onChangeQuestion={(val) => {
-            setQuestionContent(val);
-            setIsDirty(true);
-          }}
-          onChangeArrow={(val) => {
-            setArrowContent(val);
+          templateSelector={
+            <TemplateQuickSelector
+              templates={allTemplates}
+              selectedTemplateId={activeTemplate.id}
+              onSelectTemplate={handleSelectTemplate}
+              onOpenManager={() => setShowTemplateManager(true)}
+            />
+          }
+          onChangeSection={(index, val) => {
+            const nextSections = [...sections];
+            nextSections[index] = { ...nextSections[index], content: val };
+            setSections(nextSections);
             setIsDirty(true);
           }}
           onAddTag={(tag) => {
@@ -341,6 +481,35 @@ export default function NoteEditScreen() {
         }}
         onClose={() => setShowPicker(false)}
       />
+
+      {/* Template Manager Bottom Sheet Modal */}
+      <TemplateManagerModal
+        visible={showTemplateManager}
+        templates={allTemplates}
+        selectedTemplateId={activeTemplate.id}
+        onClose={() => setShowTemplateManager(false)}
+        onSelectTemplate={handleSelectTemplate}
+        onCreateNew={() => {
+          setEditingTemplate(null);
+          setShowTemplateCreator(true);
+        }}
+        onEditTemplate={(tpl) => {
+          setEditingTemplate(tpl);
+          setShowTemplateCreator(true);
+        }}
+        onDeleteTemplate={handleDeleteCustomTemplate}
+      />
+
+      {/* Template Creator / Editor Modal */}
+      <TemplateCreatorModal
+        visible={showTemplateCreator}
+        initialTemplate={editingTemplate}
+        onClose={() => {
+          setShowTemplateCreator(false);
+          setEditingTemplate(null);
+        }}
+        onSave={handleSaveCustomTemplate}
+      />
     </View>
   );
 }
@@ -355,33 +524,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   container: {
-    padding: spacing.md,
-    paddingBottom: 250,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxl,
   },
   headerButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
   },
   headerBackText: {
+    ...typography.body,
     color: colors.text.secondary,
-    fontSize: typography.body.fontSize,
   },
   headerSaveText: {
+    ...typography.body,
     color: colors.accent.keyIdea,
     fontWeight: '600',
-    fontSize: typography.body.fontSize,
+  },
+  errorBanner: {
+    backgroundColor: colors.accent.danger,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.bg.base,
+    textAlign: 'center',
   },
   passageCardRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
+    justifyContent: 'space-between',
+    marginVertical: spacing.xs,
   },
   pickerTrigger: {
     flex: 1,
-    backgroundColor: colors.bg.surface,
-    borderRadius: radii.content,
-    padding: spacing.md,
+    backgroundColor: colors.bg.surfaceRaised,
+    borderRadius: radii.controls,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border.hairline,
   },
@@ -390,38 +571,25 @@ const styles = StyleSheet.create({
     borderColor: colors.accent.keyIdea,
   },
   pickerTextColumn: {
-    flex: 1,
-  },
-  editFontSizeControls: {
-    alignSelf: 'stretch',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
+    flexDirection: 'column',
   },
   pickerLabel: {
-    fontSize: typography.caption.fontSize,
+    ...typography.caption,
     color: colors.text.secondary,
-    marginBottom: 4,
+    fontWeight: '600',
+    marginBottom: 2,
   },
   pickerValue: {
-    fontSize: typography.title.fontSize,
-    fontWeight: '600',
+    ...typography.title,
+    fontSize: 16,
     color: colors.text.primary,
   },
   pickerValueEmpty: {
-    fontSize: typography.body.fontSize,
-    color: colors.text.secondary,
-    fontWeight: '400',
+    ...typography.body,
+    color: colors.accent.keyIdea,
+    fontWeight: 'normal',
   },
-  errorBanner: {
-    backgroundColor: colors.accent.danger,
-    padding: spacing.sm,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.sm,
-    borderRadius: radii.content,
-  },
-  errorText: {
-    color: colors.text.primary,
-    fontSize: typography.caption.fontSize,
-    textAlign: 'center',
+  editFontSizeControls: {
+    marginLeft: spacing.sm,
   },
 });

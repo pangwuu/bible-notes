@@ -27,6 +27,14 @@ export interface PassageReference {
   segments: PassageSegment[];
 }
 
+export interface NoteSectionValue {
+  id: string;
+  title: string;
+  icon?: string;
+  color?: string;
+  content: string;
+}
+
 /**
  * Rich client-side domain entity.
  */
@@ -40,6 +48,11 @@ export interface Note {
   author_display_name?: string;
 
   passage: PassageReference;
+
+  // Template metadata & dynamic sections
+  templateId?: string;
+  templateName?: string;
+  sections?: NoteSectionValue[];
 
   // Swedish Method section contents
   lightContent: string;     // 💡 Key Idea
@@ -79,6 +92,15 @@ export interface NoteDocument {
     }>;
   };
 
+  template_id?: string;
+  template_name?: string;
+  sections?: Array<{
+    id: string;
+    title: string;
+    icon?: string;
+    content: string;
+  }>;
+
   content: string;
   light_content: string;
   question_content: string;
@@ -94,6 +116,9 @@ export interface CreateNoteInput {
   authorUsername?: string;
   authorDisplayName?: string;
   passage: PassageReference;
+  templateId?: string;
+  templateName?: string;
+  sections?: NoteSectionValue[];
   lightContent?: string;
   questionContent?: string;
   arrowContent?: string;
@@ -104,6 +129,9 @@ export interface CreateNoteInput {
 
 export interface UpdateNoteInput {
   passage?: PassageReference;
+  templateId?: string;
+  templateName?: string;
+  sections?: NoteSectionValue[];
   lightContent?: string;
   questionContent?: string;
   arrowContent?: string;
@@ -136,9 +164,9 @@ export function parseSwedishMarkdown(content: string): {
   }
 
   // Find header positions using flexible regex matching symbol, heading title, or both
-  const keyIdeaRegex = /###?\s*(?:💡\s*)?(?:Key Idea\(s\)|Key Idea|💡)/i;
-  const questionRegex = /###?\s*(?:❓\s*)?(?:Question\(s\)|Question|❓)/i;
-  const arrowRegex = /###?\s*(?:🏹\s*)?(?:Application\(s\)|Application|🏹)/i;
+  const keyIdeaRegex = /###?\s*(?:💡\s*)?(?:Key Idea\(s\)|Key Idea|💡)/iu;
+  const questionRegex = /###?\s*(?:❓\s*)?(?:Question\(s\)|Question|❓)/iu;
+  const arrowRegex = /###?\s*(?:🏹\s*)?(?:Application\(s\)|Application|🏹)/iu;
 
   const mKey = keyIdeaRegex.exec(content);
   const mQue = questionRegex.exec(content);
@@ -304,6 +332,28 @@ export function noteDocumentToNote(data: any, id: string): Note {
   const createdAt = data.created_at || Date.now();
   const updatedAt = data.updated_at || Date.now();
 
+  const lightContent = data.light_content ?? parsedSections.lightContent;
+  const questionContent = data.question_content ?? parsedSections.questionContent;
+  const arrowContent = data.arrow_content ?? parsedSections.arrowContent;
+
+  let sections: NoteSectionValue[] = [];
+  if (Array.isArray(data.sections) && data.sections.length > 0) {
+    sections = data.sections.map((s: any) => ({
+      id: s.id || '',
+      title: s.title || '',
+      icon: s.icon,
+      color: s.color,
+      content: s.content || '',
+    }));
+  } else {
+    // Synthesize sections from Swedish fields if legacy/blank
+    sections = [
+      { id: 'light', title: 'Key Idea', icon: 'bulb-outline', color: '#E3A53D', content: lightContent },
+      { id: 'question', title: 'Question', icon: 'help-circle-outline', color: '#5B93C4', content: questionContent },
+      { id: 'arrow', title: 'Application', icon: 'footsteps-outline', color: '#7BA05B', content: arrowContent },
+    ];
+  }
+
   return {
     id,
     userId,
@@ -313,9 +363,12 @@ export function noteDocumentToNote(data: any, id: string): Note {
     author_username: authorUsername,
     author_display_name: authorDisplayName,
     passage,
-    lightContent: data.light_content ?? parsedSections.lightContent,
-    questionContent: data.question_content ?? parsedSections.questionContent,
-    arrowContent: data.arrow_content ?? parsedSections.arrowContent,
+    templateId: data.template_id || data.templateId,
+    templateName: data.template_name || data.templateName,
+    sections,
+    lightContent,
+    questionContent,
+    arrowContent,
     content,
     tags: Array.isArray(data.tags) ? data.tags : [],
     visibility,

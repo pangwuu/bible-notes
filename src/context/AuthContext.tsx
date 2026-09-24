@@ -62,6 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     preferred_translation: preferredTrans,
                   },
                   custom_esv_api_key: data.custom_esv_api_key || data.settings?.custom_esv_api_key || '',
+                  custom_templates: Array.isArray(data.custom_templates) ? data.custom_templates : [],
                   created_at: data.created_at,
                   updated_at: data.updated_at,
                 };

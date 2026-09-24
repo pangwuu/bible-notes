@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
+import { TemplateIcon } from './TemplateIcon';
 import { colors, spacing, radius } from '../constants/theme';
 import { Note, formatPassageDisplay } from '../types/note';
 
@@ -16,8 +17,9 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onPress, style }) => {
   const cleanSnippet = (raw: string): string => {
     if (!raw) return '';
     return raw
-      .replace(/###?\s*(?:[💡❓🏹]\s*)?(?:Key Idea(?:\(s\))?|Question(?:\(s\))?|Application(?:\(s\))?)/gi, '')
-      .replace(/[💡❓🏹]/g, '')
+      .replace(/###?\s*(?:[💡❓🏹\p{Emoji}]\s*)?(?:Key Idea(?:\(s\))?|Question(?:\(s\))?|Application(?:\(s\))?)/giu, '')
+      .replace(/^#{1,6}\s+.*$/gm, '')
+      .replace(/[💡❓🏹]/gu, '')
       .replace(/\s+/g, ' ')
       .trim();
   };
@@ -26,7 +28,21 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onPress, style }) => {
   let rawSnippet = '';
   let leftBorderColor: string = colors.borderHairline;
 
-  if (note.lightContent && cleanSnippet(note.lightContent)) {
+  if (note.sections && note.sections.length > 0) {
+    const firstNonEmpty = note.sections.find((s) => s.content && cleanSnippet(s.content));
+    if (firstNonEmpty) {
+      rawSnippet = firstNonEmpty.content;
+      leftBorderColor =
+        firstNonEmpty.color ||
+        (firstNonEmpty.id === 'light'
+          ? colors.accentKeyIdea
+          : firstNonEmpty.id === 'question'
+          ? colors.accentQuestion
+          : firstNonEmpty.id === 'arrow'
+          ? colors.accentApplication
+          : colors.accentKeyIdea);
+    }
+  } else if (note.lightContent && cleanSnippet(note.lightContent)) {
     rawSnippet = note.lightContent;
     leftBorderColor = colors.accentKeyIdea;
   } else if (note.questionContent && cleanSnippet(note.questionContent)) {
@@ -35,10 +51,19 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onPress, style }) => {
   } else if (note.arrowContent && cleanSnippet(note.arrowContent)) {
     rawSnippet = note.arrowContent;
     leftBorderColor = colors.accentApplication;
-  } else if (note.content && cleanSnippet(note.content)) {
+  } else if (
+    !note.sections &&
+    note.lightContent === undefined &&
+    note.questionContent === undefined &&
+    note.arrowContent === undefined &&
+    note.content &&
+    cleanSnippet(note.content)
+  ) {
     rawSnippet = note.content;
     leftBorderColor = note.visibility === 'friends' ? colors.accentSocial : colors.borderHairline;
-  } else if (note.visibility === 'friends') {
+  }
+
+  if (!rawSnippet && note.visibility === 'friends') {
     leftBorderColor = colors.accentSocial;
   }
 
@@ -76,15 +101,39 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onPress, style }) => {
             </Text>
           </View>
 
-          {note.lightContent ? (
-            <Ionicons name="bulb-outline" size={13} color={colors.accentKeyIdea} />
-          ) : null}
-          {note.questionContent ? (
-            <Ionicons name="help-circle-outline" size={13} color={colors.accentQuestion} />
-          ) : null}
-          {note.arrowContent ? (
-            <Ionicons name="footsteps-outline" size={13} color={colors.accentApplication} />
-          ) : null}
+          {note.sections && note.sections.length > 0 ? (
+            note.sections.map((sec) =>
+              sec.content?.trim() ? (
+                <TemplateIcon
+                  key={sec.id}
+                  name={sec.icon || 'document-text-outline'}
+                  size={13}
+                  color={
+                    sec.color ||
+                    (sec.id === 'light'
+                      ? colors.accentKeyIdea
+                      : sec.id === 'question'
+                      ? colors.accentQuestion
+                      : sec.id === 'arrow'
+                      ? colors.accentApplication
+                      : colors.textSecondary)
+                  }
+                />
+              ) : null
+            )
+          ) : (
+            <>
+              {note.lightContent ? (
+                <Ionicons name="bulb-outline" size={13} color={colors.accentKeyIdea} />
+              ) : null}
+              {note.questionContent ? (
+                <Ionicons name="help-circle-outline" size={13} color={colors.accentQuestion} />
+              ) : null}
+              {note.arrowContent ? (
+                <Ionicons name="footsteps-outline" size={13} color={colors.accentApplication} />
+              ) : null}
+            </>
+          )}
         </View>
       </View>
 
