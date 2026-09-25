@@ -142,6 +142,8 @@ export const SwedishEditor: React.FC<SwedishEditorProps> = ({
           multiline
           scrollEnabled={false}
           textAlignVertical="top"
+          autoCapitalize="sentences"
+          autoCorrect={true}
           editable={editable}
           style={styles.unborderedInput}
         />
@@ -166,6 +168,8 @@ export const SwedishEditor: React.FC<SwedishEditorProps> = ({
           multiline
           scrollEnabled={false}
           textAlignVertical="top"
+          autoCapitalize="sentences"
+          autoCorrect={true}
           editable={editable}
           style={styles.unborderedInput}
         />
@@ -190,6 +194,8 @@ export const SwedishEditor: React.FC<SwedishEditorProps> = ({
           multiline
           scrollEnabled={false}
           textAlignVertical="top"
+          autoCapitalize="sentences"
+          autoCorrect={true}
           editable={editable}
           style={styles.unborderedInput}
         />

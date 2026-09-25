@@ -335,9 +335,9 @@ export function noteDocumentToNote(data: any, id: string): Note {
   const createdAt = data.created_at || Date.now();
   const updatedAt = data.updated_at || Date.now();
 
-  const lightContent = data.light_content ?? parsedSections.lightContent;
-  const questionContent = data.question_content ?? parsedSections.questionContent;
-  const arrowContent = data.arrow_content ?? parsedSections.arrowContent;
+  const lightContent = (data.light_content ?? parsedSections.lightContent ?? '').trim();
+  const questionContent = (data.question_content ?? parsedSections.questionContent ?? '').trim();
+  const arrowContent = (data.arrow_content ?? parsedSections.arrowContent ?? '').trim();
 
   let sections: NoteSectionValue[] = [];
   if (Array.isArray(data.sections) && data.sections.length > 0) {
@@ -346,7 +346,7 @@ export function noteDocumentToNote(data: any, id: string): Note {
       title: s.title || '',
       icon: s.icon,
       color: s.color,
-      content: s.content || '',
+      content: (s.content || '').trim(),
     }));
   } else {
     // Synthesize sections from Swedish fields if legacy/blank

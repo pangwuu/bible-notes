@@ -11,6 +11,7 @@ export interface TagInputProps {
   suggestions?: string[];
   maxTags?: number;
   editable?: boolean;
+  onFocus?: () => void;
 }
 
 export const TagInput: React.FC<TagInputProps> = ({
@@ -20,6 +21,7 @@ export const TagInput: React.FC<TagInputProps> = ({
   suggestions = [],
   maxTags = 5,
   editable = true,
+  onFocus,
 }) => {
   const [input, setInput] = useState('');
 
@@ -74,6 +76,7 @@ export const TagInput: React.FC<TagInputProps> = ({
             value={input}
             onChangeText={setInput}
             onSubmitEditing={handleAdd}
+            onFocus={onFocus}
             placeholder="Add tag (e.g. faith, grace)..."
             placeholderTextColor={colors.textSecondary}
             autoCapitalize="none"

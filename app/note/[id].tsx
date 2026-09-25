@@ -160,7 +160,8 @@ export default function NoteDetailScreen() {
       ? note.sections.some((s) => Boolean(s.content?.trim()))
       : Boolean(note.lightContent?.trim()) ||
         Boolean(note.questionContent?.trim()) ||
-        Boolean(note.arrowContent?.trim());
+        Boolean(note.arrowContent?.trim()) ||
+        Boolean(note.content?.trim());
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
@@ -334,6 +335,21 @@ export default function NoteDetailScreen() {
                 </Text>
               </View>
               <Markdown style={markdownStyles}>{note.arrowContent.trim()}</Markdown>
+            </View>
+          ) : null}
+
+          {!note.lightContent?.trim() &&
+          !note.questionContent?.trim() &&
+          !note.arrowContent?.trim() &&
+          note.content?.trim() ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="document-text-outline" size={15} color={colors.accent.keyIdea} />
+                <Text style={[styles.sectionLabel, { color: colors.accent.keyIdea }]}>
+                  Reflection
+                </Text>
+              </View>
+              <Markdown style={markdownStyles}>{note.content.trim()}</Markdown>
             </View>
           ) : null}
         </>

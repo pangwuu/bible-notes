@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.md,
   },
   searchBar: {
     backgroundColor: colors.bgSurface,

@@ -117,7 +117,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
       title: s.title,
       icon: s.icon,
       color: s.color,
-      content: s.content || '',
+      content: (s.content || '').trim(),
     })),
     content,
     light_content: lightContent,
@@ -215,7 +215,7 @@ export async function updateNote(noteId: string, updates: UpdateNoteInput): Prom
       title: s.title,
       icon: s.icon,
       color: s.color,
-      content: s.content || '',
+      content: (s.content || '').trim(),
     }));
     if (updates.content === undefined) {
       firestoreUpdates.content = compileSectionsToMarkdown(updates.sections);

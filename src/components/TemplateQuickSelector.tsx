@@ -20,6 +20,25 @@ export const TemplateQuickSelector: React.FC<TemplateQuickSelectorProps> = ({
 }) => {
   return (
     <View style={styles.container}>
+      {/* Top Header Row: Template Label (left) and pinned Browse all button (right) */}
+      <View style={styles.headerRow}>
+        <View style={styles.headerLeft}>
+          <Ionicons name="albums-outline" size={15} color={colors.accent.keyIdea} />
+          <Text style={styles.headerLabel}>Template</Text>
+        </View>
+        <Pressable
+          onPress={onOpenManager}
+          style={styles.browseAllButton}
+          accessibilityRole="button"
+          accessibilityLabel="Browse all templates"
+          hitSlop={8}
+        >
+          <Ionicons name="options-outline" size={13} color={colors.accent.keyIdea} />
+          <Text style={styles.browseAllText}>Browse all</Text>
+        </Pressable>
+      </View>
+
+      {/* Horizontally scrollable template options */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -48,17 +67,6 @@ export const TemplateQuickSelector: React.FC<TemplateQuickSelectorProps> = ({
             </Pressable>
           );
         })}
-
-        <Pressable
-          onPress={onOpenManager}
-          style={styles.manageButton}
-          accessibilityRole="button"
-          accessibilityLabel="Browse or create templates"
-          hitSlop={8}
-        >
-          <Ionicons name="options-outline" size={14} color={colors.accent.keyIdea} />
-          <Text style={styles.manageText}>Browse</Text>
-        </Pressable>
       </ScrollView>
     </View>
   );
@@ -66,7 +74,40 @@ export const TemplateQuickSelector: React.FC<TemplateQuickSelectorProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: spacing.xs,
+    marginVertical: 0,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  headerLabel: {
+    ...typography.caption,
+    color: colors.text.secondary,
+    fontWeight: '600',
+  },
+  browseAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radii.controls,
+    backgroundColor: colors.bg.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.border.hairline,
+    gap: 4,
+  },
+  browseAllText: {
+    ...typography.caption,
+    color: colors.accent.keyIdea,
+    fontWeight: '600',
   },
   scrollContent: {
     flexDirection: 'row',
@@ -99,22 +140,6 @@ const styles = StyleSheet.create({
   pillTextActive: {
     color: colors.bg.base,
     fontWeight: '600',
-  },
-  manageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: 9999,
-    backgroundColor: colors.bg.surfaceRaised,
-    borderWidth: 1,
-    borderColor: colors.accent.keyIdea,
-  },
-  manageText: {
-    ...typography.caption,
-    color: colors.accent.keyIdea,
-    fontWeight: '600',
-    marginLeft: 4,
   },
 });
 

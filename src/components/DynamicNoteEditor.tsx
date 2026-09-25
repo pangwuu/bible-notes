@@ -33,6 +33,7 @@ export interface DynamicNoteEditorProps {
   editable?: boolean;
   suggestionTags?: string[];
   templateSelector?: React.ReactNode;
+  onFocusTagInput?: () => void;
 }
 
 const COMMON_TAG_SUGGESTIONS = [
@@ -61,6 +62,7 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
   editable = true,
   suggestionTags,
   templateSelector,
+  onFocusTagInput,
 }) => {
   const combinedSuggestions = useMemo(() => {
     return Array.from(new Set([...(suggestionTags || []), ...COMMON_TAG_SUGGESTIONS]));
@@ -74,7 +76,10 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
     <View style={styles.container}>
       {/* Visibility Toggle Row */}
       <View style={styles.metaRow}>
-        <Text style={styles.metaLabel}>Visibility</Text>
+        <View style={styles.headerLeft}>
+          <Ionicons name="eye-outline" size={15} color={colors.text.secondary} />
+          <Text style={styles.metaLabel}>Visibility</Text>
+        </View>
         <View style={styles.visibilityToggle}>
           <Pressable
             accessibilityRole="switch"
@@ -132,7 +137,6 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
       {templateSelector && (
         <>
           <View style={styles.templateSelectorWrapper}>
-            <Text style={styles.metaLabel}>Template</Text>
             {templateSelector}
           </View>
           <View style={styles.divider} accessibilityRole="none" importantForAccessibility="no" />
@@ -165,6 +169,8 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
                 multiline
                 scrollEnabled={false}
                 textAlignVertical="top"
+                autoCapitalize="sentences"
+                autoCorrect={true}
                 editable={editable}
                 style={styles.unborderedInput}
               />
@@ -182,6 +188,7 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
         suggestions={combinedSuggestions}
         maxTags={5}
         editable={editable}
+        onFocus={onFocusTagInput}
       />
     </View>
   );
@@ -196,7 +203,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   metaLabel: {
     ...typography.caption,
@@ -204,8 +215,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   templateSelectorWrapper: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
   visibilityToggle: {
     flexDirection: 'row',

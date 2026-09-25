@@ -21,6 +21,7 @@ import { Note, formatPassageDisplay } from '../../src/types/note';
 import { useAuth } from '../../src/context/AuthContext';
 import NoteCard from '../../src/components/NoteCard';
 import EmptyState from '../../src/components/EmptyState';
+import AddNoteFAB from '../../src/components/AddNoteFAB';
 
 export default function NotesBrowserScreen() {
   const router = useRouter();
@@ -221,15 +222,8 @@ export default function NotesBrowserScreen() {
         )}
       </ScrollView>
 
-      {/* Floating Action Button: filled with accent.keyIdea */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Create new note"
-        style={styles.fab}
-        onPress={() => router.push('/note/edit')}
-      >
-        <Ionicons name="add" size={28} color={colors.bg.base} />
-      </Pressable>
+      {/* Floating Action Button */}
+      <AddNoteFAB />
     </View>
   );
 }
@@ -241,7 +235,7 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.md,
   },
   searchBar: {
     backgroundColor: colors.bgSurface,
@@ -354,16 +348,5 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     textAlign: 'center',
     maxWidth: 240,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 16,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.accent.keyIdea,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });

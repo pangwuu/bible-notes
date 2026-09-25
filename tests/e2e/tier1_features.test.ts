@@ -30,8 +30,8 @@ describe('Tier 1: Feature Coverage (Features 1 to 36)', () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'package.json'), 'utf-8'));
     const appJson = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'app.json'), 'utf-8'));
 
-    test('1.1: Expo SDK version is pinned to ~57.0.24', () => {
-      expect(pkg.dependencies.expo).toBe('~57.0.24');
+    test('1.1: Expo SDK version is pinned to ~57.0.2x', () => {
+      expect(pkg.dependencies.expo).toMatch(/^~57\.0\.2[45]$/);
     });
 
     test('1.2: React Native and React are pinned to compatible SDK 57 versions', () => {

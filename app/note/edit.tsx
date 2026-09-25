@@ -81,6 +81,13 @@ export default function NoteEditScreen() {
   const [currentNoteId, setCurrentNoteId] = useState<string | undefined>(id);
   const currentNoteIdRef = useRef<string | undefined>(id);
   const isSavingRef = useRef(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  const handleFocusTagInput = useCallback(() => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -120,13 +127,16 @@ export default function NoteEditScreen() {
           setActiveTemplate(tpl);
 
           if (existing.sections && existing.sections.length > 0) {
-            setSections(existing.sections);
+            setSections(existing.sections.map((s) => ({
+              ...s,
+              content: (s.content || '').trim(),
+            })));
           } else {
             // Synthesize from legacy Swedish fields
             setSections([
-              { id: 'light', title: 'Key Idea', icon: 'bulb-outline', content: existing.lightContent || '' },
-              { id: 'question', title: 'Question', icon: 'help-circle-outline', content: existing.questionContent || '' },
-              { id: 'arrow', title: 'Application', icon: 'footsteps-outline', content: existing.arrowContent || '' },
+              { id: 'light', title: 'Key Idea', icon: 'bulb-outline', content: (existing.lightContent || '').trim() },
+              { id: 'question', title: 'Question', icon: 'help-circle-outline', content: (existing.questionContent || '').trim() },
+              { id: 'arrow', title: 'Application', icon: 'footsteps-outline', content: (existing.arrowContent || '').trim() },
             ]);
           }
 
@@ -317,10 +327,16 @@ export default function NoteEditScreen() {
 
     const targetId = currentNoteIdRef.current || id;
 
+    // Sanitize sections and Swedish fields by trimming whitespace
+    const sanitizedSections = sections.map((s) => ({
+      ...s,
+      content: (s.content || '').trim(),
+    }));
+
     // Extract Swedish fields for backwards compatibility
-    const lightContent = sections.find((s) => s.id === 'light')?.content || '';
-    const questionContent = sections.find((s) => s.id === 'question')?.content || '';
-    const arrowContent = sections.find((s) => s.id === 'arrow')?.content || '';
+    const lightContent = sanitizedSections.find((s) => s.id === 'light')?.content || '';
+    const questionContent = sanitizedSections.find((s) => s.id === 'question')?.content || '';
+    const arrowContent = sanitizedSections.find((s) => s.id === 'arrow')?.content || '';
 
     try {
       let savedNote;
@@ -329,7 +345,7 @@ export default function NoteEditScreen() {
           passage,
           templateId: activeTemplate.id,
           templateName: activeTemplate.name,
-          sections,
+          sections: sanitizedSections,
           lightContent,
           questionContent,
           arrowContent,
@@ -344,7 +360,7 @@ export default function NoteEditScreen() {
           passage,
           templateId: activeTemplate.id,
           templateName: activeTemplate.name,
-          sections,
+          sections: sanitizedSections,
           lightContent,
           questionContent,
           arrowContent,
@@ -385,9 +401,15 @@ export default function NoteEditScreen() {
     }
   }, [handleSave, router]);
 
-  // Back confirmation dialog
-  const handleBack = useCallback(() => {
-    if (isDirty) {
+  // Back confirmation dialog via beforeRemove navigation guard
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (!isDirty || isSavingRef.current) {
+        return;
+      }
+
+      e.preventDefault();
+
       Alert.alert(
         'Unsaved Changes',
         'Do you want to save your notes before leaving?',
@@ -398,22 +420,29 @@ export default function NoteEditScreen() {
             style: 'destructive',
             onPress: () => {
               setIsDirty(false);
-              router.back();
+              navigation.dispatch(e.data.action);
             },
           },
           {
             text: 'Save',
             onPress: async () => {
               const success = await handleSave();
-              if (success) router.back();
+              if (success) {
+                setIsDirty(false);
+                navigation.dispatch(e.data.action);
+              }
             },
           },
         ]
       );
-    } else {
-      router.back();
-    }
-  }, [isDirty, router, handleSave]);
+    });
+
+    return unsubscribe;
+  }, [navigation, isDirty, handleSave]);
+
+  const handleBack = useCallback(() => {
+    navigation.goBack();
+  }, [navigation]);
 
   // Navigation Header Setup
   useLayoutEffect(() => {
@@ -456,6 +485,7 @@ export default function NoteEditScreen() {
       )}
 
       <ScrollView
+        ref={scrollViewRef}
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -533,6 +563,7 @@ export default function NoteEditScreen() {
             setIsDirty(true);
           }}
           suggestionTags={userSuggestions}
+          onFocusTagInput={handleFocusTagInput}
         />
       </ScrollView>
 
@@ -593,7 +624,7 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: spacing.sm,
     paddingTop: spacing.xs,
-    paddingBottom: spacing.xxl,
+    paddingBottom: 120, // 2.5x whitespace for keyboard clearance & tags menu
   },
   headerButton: {
     paddingHorizontal: spacing.xs,

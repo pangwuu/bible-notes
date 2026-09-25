@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
-import { Text, FAB } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius } from '../../src/constants/theme';
@@ -11,11 +11,22 @@ import NoteCard from '../../src/components/NoteCard';
 import EmptyState from '../../src/components/EmptyState';
 import { FriendNoteCard } from '../../src/components/FriendNoteCard';
 import { RandomReflectionCard } from '../../src/components/RandomReflectionCard';
+import DashboardGreeting from '../../src/components/DashboardGreeting';
+import AddNoteFAB from '../../src/components/AddNoteFAB';
+import safeStorage from '../../src/utils/safeStorage';
 import {
   getDashboardFriendActivity,
   selectRandomReflectionNote,
   DashboardFriendActivity,
 } from '../../src/services/dashboardService';
+
+export interface HiddenSectionsState {
+  recentNotes: boolean;
+  friendsActivity: boolean;
+  rediscover: boolean;
+}
+
+const DASHBOARD_HIDDEN_SECTIONS_KEY = 'dashboard_hidden_sections';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -30,6 +41,32 @@ export default function DashboardScreen() {
   const [randomNote, setRandomNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [hiddenSections, setHiddenSections] = useState<HiddenSectionsState>({
+    recentNotes: false,
+    friendsActivity: false,
+    rediscover: false,
+  });
+
+  useEffect(() => {
+    safeStorage.getItem(DASHBOARD_HIDDEN_SECTIONS_KEY).then((val) => {
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          setHiddenSections((prev) => ({ ...prev, ...parsed }));
+        } catch {
+          // ignore parse error
+        }
+      }
+    });
+  }, []);
+
+  const toggleSection = useCallback((section: keyof HiddenSectionsState) => {
+    setHiddenSections((prev) => {
+      const next = { ...prev, [section]: !prev[section] };
+      safeStorage.setItem(DASHBOARD_HIDDEN_SECTIONS_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
 
   const loadDashboardData = useCallback(async () => {
     if (!user?.uid) return;
@@ -95,101 +132,140 @@ export default function DashboardScreen() {
           />
         }
       >
+        {/* CLAUDE-STYLE GREETING */}
+        <DashboardGreeting />
+
         {/* SECTION 1: RECENT NOTES */}
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionHeading}>Recent Notes</Text>
+          <Pressable
+            style={styles.hideButton}
+            onPress={() => toggleSection('recentNotes')}
+            accessibilityRole="button"
+            accessibilityLabel={hiddenSections.recentNotes ? 'Show Recent Notes' : 'Hide Recent Notes'}
+            hitSlop={8}
+          >
+            <Ionicons
+              name={hiddenSections.recentNotes ? 'eye-outline' : 'eye-off-outline'}
+              size={14}
+              color={colors.textSecondary}
+            />
+            <Text style={styles.hideButtonText}>
+              {hiddenSections.recentNotes ? 'Show' : 'Hide'}
+            </Text>
+          </Pressable>
         </View>
 
-        {recentNotes.length === 0 ? (
-          <EmptyState
-            icon="book-outline"
-            title="No notes yet"
-            subtitle="Capture reflections on Scripture using the Swedish Method."
-            actionLabel="Start a note"
-            onAction={() => router.push('/note/edit')}
-          />
-        ) : (
-          recentNotes.map((note) => (
-            <NoteCard
-              key={note.id}
-              note={note}
-              onPress={() => router.push({ pathname: '/note/[id]', params: { id: note.id } })}
+        {!hiddenSections.recentNotes && (
+          recentNotes.length === 0 ? (
+            <EmptyState
+              icon="book-outline"
+              title="No notes yet"
+              subtitle="Capture reflections on Scripture using the Swedish Method."
+              actionLabel="Start a note"
+              onAction={() => router.push('/note/edit')}
             />
-          ))
+          ) : (
+            recentNotes.map((note) => (
+              <NoteCard
+                key={note.id}
+                note={note}
+                onPress={() => router.push({ pathname: '/note/[id]', params: { id: note.id } })}
+              />
+            ))
+          )
         )}
 
         {/* SECTION 2: FRIENDS' ACTIVITY */}
         <View style={styles.sectionDivider} />
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionHeading}>Friends' Activity</Text>
+          <Pressable
+            style={styles.hideButton}
+            onPress={() => toggleSection('friendsActivity')}
+            accessibilityRole="button"
+            accessibilityLabel={hiddenSections.friendsActivity ? "Show Friends' Activity" : "Hide Friends' Activity"}
+            hitSlop={8}
+          >
+            <Ionicons
+              name={hiddenSections.friendsActivity ? 'eye-outline' : 'eye-off-outline'}
+              size={14}
+              color={colors.textSecondary}
+            />
+            <Text style={styles.hideButtonText}>
+              {hiddenSections.friendsActivity ? 'Show' : 'Hide'}
+            </Text>
+          </Pressable>
         </View>
 
-        {!hasFriendNotes ? (
-          <View style={styles.friendEmptyCard}>
-            <Ionicons name="people-outline" size={24} color={colors.accentSocial} />
-            <View style={styles.friendEmptyMeta}>
-              <Text style={styles.friendEmptyTitle}>
-                {friendActivity.hasFriends ? 'No shared notes yet' : 'Connect with friends'}
-              </Text>
-              <Text style={styles.friendEmptySubtitle}>
-                {friendActivity.hasFriends
-                  ? 'Notes shared by your friends will appear here.'
-                  : 'Add friends to discover mutual passage reflections and shared study insights.'}
-              </Text>
+        {!hiddenSections.friendsActivity && (
+          !hasFriendNotes ? (
+            <View style={styles.friendEmptyCard}>
+              <Ionicons name="people-outline" size={24} color={colors.accentSocial} />
+              <View style={styles.friendEmptyMeta}>
+                <Text style={styles.friendEmptyTitle}>
+                  {friendActivity.hasFriends ? 'No shared notes yet' : 'Connect with friends'}
+                </Text>
+                <Text style={styles.friendEmptySubtitle}>
+                  {friendActivity.hasFriends
+                    ? 'Notes shared by your friends will appear here.'
+                    : 'Add friends to discover mutual passage reflections and shared study insights.'}
+                </Text>
+              </View>
+              <Pressable
+                style={styles.findFriendsButton}
+                onPress={() => router.push('/(tabs)/friends')}
+                accessibilityRole="button"
+                accessibilityLabel="Find Friends"
+              >
+                <Text style={styles.findFriendsButtonText}>
+                  {friendActivity.hasFriends ? 'Friends' : 'Find Friends'}
+                </Text>
+              </Pressable>
             </View>
-            <Pressable
-              style={styles.findFriendsButton}
-              onPress={() => router.push('/(tabs)/friends')}
-              accessibilityRole="button"
-              accessibilityLabel="Find Friends"
-            >
-              <Text style={styles.findFriendsButtonText}>
-                {friendActivity.hasFriends ? 'Friends' : 'Find Friends'}
-              </Text>
-            </Pressable>
-          </View>
-        ) : (
-          <>
-            {/* Pinned Shared Passages (Intersecting Notes) */}
-            {friendActivity.intersectingNotes.length > 0 ? (
-              <View style={styles.subSectionContainer}>
-                <View style={styles.subSectionHeader}>
-                  <Ionicons name="people-outline" size={15} color={colors.accentSocial} />
-                  <Text style={styles.subSectionTitle}>Shared Passages</Text>
-                </View>
-                {friendActivity.intersectingNotes.map((item) => (
-                  <FriendNoteCard
-                    key={`intersecting-${item.note.id}`}
-                    item={item}
-                    onPress={() =>
-                      router.push({ pathname: '/note/[id]', params: { id: item.note.id } })
-                    }
-                  />
-                ))}
-              </View>
-            ) : null}
-
-            {/* Other Friend Updates */}
-            {friendActivity.otherFriendNotes.length > 0 ? (
-              <View style={styles.subSectionContainer}>
-                {friendActivity.intersectingNotes.length > 0 ? (
+          ) : (
+            <>
+              {/* Pinned Shared Passages (Intersecting Notes) */}
+              {friendActivity.intersectingNotes.length > 0 ? (
+                <View style={styles.subSectionContainer}>
                   <View style={styles.subSectionHeader}>
-                    <Ionicons name="newspaper-outline" size={14} color={colors.textSecondary} />
-                    <Text style={styles.subSectionTitleSecondary}>Recent Updates</Text>
+                    <Ionicons name="people-outline" size={15} color={colors.accentSocial} />
+                    <Text style={styles.subSectionTitle}>Shared Passages</Text>
                   </View>
-                ) : null}
-                {friendActivity.otherFriendNotes.map((item) => (
-                  <FriendNoteCard
-                    key={`other-${item.note.id}`}
-                    item={item}
-                    onPress={() =>
-                      router.push({ pathname: '/note/[id]', params: { id: item.note.id } })
-                    }
-                  />
-                ))}
-              </View>
-            ) : null}
-          </>
+                  {friendActivity.intersectingNotes.map((item) => (
+                    <FriendNoteCard
+                      key={`intersecting-${item.note.id}`}
+                      item={item}
+                      onPress={() =>
+                        router.push({ pathname: '/note/[id]', params: { id: item.note.id } })
+                      }
+                    />
+                  ))}
+                </View>
+              ) : null}
+
+              {/* Other Friend Updates */}
+              {friendActivity.otherFriendNotes.length > 0 ? (
+                <View style={styles.subSectionContainer}>
+                  {friendActivity.intersectingNotes.length > 0 ? (
+                    <View style={styles.subSectionHeader}>
+                      <Ionicons name="newspaper-outline" size={14} color={colors.textSecondary} />
+                      <Text style={styles.subSectionTitleSecondary}>Recent Updates</Text>
+                    </View>
+                  ) : null}
+                  {friendActivity.otherFriendNotes.map((item) => (
+                    <FriendNoteCard
+                      key={`other-${item.note.id}`}
+                      item={item}
+                      onPress={() =>
+                        router.push({ pathname: '/note/[id]', params: { id: item.note.id } })
+                      }
+                    />
+                  ))}
+                </View>
+              ) : null}
+            </>
+          )
         )}
 
         {/* SECTION 3: REDISCOVER A REFLECTION */}
@@ -198,25 +274,37 @@ export default function DashboardScreen() {
             <View style={styles.sectionDivider} />
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionHeading}>Rediscover a Reflection</Text>
+              <Pressable
+                style={styles.hideButton}
+                onPress={() => toggleSection('rediscover')}
+                accessibilityRole="button"
+                accessibilityLabel={hiddenSections.rediscover ? "Show Rediscover a Reflection" : "Hide Rediscover a Reflection"}
+                hitSlop={8}
+              >
+                <Ionicons
+                  name={hiddenSections.rediscover ? 'eye-outline' : 'eye-off-outline'}
+                  size={14}
+                  color={colors.textSecondary}
+                />
+                <Text style={styles.hideButtonText}>
+                  {hiddenSections.rediscover ? 'Show' : 'Hide'}
+                </Text>
+              </Pressable>
             </View>
-            <RandomReflectionCard
-              note={randomNote}
-              onPress={() =>
-                router.push({ pathname: '/note/[id]', params: { id: randomNote.id } })
-              }
-              onShuffle={handleShuffleRandomNote}
-            />
+            {!hiddenSections.rediscover && (
+              <RandomReflectionCard
+                note={randomNote}
+                onPress={() =>
+                  router.push({ pathname: '/note/[id]', params: { id: randomNote.id } })
+                }
+                onShuffle={handleShuffleRandomNote}
+              />
+            )}
           </>
         ) : null}
       </ScrollView>
 
-      <FAB
-        icon="plus"
-        color={colors.bgBase}
-        style={styles.fab}
-        onPress={() => router.push('/note/edit')}
-        accessibilityLabel="Create note"
-      />
+      <AddNoteFAB />
     </View>
   );
 }
@@ -240,6 +328,22 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+  hideButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.control,
+    backgroundColor: colors.bgSurfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.borderHairline,
+  },
+  hideButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.textSecondary,
   },
   sectionDivider: {
     height: 1,
@@ -303,12 +407,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: colors.accentSocial,
-  },
-  fab: {
-    position: 'absolute',
-    right: spacing.md,
-    bottom: spacing.md,
-    backgroundColor: colors.accentKeyIdea,
-    borderRadius: 28,
   },
 });
