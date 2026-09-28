@@ -14,6 +14,8 @@ import {
   Pressable,
   Alert,
   ActivityIndicator,
+  BackHandler,
+  Keyboard,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useNavigation, useRouter, useLocalSearchParams } from 'expo-router';
@@ -33,11 +35,21 @@ import {
   DEFAULT_TEMPLATE,
   getTemplateById,
   initializeSectionValues,
+  getSectionColor,
 } from '../../src/constants/templates';
 import * as notesService from '../../src/services/notesService';
 import { updateUserProfile } from '../../src/services/authService';
 import { notifyFriendsOfNoteOverlap } from '../../src/services/noteOverlapService';
 import { useAuth } from '../../src/context/AuthContext';
+import VersePreviewModal from '../../src/components/VersePreviewModal';
+import {
+  buildLinkedVerseMap,
+  formatVerseReferenceTag,
+  extractVerseRangeText,
+} from '../../src/utils/verseLinkUtils';
+import { findCanonicalBook } from '../../src/constants/bibleData';
+import { createPassageReference } from '../../src/utils/passageParser';
+import { fetchPassageText } from '../../src/services/bibleService';
 
 export default function NoteEditScreen() {
   const navigation = useNavigation();
@@ -80,8 +92,146 @@ export default function NoteEditScreen() {
 
   const [currentNoteId, setCurrentNoteId] = useState<string | undefined>(id);
   const currentNoteIdRef = useRef<string | undefined>(id);
+  const editorLayoutY = useRef<number>(0);
+  const sectionLayoutMap = useRef<Record<string, number>>({});
   const isSavingRef = useRef(false);
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Verse Link & Preview Modal State
+  const [previewVerseData, setPreviewVerseData] = useState<{
+    visible: boolean;
+    startVerse: number;
+    endVerse: number;
+    verseText: string;
+  }>({ visible: false, startVerse: 1, endVerse: 1, verseText: '' });
+
+  const linkedVerseMap = useMemo(() => {
+    return buildLinkedVerseMap(sections);
+  }, [sections]);
+
+  const sectionOptions = useMemo(() => {
+    return sections.map((s) => ({
+      id: s.id,
+      title: s.title,
+      icon: s.icon,
+      color: s.color,
+    }));
+  }, [sections]);
+
+  const sectionsRef = useRef<NoteSectionValue[]>(sections);
+  useEffect(() => {
+    sectionsRef.current = sections;
+  }, [sections]);
+
+  const handleAttachToSection = useCallback((
+    verses: number[],
+    sectionId: string,
+    context?: { book?: string; chapter?: number }
+  ) => {
+    if (verses.length === 0) return;
+    const sorted = [...verses].sort((a, b) => a - b);
+    const min = sorted[0];
+    const max = sorted[sorted.length - 1];
+
+    const book = context?.book || passage?.segments?.[0]?.book;
+    const chapter = context?.chapter || passage?.segments?.[0]?.startChapter;
+
+    const tag = formatVerseReferenceTag(sorted, { book, chapter });
+
+    setSections((prev) => {
+      const secIdx = prev.findIndex((s) => s.id === sectionId);
+      if (secIdx < 0) return prev;
+
+      const targetSec = prev[secIdx];
+      const existingRefs = targetSec.verseReferences || [];
+      const alreadyExists = existingRefs.some((r) => r.startVerse === min && r.endVerse === max && r.book === book && r.chapter === chapter);
+      const updatedRefs = alreadyExists
+        ? existingRefs
+        : [...existingRefs, { startVerse: min, endVerse: max, book, chapter }];
+
+      const currentContent = targetSec.content || '';
+      const hasTag = currentContent.includes(tag);
+      const updatedContent = hasTag
+        ? currentContent
+        : currentContent.trim()
+        ? `${currentContent.trim()} ${tag}`
+        : tag;
+
+      const copy = [...prev];
+      copy[secIdx] = {
+        ...targetSec,
+        content: updatedContent,
+        verseReferences: updatedRefs,
+      };
+      return copy;
+    });
+    setIsDirty(true);
+  }, [passage]);
+
+  const handleRemoveVerseReference = useCallback((sectionIndex: number, referenceIndex: number) => {
+    setSections((prev) => {
+      const targetSec = prev[sectionIndex];
+      if (!targetSec || !targetSec.verseReferences) return prev;
+      const refToRemove = targetSec.verseReferences[referenceIndex];
+      const tag = formatVerseReferenceTag([refToRemove.startVerse, refToRemove.endVerse]);
+      const updatedRefs = targetSec.verseReferences.filter((_, idx) => idx !== referenceIndex);
+      const updatedContent = targetSec.content.replace(tag, '').trim();
+
+      const copy = [...prev];
+      copy[sectionIndex] = {
+        ...targetSec,
+        content: updatedContent,
+        verseReferences: updatedRefs,
+      };
+      return copy;
+    });
+    setIsDirty(true);
+  }, []);
+
+  const handlePreviewVerse = useCallback(
+    async (startVerse: number, endVerse: number, context?: { book?: string; chapter?: number }) => {
+      let targetPassage = passage;
+      if (context?.book) {
+        const meta = findCanonicalBook(context.book);
+        if (meta) {
+          const ch =
+            typeof context.chapter === 'number' && context.chapter >= 1 && context.chapter <= meta.chapters
+              ? context.chapter
+              : passage?.segments?.[0]?.startChapter || 1;
+          try {
+            targetPassage = createPassageReference([
+              {
+                book: meta.name,
+                startChapter: ch,
+                startVerse,
+                endChapter: ch,
+                endVerse,
+              },
+            ]);
+          } catch (createErr) {
+            console.warn('Failed to build passage reference for preview:', createErr);
+          }
+        }
+      }
+      if (!targetPassage) return;
+      try {
+        const res = await fetchPassageText(targetPassage, {
+          translation: profile?.settings?.preferred_translation || 'ESV',
+          esvApiKey: profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key,
+        });
+        const text = extractVerseRangeText(res.verses || [], startVerse, endVerse);
+        setPreviewVerseData({
+          visible: true,
+          startVerse,
+          endVerse,
+          verseText: text,
+        });
+      } catch (err) {
+        console.warn('Failed to load verse preview text:', err);
+      }
+    },
+    [passage, profile]
+  );
 
   const handleFocusTagInput = useCallback(() => {
     setTimeout(() => {
@@ -161,7 +311,8 @@ export default function NoteEditScreen() {
     (targetTemplate: NoteTemplate) => {
       if (targetTemplate.id === activeTemplate.id) return;
 
-      const hasText = sections.some((s) => s.content.trim().length > 0);
+      const currentSections = sectionsRef.current;
+      const hasText = currentSections.some((s) => s.content.trim().length > 0);
       if (!hasText) {
         setActiveTemplate(targetTemplate);
         setSections(initializeSectionValues(targetTemplate));
@@ -186,11 +337,14 @@ export default function NoteEditScreen() {
           {
             text: 'Keep Text',
             onPress: () => {
-              const newSections = targetTemplate.sections.map((sec, idx) => ({
+              const latest = sectionsRef.current;
+              const newSections: NoteSectionValue[] = targetTemplate.sections.map((sec, idx) => ({
                 id: sec.id,
                 title: sec.title,
-                icon: sec.icon,
-                content: sections[idx]?.content || '',
+                icon: sec.icon || 'document-text-outline',
+                color: sec.color || getSectionColor(sec.id),
+                content: latest[idx]?.content || '',
+                verseReferences: latest[idx]?.verseReferences,
               }));
               setActiveTemplate(targetTemplate);
               setSections(newSections);
@@ -200,7 +354,7 @@ export default function NoteEditScreen() {
         ]
       );
     },
-    [activeTemplate.id, sections]
+    [activeTemplate.id]
   );
 
   // Template CRUD actions
@@ -373,8 +527,9 @@ export default function NoteEditScreen() {
         }
       }
 
-      // If note is visible to friends, evaluate verse overlaps and notify friends asynchronously
-      if (savedNote && visibility === 'friends' && user?.uid) {
+      // If note is visible to friends, evaluate verse overlaps and notify friends asynchronously ONLY on note creation
+      const isNewNote = !targetId;
+      if (isNewNote && savedNote && visibility === 'friends' && user?.uid) {
         const authorName = profile?.display_name || profile?.username || user?.displayName || 'A friend';
         notifyFriendsOfNoteOverlap(user.uid, authorName, savedNote).catch((err) => {
           console.warn('Failed to dispatch friend overlap notifications:', err);
@@ -401,15 +556,9 @@ export default function NoteEditScreen() {
     }
   }, [handleSave, router]);
 
-  // Back confirmation dialog via beforeRemove navigation guard
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
-      if (!isDirty || isSavingRef.current) {
-        return;
-      }
-
-      e.preventDefault();
-
+  // Back confirmation dialog
+  const handleBack = useCallback(() => {
+    if (isDirty) {
       Alert.alert(
         'Unsaved Changes',
         'Do you want to save your notes before leaving?',
@@ -420,7 +569,7 @@ export default function NoteEditScreen() {
             style: 'destructive',
             onPress: () => {
               setIsDirty(false);
-              navigation.dispatch(e.data.action);
+              router.back();
             },
           },
           {
@@ -429,25 +578,35 @@ export default function NoteEditScreen() {
               const success = await handleSave();
               if (success) {
                 setIsDirty(false);
-                navigation.dispatch(e.data.action);
+                router.back();
               }
             },
           },
         ]
       );
-    });
+    } else {
+      router.back();
+    }
+  }, [isDirty, router, handleSave]);
 
-    return unsubscribe;
-  }, [navigation, isDirty, handleSave]);
+  // Intercept Android hardware back button when note has unsaved changes
+  useEffect(() => {
+    if (!isDirty) return;
 
-  const handleBack = useCallback(() => {
-    navigation.goBack();
-  }, [navigation]);
+    const onHardwareBackPress = () => {
+      handleBack();
+      return true; // Prevent default Android back navigation
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onHardwareBackPress);
+    return () => subscription.remove();
+  }, [isDirty, handleBack]);
 
   // Navigation Header Setup
   useLayoutEffect(() => {
     navigation.setOptions({
       title: id ? 'Edit Note' : 'New Note',
+      gestureEnabled: !isDirty,
       headerLeft: () => (
         <Pressable onPress={handleBack} style={styles.headerButton} hitSlop={8}>
           <Text style={styles.headerBackText}>Cancel</Text>
@@ -488,8 +647,9 @@ export default function NoteEditScreen() {
         ref={scrollViewRef}
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        automaticallyAdjustKeyboardInsets={true}
+        keyboardDismissMode="interactive"
+        onScrollBeginDrag={Keyboard.dismiss}
+        canCancelContentTouches={true}
         showsVerticalScrollIndicator={false}
       >
         {/* Passage Selector Trigger Card */}
@@ -525,47 +685,84 @@ export default function NoteEditScreen() {
             customApiKey={profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key}
             initiallyCollapsed={false}
             fontSize={readerFontSize}
+            linkedVerseMap={linkedVerseMap}
+            sectionOptions={sectionOptions}
+            onAttachToSection={handleAttachToSection}
+            onJumpToSection={(sectionId) => {
+              const secY = sectionLayoutMap.current[sectionId];
+              if (typeof secY === 'number') {
+                const targetY = editorLayoutY.current + secY;
+                scrollViewRef.current?.scrollTo({ y: Math.max(0, targetY - 16), animated: true });
+              } else {
+                scrollViewRef.current?.scrollToEnd({ animated: true });
+              }
+            }}
           />
         )}
 
         {/* Dynamic Multi-Section Note Editor */}
-        <DynamicNoteEditor
-          template={activeTemplate}
-          sections={sections}
-          tags={tags}
-          visibility={visibility}
-          templateSelector={
-            <TemplateQuickSelector
-              templates={allTemplates}
-              selectedTemplateId={activeTemplate.id}
-              onSelectTemplate={handleSelectTemplate}
-              onOpenManager={() => setShowTemplateManager(true)}
-            />
-          }
-          onChangeSection={(index, val) => {
-            const nextSections = [...sections];
-            nextSections[index] = { ...nextSections[index], content: val };
-            setSections(nextSections);
-            setIsDirty(true);
+        <View
+          onLayout={(e) => {
+            editorLayoutY.current = e.nativeEvent.layout.y;
           }}
-          onAddTag={(tag) => {
-            if (tags.length < 5) {
-              setTags([...tags, tag]);
-              setIsDirty(true);
+        >
+          <DynamicNoteEditor
+            template={activeTemplate}
+            sections={sections}
+            tags={tags}
+            visibility={visibility}
+            templateSelector={
+              <TemplateQuickSelector
+                templates={allTemplates}
+                selectedTemplateId={activeTemplate.id}
+                onSelectTemplate={handleSelectTemplate}
+                onOpenManager={() => setShowTemplateManager(true)}
+              />
             }
-          }}
-          onRemoveTag={(tag) => {
-            setTags(tags.filter((t) => t !== tag));
-            setIsDirty(true);
-          }}
-          onChangeVisibility={(vis) => {
-            setVisibility(vis);
-            setIsDirty(true);
-          }}
-          suggestionTags={userSuggestions}
-          onFocusTagInput={handleFocusTagInput}
-        />
+            onSectionLayout={(sectionId, y) => {
+              sectionLayoutMap.current[sectionId] = y;
+            }}
+            onChangeSection={(index, val) => {
+              const nextSections = [...sections];
+              nextSections[index] = { ...nextSections[index], content: val };
+              setSections(nextSections);
+              setIsDirty(true);
+            }}
+            onAddTag={(tag) => {
+              if (tags.length < 5) {
+                setTags([...tags, tag]);
+                setIsDirty(true);
+              }
+            }}
+            onRemoveTag={(tag) => {
+              setTags(tags.filter((t) => t !== tag));
+              setIsDirty(true);
+            }}
+            onChangeVisibility={(vis) => {
+              setVisibility(vis);
+              setIsDirty(true);
+            }}
+            suggestionTags={userSuggestions}
+            onFocusTagInput={handleFocusTagInput}
+            onPreviewVerse={handlePreviewVerse}
+            onRemoveVerseReference={handleRemoveVerseReference}
+          />
+        </View>
       </ScrollView>
+
+      {/* In-Place Verse Preview Modal */}
+      <VersePreviewModal
+        visible={previewVerseData.visible}
+        onClose={() => setPreviewVerseData((p) => ({ ...p, visible: false }))}
+        passageRef={passage ? formatPassageDisplay(passage) : ''}
+        startVerse={previewVerseData.startVerse}
+        endVerse={previewVerseData.endVerse}
+        verseText={previewVerseData.verseText}
+        translation={profile?.settings?.preferred_translation || 'ESV'}
+        onViewInContext={() => {
+          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+        }}
+      />
 
       {/* YouVersion Passage Picker Modal */}
       <PassagePicker

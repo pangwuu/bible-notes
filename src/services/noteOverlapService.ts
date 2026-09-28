@@ -181,6 +181,18 @@ export async function notifyFriendsOfNoteOverlap(
 
     notifiedFriends.add(friendUid);
     try {
+      // Idempotency: verify no notification already exists for this note and friend
+      const notifsRef = collection(db, 'notifications');
+      const existingQuery = query(
+        notifsRef,
+        where('user_id', '==', friendUid),
+        where('related_note_id', '==', note.id)
+      );
+      const existingSnap = await getDocs(existingQuery);
+      if (!existingSnap.empty) {
+        continue;
+      }
+
       await createNotification({
         user_id: friendUid,
         type: 'friend_note_exists',

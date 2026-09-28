@@ -112,13 +112,19 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
     },
     template_id: input.templateId || 'swedish',
     template_name: input.templateName || 'Swedish Method',
-    sections: sections.map((s) => ({
-      id: s.id,
-      title: s.title,
-      icon: s.icon,
-      color: s.color,
-      content: (s.content || '').trim(),
-    })),
+    sections: sections.map((s) => {
+      const secObj: any = {
+        id: s.id,
+        title: s.title,
+        content: (s.content || '').trim(),
+      };
+      if (s.icon) secObj.icon = s.icon;
+      if (s.color) secObj.color = s.color;
+      if (s.verseReferences && s.verseReferences.length > 0) {
+        secObj.verse_references = s.verseReferences;
+      }
+      return secObj;
+    }),
     content,
     light_content: lightContent,
     question_content: questionContent,
@@ -210,13 +216,19 @@ export async function updateNote(noteId: string, updates: UpdateNoteInput): Prom
   if (updates.templateName !== undefined) firestoreUpdates.template_name = updates.templateName;
 
   if (updates.sections !== undefined) {
-    firestoreUpdates.sections = updates.sections.map((s) => ({
-      id: s.id,
-      title: s.title,
-      icon: s.icon,
-      color: s.color,
-      content: (s.content || '').trim(),
-    }));
+    firestoreUpdates.sections = updates.sections.map((s) => {
+      const secObj: any = {
+        id: s.id,
+        title: s.title,
+        content: (s.content || '').trim(),
+      };
+      if (s.icon) secObj.icon = s.icon;
+      if (s.color) secObj.color = s.color;
+      if (s.verseReferences && s.verseReferences.length > 0) {
+        secObj.verse_references = s.verseReferences;
+      }
+      return secObj;
+    });
     if (updates.content === undefined) {
       firestoreUpdates.content = compileSectionsToMarkdown(updates.sections);
     }

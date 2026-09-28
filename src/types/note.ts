@@ -35,6 +35,7 @@ export interface NoteSectionValue {
   icon?: string;
   color?: string;
   content: string;
+  verseReferences?: Array<{ startVerse: number; endVerse: number; book?: string; chapter?: number }>;
 }
 
 /**
@@ -347,6 +348,11 @@ export function noteDocumentToNote(data: any, id: string): Note {
       icon: s.icon,
       color: s.color,
       content: (s.content || '').trim(),
+      verseReferences: Array.isArray(s.verseReferences)
+        ? s.verseReferences
+        : Array.isArray(s.verse_references)
+        ? s.verse_references
+        : undefined,
     }));
   } else {
     // Synthesize sections from Swedish fields if legacy/blank

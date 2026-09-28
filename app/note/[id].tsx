@@ -4,7 +4,7 @@
  * Letterboxd-style friend overlap badge, and author actions (edit/delete).
  */
 
-import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -23,11 +23,17 @@ import { getSectionColor } from '../../src/constants/templates';
 import * as notesService from '../../src/services/notesService';
 import { Note, formatPassageDisplay, PassageReference, PassageSegment } from '../../src/types/note';
 import { formatSegmentDisplay, createPassageReference } from '../../src/utils/passageParser';
+import { findCanonicalBook } from '../../src/constants/bibleData';
 import { useAuth } from '../../src/context/AuthContext';
 import BibleReader from '../../src/components/BibleReader';
 import FontSizeControls from '../../src/components/FontSizeControls';
 import safeStorage from '../../src/utils/safeStorage';
-import { findFriendNoteOverlaps, FriendOverlapItem } from '../../src/services/noteOverlapService';
+import { findFriendNoteOverlaps, FriendOverlapItem, segmentsOverlap } from '../../src/services/noteOverlapService';
+import VersePill from '../../src/components/VersePill';
+import VersePreviewModal from '../../src/components/VersePreviewModal';
+import { buildLinkedVerseMap, extractVerseRangeText } from '../../src/utils/verseLinkUtils';
+import { fetchPassageText } from '../../src/services/bibleService';
+import NoteCard from '../../src/components/NoteCard';
 
 export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -37,10 +43,24 @@ export default function NoteDetailScreen() {
 
   const [note, setNote] = useState<Note | null>(null);
   const [overlaps, setOverlaps] = useState<FriendOverlapItem[]>([]);
+  const [relatedNotes, setRelatedNotes] = useState<Note[]>([]);
+  const [showRelatedNotes, setShowRelatedNotes] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [readerFontSize, setReaderFontSize] = useState<number>(16);
   const [activeSegmentIndex, setActiveSegmentIndex] = useState<number | null>(null);
+  const [targetHighlightedVerse, setTargetHighlightedVerse] = useState<number | null>(null);
+  const [previewVerseData, setPreviewVerseData] = useState<{
+    visible: boolean;
+    startVerse: number;
+    endVerse: number;
+    verseText: string;
+  }>({ visible: false, startVerse: 1, endVerse: 1, verseText: '' });
+
+  const scrollViewRef = useRef<ScrollView>(null);
+  const sectionsContainerTop = useRef<number>(0);
+  const sectionLayoutMap = useRef<Record<string, number>>({});
+  const [targetHighlightedSection, setTargetHighlightedSection] = useState<string | null>(null);
 
   const activeSegmentPassage = useMemo(() => {
     if (activeSegmentIndex === null || !note?.passage?.segments?.[activeSegmentIndex]) {
@@ -71,10 +91,26 @@ export default function NoteDetailScreen() {
       if (fetched) {
         setNote(fetched);
         if (user?.uid) {
+          // 1. Friend overlaps
           findFriendNoteOverlaps(user.uid, fetched.passage)
             .then((items) => setOverlaps(items))
             .catch((err) => {
               console.warn('Failed to query friend note overlaps:', err);
+            });
+
+          // 2. User's own related notes (Point 3)
+          notesService.getUserNotes(user.uid)
+            .then((userNotes) => {
+              const pSegs = fetched.passage?.segments || [];
+              const related = userNotes.filter((n) => {
+                if (n.id === fetched.id) return false;
+                const otherSegs = n.passage?.segments || [];
+                return pSegs.some((sA) => otherSegs.some((sB) => segmentsOverlap(sA, sB)));
+              });
+              setRelatedNotes(related);
+            })
+            .catch((err) => {
+              console.warn('Failed to load user related notes:', err);
             });
         }
       } else {
@@ -136,6 +172,119 @@ export default function NoteDetailScreen() {
     });
   }, [navigation, isAuthor, note, router]);
 
+  const normalizedSections = useMemo(() => {
+    if (!note) return [];
+    if (note.sections && note.sections.length > 0) {
+      return note.sections;
+    }
+    return [
+      { id: 'light', title: 'Key Idea', content: note.lightContent || '', icon: 'bulb-outline', color: colors.accent.keyIdea },
+      { id: 'question', title: 'Question', content: note.questionContent || '', icon: 'help-circle-outline', color: colors.accent.question },
+      { id: 'arrow', title: 'Application', content: note.arrowContent || '', icon: 'footsteps-outline', color: colors.accent.application },
+    ];
+  }, [note]);
+
+  const linkedVerseMap = useMemo(() => {
+    return buildLinkedVerseMap(normalizedSections);
+  }, [normalizedSections]);
+
+  const handleOpenVersePreview = useCallback(
+    async (startVerse: number, endVerse: number, context?: { book?: string; chapter?: number }) => {
+      let targetPassage = note?.passage;
+      if (context?.book) {
+        const meta = findCanonicalBook(context.book);
+        if (meta) {
+          const ch =
+            typeof context.chapter === 'number' && context.chapter >= 1 && context.chapter <= meta.chapters
+              ? context.chapter
+              : note?.passage?.segments?.[0]?.startChapter || 1;
+          try {
+            targetPassage = createPassageReference([
+              {
+                book: meta.name,
+                startChapter: ch,
+                startVerse,
+                endChapter: ch,
+                endVerse,
+              },
+            ]);
+          } catch (createErr) {
+            console.warn('Failed to build passage reference for preview:', createErr);
+          }
+        }
+      }
+      if (!targetPassage) return;
+      try {
+        const res = await fetchPassageText(targetPassage, {
+          translation: profile?.settings?.preferred_translation || 'ESV',
+          esvApiKey: profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key,
+        });
+        const text = extractVerseRangeText(res.verses || [], startVerse, endVerse);
+        setPreviewVerseData({
+          visible: true,
+          startVerse,
+          endVerse,
+          verseText: text,
+        });
+      } catch (err) {
+        console.warn('Failed to load verse preview text:', err);
+      }
+    },
+    [note?.passage, profile]
+  );
+
+  const handleScrollToVerse = useCallback((verseNum: number) => {
+    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    setTargetHighlightedVerse(verseNum);
+    setTimeout(() => {
+      setTargetHighlightedVerse(null);
+    }, 2500);
+  }, []);
+
+  const formatMarkdownWithVerseLinks = (rawText: string) => {
+    if (!rawText) return '';
+    return rawText
+      .replace(
+        /\[([0-9]?\s*[A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+)[:.](\d+)(?:\s*[-–—]\s*(\d+))?\]/gi,
+        (_, b, c, s, e) => `[⚓ ${b.trim()} ${c}:${s}${e ? `–${e}` : ''}](verse:${encodeURIComponent(b.trim())}:${c}:${s}${e ? `-${e}` : ''})`
+      )
+      .replace(
+        /\[v\.?\s*(\d+)(?:\s*[-–—]\s*(\d+))?\]/gi,
+        (_, s, e) => `[⚓ v. ${s}${e ? `–${e}` : ''}](verse:${s}-${e || s})`
+      );
+  };
+
+  const handleLinkPress = (url: string) => {
+    if (url.startsWith('verse:')) {
+      const payload = url.replace('verse:', '');
+      const colonCount = (payload.match(/:/g) || []).length;
+      if (colonCount >= 2) {
+        // Canonical: "Book:Chapter:Start-End" or "Book:Chapter:Verse"
+        const parts = payload.split(':');
+        const book = decodeURIComponent(parts[0]);
+        const chapter = parseInt(parts[1], 10);
+        const range = parts.slice(2).join(':');
+        const [startStr, endStr] = range.split('-');
+        const s = parseInt(startStr, 10);
+        const e = endStr ? parseInt(endStr, 10) : s;
+        if (!isNaN(s)) {
+          handleOpenVersePreview(s, isNaN(e) ? s : e, { book, chapter: isNaN(chapter) ? undefined : chapter });
+          return false;
+        }
+      } else {
+        // Legacy: "Start-End" or "Start"
+        const [startStr, endStr] = payload.split('-');
+        const s = parseInt(startStr, 10);
+        const e = endStr ? parseInt(endStr, 10) : s;
+        if (!isNaN(s)) {
+          handleOpenVersePreview(s, isNaN(e) ? s : e);
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+
   if (loading) {
     return (
       <View style={[styles.screen, styles.center]}>
@@ -164,7 +313,11 @@ export default function NoteDetailScreen() {
         Boolean(note.content?.trim());
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
+    <ScrollView
+      ref={scrollViewRef}
+      style={styles.screen}
+      contentContainerStyle={styles.container}
+    >
       {/* Top Action Row: Visibility Badge (left) & Font Size Stepper (right) */}
       <View style={styles.topActionRow}>
         <View style={styles.metaRow}>
@@ -207,7 +360,7 @@ export default function NoteDetailScreen() {
                 <View style={styles.overlapAvatar}>
                   <Text style={styles.overlapAvatarText}>{initial}</Text>
                 </View>
-                <Text style={styles.overlapText}>
+                <Text style={styles.overlapText} numberOfLines={2} ellipsizeMode="tail">
                   {friendName} also noted {passageSummary}
                 </Text>
               </Pressable>
@@ -276,16 +429,44 @@ export default function NoteDetailScreen() {
         preferredTranslation={profile?.settings?.preferred_translation || 'ESV'}
         customApiKey={profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key}
         initiallyCollapsed={false}
+        linkedVerseMap={linkedVerseMap}
+        onJumpToSection={(sectionId) => {
+          setTargetHighlightedSection(sectionId);
+          setTimeout(() => {
+            setTargetHighlightedSection(null);
+          }, 2500);
+
+          const secY = sectionLayoutMap.current[sectionId];
+          if (typeof secY === 'number') {
+            const targetY = sectionsContainerTop.current + secY;
+            scrollViewRef.current?.scrollTo({ y: Math.max(0, targetY - 16), animated: true });
+          }
+        }}
+        targetHighlightedVerse={targetHighlightedVerse}
       />
 
       {/* Note Template Sections */}
-      {note.sections && note.sections.length > 0 ? (
-        note.sections.map((sec) => {
-          if (!sec.content?.trim()) return null;
-          const secColor = getSectionColor(sec.id, sec.color);
+      <View
+        onLayout={(e) => {
+          sectionsContainerTop.current = e.nativeEvent.layout.y;
+        }}
+      >
+        {note.sections && note.sections.length > 0 ? (
+          note.sections.map((sec) => {
+            if (!sec.content?.trim() && (!sec.verseReferences || sec.verseReferences.length === 0)) return null;
+            const secColor = getSectionColor(sec.id, sec.color);
 
-          return (
-            <View key={sec.id} style={styles.section}>
+            return (
+              <View
+                key={sec.id}
+                style={[
+                  styles.section,
+                  targetHighlightedSection === sec.id && styles.sectionHighlighted,
+                ]}
+                onLayout={(e) => {
+                  sectionLayoutMap.current[sec.id] = e.nativeEvent.layout.y;
+                }}
+              >
               <View style={styles.sectionHeaderRow}>
                 <TemplateIcon
                   name={sec.icon || 'document-text-outline'}
@@ -296,45 +477,99 @@ export default function NoteDetailScreen() {
                   {sec.title}
                 </Text>
               </View>
-              <Markdown style={markdownStyles}>{sec.content.trim()}</Markdown>
+
+              {sec.verseReferences && sec.verseReferences.length > 0 && (
+                <View style={styles.pillBar}>
+                  {sec.verseReferences.map((ref, rIdx) => (
+                    <VersePill
+                      key={rIdx}
+                      startVerse={ref.startVerse}
+                      endVerse={ref.endVerse}
+                      book={ref.book}
+                      chapter={ref.chapter}
+                      color={secColor}
+                      onPress={() => handleOpenVersePreview(ref.startVerse, ref.endVerse, { book: ref.book, chapter: ref.chapter })}
+                    />
+                  ))}
+                </View>
+              )}
+
+              {Boolean(sec.content?.trim()) && (
+                <Markdown
+                  style={markdownStyles}
+                  onLinkPress={handleLinkPress}
+                >
+                  {formatMarkdownWithVerseLinks(sec.content.trim())}
+                </Markdown>
+              )}
             </View>
           );
         })
       ) : (
         <>
           {note.lightContent?.trim() ? (
-            <View style={styles.section}>
+            <View
+              style={styles.section}
+              onLayout={(e) => {
+                sectionLayoutMap.current['light'] = e.nativeEvent.layout.y;
+              }}
+            >
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="bulb-outline" size={15} color={colors.accent.keyIdea} />
                 <Text style={[styles.sectionLabel, { color: colors.accent.keyIdea }]}>
                   Key Idea
                 </Text>
               </View>
-              <Markdown style={markdownStyles}>{note.lightContent.trim()}</Markdown>
+              <Markdown
+                style={markdownStyles}
+                onLinkPress={handleLinkPress}
+              >
+                {formatMarkdownWithVerseLinks(note.lightContent.trim())}
+              </Markdown>
             </View>
           ) : null}
 
           {note.questionContent?.trim() ? (
-            <View style={styles.section}>
+            <View
+              style={styles.section}
+              onLayout={(e) => {
+                sectionLayoutMap.current['question'] = e.nativeEvent.layout.y;
+              }}
+            >
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="help-circle-outline" size={15} color={colors.accent.question} />
                 <Text style={[styles.sectionLabel, { color: colors.accent.question }]}>
                   Question
                 </Text>
               </View>
-              <Markdown style={markdownStyles}>{note.questionContent.trim()}</Markdown>
+              <Markdown
+                style={markdownStyles}
+                onLinkPress={handleLinkPress}
+              >
+                {formatMarkdownWithVerseLinks(note.questionContent.trim())}
+              </Markdown>
             </View>
           ) : null}
 
           {note.arrowContent?.trim() ? (
-            <View style={styles.section}>
+            <View
+              style={styles.section}
+              onLayout={(e) => {
+                sectionLayoutMap.current['arrow'] = e.nativeEvent.layout.y;
+              }}
+            >
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="footsteps-outline" size={15} color={colors.accent.application} />
                 <Text style={[styles.sectionLabel, { color: colors.accent.application }]}>
                   Application
                 </Text>
               </View>
-              <Markdown style={markdownStyles}>{note.arrowContent.trim()}</Markdown>
+              <Markdown
+                style={markdownStyles}
+                onLinkPress={handleLinkPress}
+              >
+                {formatMarkdownWithVerseLinks(note.arrowContent.trim())}
+              </Markdown>
             </View>
           ) : null}
 
@@ -342,18 +577,29 @@ export default function NoteDetailScreen() {
           !note.questionContent?.trim() &&
           !note.arrowContent?.trim() &&
           note.content?.trim() ? (
-            <View style={styles.section}>
+            <View
+              style={styles.section}
+              onLayout={(e) => {
+                sectionLayoutMap.current['content'] = e.nativeEvent.layout.y;
+              }}
+            >
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="document-text-outline" size={15} color={colors.accent.keyIdea} />
                 <Text style={[styles.sectionLabel, { color: colors.accent.keyIdea }]}>
                   Reflection
                 </Text>
               </View>
-              <Markdown style={markdownStyles}>{note.content.trim()}</Markdown>
+              <Markdown
+                style={markdownStyles}
+                onLinkPress={handleLinkPress}
+              >
+                {formatMarkdownWithVerseLinks(note.content.trim())}
+              </Markdown>
             </View>
           ) : null}
         </>
       )}
+      </View>
 
       {/* Empty reflections fallback */}
       {!hasAnyReflection && (
@@ -381,6 +627,52 @@ export default function NoteDetailScreen() {
           ))}
         </View>
       )}
+
+      {/* Related Notes Drawer (Point 3) */}
+      {relatedNotes.length > 0 && (
+        <View style={styles.relatedNotesSection}>
+          <Pressable
+            style={styles.relatedNotesHeaderRow}
+            onPress={() => setShowRelatedNotes(!showRelatedNotes)}
+          >
+            <View style={styles.relatedNotesTitleGroup}>
+              <Ionicons name="book-outline" size={16} color={colors.accent.keyIdea} />
+              <Text style={styles.relatedNotesTitle}>
+                Your other notes on this passage ({relatedNotes.length})
+              </Text>
+            </View>
+            <Ionicons
+              name={showRelatedNotes ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={colors.text.secondary}
+            />
+          </Pressable>
+
+          {showRelatedNotes && (
+            <View style={styles.relatedNotesList}>
+              {relatedNotes.map((relNote) => (
+                <NoteCard
+                  key={relNote.id}
+                  note={relNote}
+                  onPress={() => router.push({ pathname: '/note/[id]', params: { id: relNote.id } })}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Verse Preview Bottom Sheet Modal */}
+      <VersePreviewModal
+        visible={previewVerseData.visible}
+        passageRef={note.passage ? formatPassageDisplay(note.passage) : ''}
+        startVerse={previewVerseData.startVerse}
+        endVerse={previewVerseData.endVerse}
+        verseText={previewVerseData.verseText}
+        translation={profile?.settings?.preferred_translation || 'ESV'}
+        onClose={() => setPreviewVerseData((prev) => ({ ...prev, visible: false }))}
+        onViewInContext={() => handleScrollToVerse(previewVerseData.startVerse)}
+      />
     </ScrollView>
   );
 }
@@ -476,6 +768,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
+    maxWidth: '100%',
     backgroundColor: colors.bg.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.accent.social,
@@ -501,6 +794,7 @@ const styles = StyleSheet.create({
   overlapText: {
     color: colors.text.primary,
     fontSize: 13,
+    flexShrink: 1,
   },
   scriptureCard: {
     backgroundColor: colors.bg.surface,
@@ -518,6 +812,11 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: spacing.lg,
+  },
+  sectionHighlighted: {
+    backgroundColor: 'rgba(227, 165, 61, 0.08)',
+    borderRadius: radii.controls,
+    padding: spacing.xs,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -612,5 +911,38 @@ const styles = StyleSheet.create({
   tocPillTextActive: {
     color: colors.accent.keyIdea,
     fontWeight: '700',
+  },
+  pillBar: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: spacing.xs,
+  },
+  relatedNotesSection: {
+    marginTop: spacing.xl,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.hairline,
+  },
+  relatedNotesHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  relatedNotesTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  relatedNotesTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text.primary,
+  },
+  relatedNotesList: {
+    gap: spacing.sm,
+    marginTop: spacing.xs,
   },
 });

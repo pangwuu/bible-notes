@@ -19,6 +19,7 @@ import { getSectionColor } from '../constants/templates';
 import { NoteVisibility, NoteSectionValue } from '../types/note';
 import { NoteTemplate } from '../types/template';
 import TagInput from './TagInput';
+import VersePill from './VersePill';
 
 export interface DynamicNoteEditorProps {
   template: NoteTemplate;
@@ -34,6 +35,9 @@ export interface DynamicNoteEditorProps {
   suggestionTags?: string[];
   templateSelector?: React.ReactNode;
   onFocusTagInput?: () => void;
+  onPreviewVerse?: (startVerse: number, endVerse: number, context?: { book?: string; chapter?: number }) => void;
+  onRemoveVerseReference?: (sectionIndex: number, referenceIndex: number) => void;
+  onSectionLayout?: (sectionId: string, y: number) => void;
 }
 
 const COMMON_TAG_SUGGESTIONS = [
@@ -63,6 +67,9 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
   suggestionTags,
   templateSelector,
   onFocusTagInput,
+  onPreviewVerse,
+  onRemoveVerseReference,
+  onSectionLayout,
 }) => {
   const combinedSuggestions = useMemo(() => {
     return Array.from(new Set([...(suggestionTags || []), ...COMMON_TAG_SUGGESTIONS]));
@@ -153,13 +160,39 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
 
         return (
           <React.Fragment key={section.id || idx}>
-            <View style={styles.section}>
+            <View
+              style={styles.section}
+              onLayout={(e) => {
+                if (section.id) {
+                  onSectionLayout?.(section.id, e.nativeEvent.layout.y);
+                }
+              }}
+            >
               <View style={styles.sectionHeaderRow}>
                 <TemplateIcon name={iconName} size={15} color={color} />
                 <Text style={[styles.sectionCaption, { color }]}>
                   {section.title}
                 </Text>
               </View>
+
+              {/* Section Attached Verse Pills */}
+              {section.verseReferences && section.verseReferences.length > 0 && (
+                <View style={styles.pillBar}>
+                  {section.verseReferences.map((ref, rIdx) => (
+                    <VersePill
+                      key={rIdx}
+                      startVerse={ref.startVerse}
+                      endVerse={ref.endVerse}
+                      book={ref.book}
+                      chapter={ref.chapter}
+                      color={color}
+                      onPress={() => onPreviewVerse?.(ref.startVerse, ref.endVerse, { book: ref.book, chapter: ref.chapter })}
+                      onRemove={() => onRemoveVerseReference?.(idx, rIdx)}
+                    />
+                  ))}
+                </View>
+              )}
+
               <TextInput
                 value={section.content}
                 onChangeText={(val) => onChangeSection(idx, val)}
@@ -263,6 +296,12 @@ const styles = StyleSheet.create({
   sectionCaption: {
     ...typography.caption,
     fontWeight: '600',
+  },
+  pillBar: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 2,
+    marginBottom: spacing.xs,
   },
   unborderedInput: {
     ...typography.body,

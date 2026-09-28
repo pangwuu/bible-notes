@@ -12,7 +12,7 @@
  */
 
 import safeStorage from '../utils/safeStorage';
-import { PassageReference } from '../types/note';
+import { PassageReference, PassageSegment } from '../types/note';
 import { BibleTranslation } from '../types/user';
 import { findCanonicalBook, CANONICAL_BOOKS } from '../constants/bibleData';
 
@@ -50,6 +50,7 @@ export interface MultiPassageSection {
   title: string;
   verses: VerseSegment[];
   text: string;
+  segment?: PassageSegment;
 }
 
 /**
@@ -563,6 +564,7 @@ export async function fetchPassageText(
             title: formatSegmentDisplay(seg),
             verses: res.verses,
             text: res.text,
+            segment: seg,
           };
         })
       );
