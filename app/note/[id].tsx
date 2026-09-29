@@ -30,6 +30,7 @@ import safeStorage from '../../src/utils/safeStorage';
 import { findFriendNoteOverlaps, FriendOverlapItem, segmentsOverlap } from '../../src/services/noteOverlapService';
 import VersePill from '../../src/components/VersePill';
 import VersePreviewModal from '../../src/components/VersePreviewModal';
+import FriendActivityLoadingIndicator from '../../src/components/FriendActivityLoadingIndicator';
 import { buildLinkedVerseMap, extractVerseRangeText, extractSelectedVersesText } from '../../src/utils/verseLinkUtils';
 import { fetchPassageText } from '../../src/services/bibleService';
 import NoteCard from '../../src/components/NoteCard';
@@ -42,6 +43,7 @@ export default function NoteDetailScreen() {
 
   const [note, setNote] = useState<Note | null>(null);
   const [overlaps, setOverlaps] = useState<FriendOverlapItem[]>([]);
+  const [loadingOverlaps, setLoadingOverlaps] = useState<boolean>(false);
   const [relatedNotes, setRelatedNotes] = useState<Note[]>([]);
   const [showRelatedNotes, setShowRelatedNotes] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(true);
@@ -67,6 +69,7 @@ export default function NoteDetailScreen() {
   const tocTop = useRef<number>(0);
   const sectionLayoutMap = useRef<Record<string, number>>({});
   const [targetHighlightedSection, setTargetHighlightedSection] = useState<string | null>(null);
+  const previousPassageKeyRef = useRef<string | null>(null);
 
   const activeSegmentPassage = useMemo(() => {
     if (activeSegmentIndex === null || !note?.passage?.segments?.[activeSegmentIndex]) {
@@ -97,11 +100,24 @@ export default function NoteDetailScreen() {
       if (fetched) {
         setNote(fetched);
         if (user?.uid) {
-          // 1. Friend overlaps
+          const passageKey = fetched.passage ? formatPassageDisplay(fetched.passage) : '';
+          const passageChanged = previousPassageKeyRef.current !== null && previousPassageKeyRef.current !== passageKey;
+          previousPassageKeyRef.current = passageKey;
+
+          if (passageChanged) {
+            // Passage changed during edit: clear previous overlaps so new loader displays properly
+            setOverlaps([]);
+          }
+
+          // 1. Friend overlaps (decoupled background fetch)
+          setLoadingOverlaps(true);
           findFriendNoteOverlaps(user.uid, fetched.passage)
             .then((items) => setOverlaps(items))
             .catch((err) => {
               console.warn('Failed to query friend note overlaps:', err);
+            })
+            .finally(() => {
+              setLoadingOverlaps(false);
             });
 
           // 2. User's own related notes (Point 3)
@@ -425,6 +441,12 @@ export default function NoteDetailScreen() {
       </View>
 
       {/* Letterboxd-style Overlap Badge Pill */}
+      {loadingOverlaps && overlaps.length === 0 && (
+        <FriendActivityLoadingIndicator
+          compact
+          message="Checking for friend reflections..."
+        />
+      )}
       {overlaps.length > 0 && (
         <View style={styles.overlapSection}>
           {(showAllOverlaps ? overlaps : overlaps.slice(0, 3)).map((item) => {

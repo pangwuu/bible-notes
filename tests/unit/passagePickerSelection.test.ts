@@ -472,6 +472,7 @@ describe('PassagePicker Selection Logic & State Machine', () => {
       expect(state.step).toBe('book');
       expect(state.selectedBook).toBeNull();
       expect(state.selectedChapter).toBeNull();
+      expect(state.searchQuery).toBe('');
 
       // Remove segment
       state = passagePickerReducer(state, {

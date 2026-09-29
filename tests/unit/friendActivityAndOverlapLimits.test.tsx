@@ -138,8 +138,6 @@ function createSampleFriendActivityItem(id: string, username: string, isIntersec
       email: `${username}@example.com`,
       full_name: username,
       default_visibility: 'friends',
-      friends: [],
-      pending_requests: [],
       created_at: 1000,
       updated_at: 1000,
     },
@@ -278,22 +276,27 @@ describe('Friends Activity & Note Overlap Display Limits', () => {
       {
         friendProfile: { id: 'f1', uid: 'f1', username: 'sarah', display_name: 'Sarah' } as any,
         note: createSampleNote('fn1'),
+        overlapSegments: [],
       },
       {
         friendProfile: { id: 'f2', uid: 'f2', username: 'alex', display_name: 'Alex' } as any,
         note: createSampleNote('fn2'),
+        overlapSegments: [],
       },
       {
         friendProfile: { id: 'f3', uid: 'f3', username: 'james', display_name: 'James' } as any,
         note: createSampleNote('fn3'),
+        overlapSegments: [],
       },
       {
         friendProfile: { id: 'f4', uid: 'f4', username: 'hannah', display_name: 'Hannah' } as any,
         note: createSampleNote('fn4'),
+        overlapSegments: [],
       },
       {
         friendProfile: { id: 'f5', uid: 'f5', username: 'lucas', display_name: 'Lucas' } as any,
         note: createSampleNote('fn5'),
+        overlapSegments: [],
       },
     ];
 

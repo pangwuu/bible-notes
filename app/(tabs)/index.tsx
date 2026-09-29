@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -14,6 +14,7 @@ import { RandomReflectionCard } from '../../src/components/RandomReflectionCard'
 import DashboardGreeting from '../../src/components/DashboardGreeting';
 import AddNoteFAB from '../../src/components/AddNoteFAB';
 import safeStorage from '../../src/utils/safeStorage';
+import FriendActivityLoadingIndicator from '../../src/components/FriendActivityLoadingIndicator';
 import {
   getDashboardFriendActivity,
   selectRandomReflectionNote,
@@ -40,6 +41,8 @@ export default function DashboardScreen() {
   });
   const [randomNote, setRandomNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadingFriendActivity, setLoadingFriendActivity] = useState<boolean>(true);
+  const hasLoadedFriendActivityOnceRef = useRef<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [hiddenSections, setHiddenSections] = useState<HiddenSectionsState>({
     recentNotes: false,
@@ -73,7 +76,7 @@ export default function DashboardScreen() {
   const loadDashboardData = useCallback(async () => {
     if (!user?.uid) return;
     try {
-      // 1. Fetch user notes
+      // 1. Fetch user notes first (progressive load)
       const notes = await notesService.getUserNotes(user.uid);
       setAllUserNotes(notes);
       const topRecent = notes.slice(0, 5);
@@ -82,14 +85,27 @@ export default function DashboardScreen() {
       // 2. Select a random note (preferring notes not in the top 5 recent notes)
       const recentIds = new Set(topRecent.map((n) => n.id));
       setRandomNote((prev) => selectRandomReflectionNote(notes, recentIds, prev?.id));
+      setLoading(false);
 
       // 3. Fetch friend activity & intersection data
-      const socialActivity = await getDashboardFriendActivity(user.uid, notes);
-      setFriendActivity(socialActivity);
+      // Only show the loading indicator on the initial fetch before any activity has loaded
+      if (!hasLoadedFriendActivityOnceRef.current) {
+        setLoadingFriendActivity(true);
+      }
+      try {
+        const socialActivity = await getDashboardFriendActivity(user.uid, notes);
+        setFriendActivity(socialActivity);
+        hasLoadedFriendActivityOnceRef.current = true;
+      } catch (friendErr) {
+        console.warn('Dashboard friend activity fetch error:', friendErr);
+      } finally {
+        setLoadingFriendActivity(false);
+      }
     } catch (err) {
       console.warn('Dashboard data fetch error:', err);
-    } finally {
       setLoading(false);
+      setLoadingFriendActivity(false);
+    } finally {
       setRefreshing(false);
     }
   }, [user?.uid]);
@@ -201,7 +217,12 @@ export default function DashboardScreen() {
         </View>
 
         {!hiddenSections.friendsActivity && (
-          !hasFriendNotes ? (
+          loadingFriendActivity ? (
+            <FriendActivityLoadingIndicator
+              message="Checking friend activity..."
+              style={styles.loadingActivityCard}
+            />
+          ) : !hasFriendNotes ? (
             <View style={styles.friendEmptyCard}>
               <Ionicons name="people-outline" size={24} color={colors.accentSocial} />
               <View style={styles.friendEmptyMeta}>
@@ -480,5 +501,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: colors.accentSocial,
+  },
+  loadingActivityCard: {
+    marginBottom: spacing.sm,
   },
 });

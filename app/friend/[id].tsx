@@ -20,6 +20,7 @@ import {
 } from '../../src/services/friendService';
 import { NoteCard } from '../../src/components/NoteCard';
 import { EmptyState } from '../../src/components/EmptyState';
+import FriendActivityLoadingIndicator from '../../src/components/FriendActivityLoadingIndicator';
 
 export default function FriendProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -31,26 +32,38 @@ export default function FriendProfileScreen() {
   const [isFriend, setIsFriend] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingNotes, setLoadingNotes] = useState(true);
   const [showUnfriendDialog, setShowUnfriendDialog] = useState(false);
   const [unfriending, setUnfriending] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!id || !user) return;
     try {
-      const [profile, relStatus, sharedNotes] = await Promise.all([
+      // 1. Load profile and friendship status
+      const [profile, relStatus] = await Promise.all([
         getUserProfile(id),
         getFriendshipStatus(user.uid, id),
-        getFriendNotes(id),
       ]);
 
       setFriendProfile(profile);
       setFriendshipId(relStatus.friendshipId || null);
       setIsFriend(relStatus.status === 'accepted');
-      setNotes(sharedNotes);
+      setLoading(false);
+
+      // 2. Fetch shared notes progressively
+      setLoadingNotes(true);
+      try {
+        const sharedNotes = await getFriendNotes(id);
+        setNotes(sharedNotes);
+      } catch (notesErr) {
+        console.error('Failed to load friend notes:', notesErr);
+      } finally {
+        setLoadingNotes(false);
+      }
     } catch (err) {
       console.error('Failed to load friend profile:', err);
-    } finally {
       setLoading(false);
+      setLoadingNotes(false);
     }
   }, [id, user]);
 
@@ -120,7 +133,12 @@ export default function FriendProfileScreen() {
 
       <Text style={styles.sectionHeader}>Shared Notes</Text>
 
-      {notes.length === 0 ? (
+      {loadingNotes ? (
+        <FriendActivityLoadingIndicator
+          message="Loading shared notes..."
+          style={{ marginBottom: spacing.md }}
+        />
+      ) : notes.length === 0 ? (
         <EmptyState
           icon="document-text-outline"
           title="No shared notes"

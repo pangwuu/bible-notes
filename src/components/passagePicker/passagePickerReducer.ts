@@ -180,6 +180,8 @@ export function passagePickerReducer(
         selectedChapterEnd: null,
         selectedVerseStart: null,
         selectedVerseEnd: null,
+        searchQuery: '',
+        smartParseError: null,
         step: 'book',
       };
     }
