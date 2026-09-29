@@ -30,6 +30,7 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
     fontSize,
     selectedVerses,
     sortedSelectedVerses,
+    activeContext,
     targetPassage,
     passageDisplay,
     isOfflineEmpty,
@@ -65,6 +66,7 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
             fontSize={fontSize}
             showVerseNumbers={showVerseNumbers}
             selectedVerses={selectedVerses}
+            activeContext={activeContext}
             targetHighlightedVerse={targetHighlightedVerse}
             linkedVerseMap={linkedVerseMap}
             onToggleVerse={handleToggleVerse}
@@ -75,6 +77,7 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
                 linkedSectionsToJump={linkedSectionsToJump}
                 availableSections={availableSections}
                 targetPassage={targetPassage}
+                activeContext={activeContext}
                 onClearSelection={clearSelectedVerses}
                 onShareSelected={handleShareSelected}
                 onJumpToSection={onJumpToSection}

@@ -43,7 +43,17 @@ export default function NotificationsModal() {
     navigation.setOptions({
       title: 'Notifications',
       headerLeft: () => (
-        <Pressable onPress={() => router.back()} style={styles.closeButton} hitSlop={8}>
+        <Pressable
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)');
+            }
+          }}
+          style={styles.closeButton}
+          hitSlop={8}
+        >
           <Ionicons name="close" size={24} color={colors.textPrimary} />
         </Pressable>
       ),

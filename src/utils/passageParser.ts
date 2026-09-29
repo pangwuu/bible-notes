@@ -59,6 +59,7 @@ export function formatCompoundDisplay(segments: PassageSegment[]): string {
 
   const parts: string[] = [];
   let currentBook = '';
+  let prevChapter: number | null = null;
 
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
@@ -68,17 +69,21 @@ export function formatCompoundDisplay(segments: PassageSegment[]): string {
     if (bookName === currentBook) {
       // Same book as previous segment: format without repeating book name
       if (seg.startChapter === seg.endChapter) {
-        if (seg.startVerse === seg.endVerse) {
-          parts.push(`${seg.startChapter}:${seg.startVerse}`);
+        const verseStr = seg.startVerse === seg.endVerse ? `${seg.startVerse}` : `${seg.startVerse}–${seg.endVerse}`;
+        if (prevChapter !== null && seg.startChapter === prevChapter) {
+          // Same chapter: omit repeating chapter e.g. "Matthew 1:1, 3"
+          parts.push(verseStr);
         } else {
-          parts.push(`${seg.startChapter}:${seg.startVerse}–${seg.endVerse}`);
+          parts.push(`${seg.startChapter}:${verseStr}`);
         }
       } else {
         parts.push(`${seg.startChapter}:${seg.startVerse}–${seg.endChapter}:${seg.endVerse}`);
       }
+      prevChapter = seg.endChapter;
     } else {
       // New book
       currentBook = bookName;
+      prevChapter = seg.endChapter;
       parts.push(formatSegmentDisplay(seg));
     }
   }

@@ -12,6 +12,7 @@ import {
   getDocs,
   updateDoc,
   deleteDoc,
+  deleteField,
   query,
   where,
   limit,
@@ -94,11 +95,14 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
 
   const books = input.passage?.books || Array.from(new Set(segments.map((s) => s.book)));
 
+  const cleanTitle = (input.title || '').trim();
+
   const notePayload: NoteDocument = {
     id: noteId,
     user_id: currentUid,
     author_username: input.authorUsername || auth.currentUser?.displayName || '',
     author_display_name: input.authorDisplayName || auth.currentUser?.displayName || '',
+    ...(cleanTitle ? { title: cleanTitle } : {}),
     passage: {
       display: passageDisplay,
       books,
@@ -183,6 +187,11 @@ export async function updateNote(noteId: string, updates: UpdateNoteInput): Prom
   const firestoreUpdates: Record<string, any> = {
     updated_at: serverTimestamp(),
   };
+
+  if (updates.title !== undefined) {
+    const trimmedTitle = updates.title.trim();
+    firestoreUpdates.title = trimmedTitle ? trimmedTitle : deleteField();
+  }
 
   if (updates.passage) {
     const p = updates.passage;
@@ -283,9 +292,15 @@ export async function updateNote(noteId: string, updates: UpdateNoteInput): Prom
     ...(updates.passage || {}),
   };
 
+  const resolvedTitle =
+    updates.title !== undefined
+      ? (updates.title.trim() || undefined)
+      : existing.title;
+
   const updatedNote: Note = {
     ...existing,
     ...updates,
+    title: resolvedTitle,
     passage: mergedPassage,
     tags: updates.tags ? updates.tags.slice(0, 5).map((t) => t.trim().toLowerCase()) : existing.tags,
     updatedAt: Date.now(),

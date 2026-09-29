@@ -35,8 +35,22 @@ export interface NoteSectionValue {
   icon?: string;
   color?: string;
   content: string;
-  verseReferences?: Array<{ startVerse: number; endVerse: number; book?: string; chapter?: number }>;
+  verseReferences?: Array<{
+    startVerse: number;
+    endVerse: number;
+    book?: string;
+    chapter?: number;
+    verses?: number[];
+  }>;
 }
+
+export type TargetVerseHighlight =
+  | {
+      book?: string;
+      chapter?: number;
+      verses: number[];
+    }
+  | number;
 
 /**
  * Rich client-side domain entity.
@@ -50,6 +64,7 @@ export interface Note {
   author_username?: string;
   author_display_name?: string;
 
+  title?: string;
   passage: PassageReference;
 
   // Template metadata & dynamic sections
@@ -83,6 +98,7 @@ export interface NoteDocument {
   author_username?: string;
   author_display_name?: string;
 
+  title?: string;
   passage: {
     display: string;
     books: string[];
@@ -119,6 +135,7 @@ export interface CreateNoteInput {
   userId: string;
   authorUsername?: string;
   authorDisplayName?: string;
+  title?: string;
   passage: PassageReference;
   templateId?: string;
   templateName?: string;
@@ -132,6 +149,7 @@ export interface CreateNoteInput {
 }
 
 export interface UpdateNoteInput {
+  title?: string;
   passage?: PassageReference;
   templateId?: string;
   templateName?: string;
@@ -363,6 +381,8 @@ export function noteDocumentToNote(data: any, id: string): Note {
     ];
   }
 
+  const noteTitle = (data.title || '').trim() || undefined;
+
   return {
     id,
     userId,
@@ -371,6 +391,7 @@ export function noteDocumentToNote(data: any, id: string): Note {
     authorDisplayName,
     author_username: authorUsername,
     author_display_name: authorDisplayName,
+    title: noteTitle,
     passage,
     templateId: data.template_id || data.templateId,
     templateName: data.template_name || data.templateName,

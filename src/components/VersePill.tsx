@@ -9,6 +9,7 @@ export interface VersePillProps {
   endVerse: number;
   book?: string;
   chapter?: number;
+  verses?: number[];
   onPress: () => void;
   onRemove?: () => void;
   color?: string;
@@ -20,12 +21,13 @@ export default function VersePill({
   endVerse,
   book,
   chapter,
+  verses,
   onPress,
   onRemove,
   color = colors.accent.keyIdea,
   style,
 }: VersePillProps) {
-  const label = formatVerseRangeLabel(startVerse, endVerse, { book, chapter });
+  const label = formatVerseRangeLabel(startVerse, endVerse, { book, chapter }, verses);
 
   return (
     <View style={[styles.pillContainer, { borderColor: colors.border.hairline }, style]}>

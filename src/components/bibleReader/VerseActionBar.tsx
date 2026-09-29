@@ -12,6 +12,7 @@ interface VerseActionBarProps {
   linkedSectionsToJump: LinkedSectionInfo[];
   availableSections: SectionOption[];
   targetPassage?: PassageReference;
+  activeContext?: { book?: string; chapter?: number } | null;
   onClearSelection: () => void;
   onShareSelected: () => void;
   onJumpToSection?: (sectionId: string) => void;
@@ -23,6 +24,7 @@ export const VerseActionBar: React.FC<VerseActionBarProps> = ({
   linkedSectionsToJump,
   availableSections,
   targetPassage,
+  activeContext,
   onClearSelection,
   onShareSelected,
   onJumpToSection,
@@ -32,7 +34,9 @@ export const VerseActionBar: React.FC<VerseActionBarProps> = ({
 
   const rangeLabel = formatVerseRangeLabel(
     sortedSelectedVerses[0],
-    sortedSelectedVerses[sortedSelectedVerses.length - 1]
+    sortedSelectedVerses[sortedSelectedVerses.length - 1],
+    activeContext || undefined,
+    sortedSelectedVerses
   );
 
   return (
@@ -105,10 +109,12 @@ export const VerseActionBar: React.FC<VerseActionBarProps> = ({
                 <Pressable
                   key={sec.id}
                   onPress={() => {
-                    const resolvedSeg = targetPassage?.segments?.[0];
+                    const fallbackSeg = targetPassage?.segments?.[0];
+                    const book = activeContext?.book || fallbackSeg?.book;
+                    const chapter = activeContext?.chapter || fallbackSeg?.startChapter;
                     onAttachToSection(sortedSelectedVerses, sec.id, {
-                      book: resolvedSeg?.book,
-                      chapter: resolvedSeg?.startChapter,
+                      book,
+                      chapter,
                     });
                     onClearSelection();
                   }}

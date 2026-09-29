@@ -113,6 +113,26 @@ describe('passageParser', () => {
       expect(passageRef.segments).toHaveLength(2);
       expect(passageRef.display).toBe('Genesis 1:1–3, 3:2–6');
     });
+
+    it('parses and formats split verses within the same chapter (Matthew 1:1, 3)', () => {
+      const segments = parsePassageReferenceString('Matthew 1:1, 3');
+      expect(segments).toHaveLength(2);
+      expect(segments[0]).toMatchObject({
+        book: 'Matthew',
+        startChapter: 1,
+        startVerse: 1,
+        endChapter: 1,
+        endVerse: 1,
+      });
+      expect(segments[1]).toMatchObject({
+        book: 'Matthew',
+        startChapter: 1,
+        startVerse: 3,
+        endChapter: 1,
+        endVerse: 3,
+      });
+      expect(formatCompoundDisplay(segments)).toBe('Matthew 1:1, 3');
+    });
   });
 
   describe('buildSegment defensive clamping', () => {

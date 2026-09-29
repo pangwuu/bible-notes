@@ -6,6 +6,7 @@ import { TemplateIcon } from './TemplateIcon';
 import { colors, spacing, radius } from '../constants/theme';
 import { Note, formatPassageDisplay } from '../types/note';
 import { getSectionColor } from '../constants/templates';
+import { stripVerseTags } from '../utils/verseLinkUtils';
 
 export interface NoteCardProps {
   note: Note;
@@ -14,10 +15,10 @@ export interface NoteCardProps {
 }
 
 export const NoteCard: React.FC<NoteCardProps> = ({ note, onPress, style }) => {
-  // Clean preview snippet: remove markdown headers and Swedish emojis so only user reflection appears
+  // Clean preview snippet: remove markdown headers, verse tags, and Swedish emojis so only user reflection appears
   const cleanSnippet = (raw: string): string => {
     if (!raw) return '';
-    return raw
+    return stripVerseTags(raw)
       .replace(/###?\s*(?:[💡❓🏹\p{Emoji}]\s*)?(?:Key Idea(?:\(s\))?|Question(?:\(s\))?|Application(?:\(s\))?)/giu, '')
       .replace(/^#{1,6}\s+.*$/gm, '')
       .replace(/[💡❓🏹]/gu, '')
@@ -78,9 +79,22 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, onPress, style }) => {
       accessibilityLabel={`Note on ${passageDisplay}`}
     >
       <View style={styles.headerRow}>
-        <Text style={styles.passageRef} numberOfLines={2} ellipsizeMode="tail">
-          {passageDisplay}
-        </Text>
+        <View style={styles.titleColumn}>
+          {note.title ? (
+            <>
+              <Text style={styles.noteTitle} numberOfLines={2} ellipsizeMode="tail">
+                {note.title}
+              </Text>
+              <Text style={styles.passageSubref} numberOfLines={1} ellipsizeMode="tail">
+                {passageDisplay}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.passageRef} numberOfLines={2} ellipsizeMode="tail">
+              {passageDisplay}
+            </Text>
+          )}
+        </View>
         <View style={styles.indicators}>
           {/* Visibility indicator pill showing whether note is shared with friends or private */}
           <View style={styles.visBadge}>
@@ -158,6 +172,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.xs,
+  },
+  titleColumn: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  noteTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  passageSubref: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.accentKeyIdea,
   },
   passageRef: {
     fontSize: 16,

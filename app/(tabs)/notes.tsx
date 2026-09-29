@@ -63,11 +63,13 @@ export default function NotesBrowserScreen() {
   const filteredNotes = useMemo(() => {
     return notes.filter((n) => {
       const q = searchQuery.trim().toLowerCase();
+      const titleMatch = Boolean(n.title && n.title.toLowerCase().includes(q));
       const passageText = (n.passage?.display || n.passage?.displayString || '').toLowerCase();
       const booksMatch = n.passage?.books?.some((b) => b.toLowerCase().includes(q));
 
       const matchesSearch =
         !q ||
+        titleMatch ||
         passageText.includes(q) ||
         booksMatch ||
         n.content.toLowerCase().includes(q) ||
@@ -114,7 +116,7 @@ export default function NotesBrowserScreen() {
       {/* Search Input matching Friends search component */}
       <View style={styles.searchContainer}>
         <Searchbar
-          placeholder="Search by book, tag, or reflection..."
+          placeholder="Search by title, book, tag, or reflection..."
           value={searchQuery}
           onChangeText={setSearchQuery}
           style={styles.searchBar}

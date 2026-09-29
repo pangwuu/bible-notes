@@ -59,9 +59,22 @@ export const FriendNoteCard: React.FC<FriendNoteCardProps> = ({ item, onPress, s
       </View>
 
       <View style={styles.passageRow}>
-        <Text style={styles.passageRef} numberOfLines={1}>
-          {passageDisplay}
-        </Text>
+        <View style={styles.titleColumn}>
+          {note.title ? (
+            <>
+              <Text style={styles.noteTitle} numberOfLines={2} ellipsizeMode="tail">
+                {note.title}
+              </Text>
+              <Text style={styles.passageSubref} numberOfLines={1} ellipsizeMode="tail">
+                {passageDisplay}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.passageRef} numberOfLines={1}>
+              {passageDisplay}
+            </Text>
+          )}
+        </View>
 
         {/* Section indicator icons on the right */}
         <View style={styles.sectionIndicators}>
@@ -180,6 +193,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 2,
   },
+  titleColumn: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  noteTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    lineHeight: 20,
+    marginBottom: 2,
+  },
+  passageSubref: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    lineHeight: 16,
+  },
   passageRef: {
     fontSize: 16,
     fontWeight: '600',
@@ -215,3 +245,5 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
 });
+
+export default FriendNoteCard;

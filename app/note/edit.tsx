@@ -16,8 +16,10 @@ import {
   ActivityIndicator,
   BackHandler,
   Keyboard,
+  TextInput,
 } from 'react-native';
 import { Text } from 'react-native-paper';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, spacing, radii, typography } from '../../src/constants/theme';
 import DynamicNoteEditor from '../../src/components/DynamicNoteEditor';
@@ -28,7 +30,7 @@ import PassagePicker, { PassageSelection } from '../../src/components/PassagePic
 import BibleReader from '../../src/components/BibleReader';
 import FontSizeControls from '../../src/components/FontSizeControls';
 import safeStorage from '../../src/utils/safeStorage';
-import { PassageReference, NoteVisibility, NoteSectionValue, formatPassageDisplay } from '../../src/types/note';
+import { PassageReference, NoteVisibility, NoteSectionValue, TargetVerseHighlight, formatPassageDisplay } from '../../src/types/note';
 import { NoteTemplate } from '../../src/types/template';
 import {
   BUILT_IN_TEMPLATES,
@@ -46,9 +48,10 @@ import {
   buildLinkedVerseMap,
   formatVerseReferenceTag,
   extractVerseRangeText,
+  extractSelectedVersesText,
 } from '../../src/utils/verseLinkUtils';
 import { findCanonicalBook } from '../../src/constants/bibleData';
-import { createPassageReference } from '../../src/utils/passageParser';
+import { createPassageReference, formatSegmentDisplay } from '../../src/utils/passageParser';
 import { fetchPassageText } from '../../src/services/bibleService';
 
 export default function NoteEditScreen() {
@@ -77,8 +80,17 @@ export default function NoteEditScreen() {
   // Note State - defaults to null for new notes so users choose their own passage
   const [passage, setPassage] = useState<PassageReference | null>(null);
   const [readerFontSize, setReaderFontSize] = useState<number>(16);
+  const [activeSegmentIndex, setActiveSegmentIndex] = useState<number | null>(null);
+
+  const activeSegmentPassage = useMemo(() => {
+    if (activeSegmentIndex === null || !passage?.segments?.[activeSegmentIndex]) {
+      return null;
+    }
+    return createPassageReference([passage.segments[activeSegmentIndex]]);
+  }, [passage, activeSegmentIndex]);
 
   // Active Template & Dynamic Sections
+  const [title, setTitle] = useState<string>('');
   const [activeTemplate, setActiveTemplate] = useState<NoteTemplate>(DEFAULT_TEMPLATE);
   const [sections, setSections] = useState<NoteSectionValue[]>(() =>
     initializeSectionValues(DEFAULT_TEMPLATE)
@@ -96,14 +108,21 @@ export default function NoteEditScreen() {
   const sectionLayoutMap = useRef<Record<string, number>>({});
   const isSavingRef = useRef(false);
   const scrollViewRef = useRef<ScrollView>(null);
+  const bibleReaderTop = useRef<number>(0);
+  const tocTop = useRef<number>(0);
+  const [targetHighlightedVerse, setTargetHighlightedVerse] = useState<TargetVerseHighlight | null>(null);
 
   // Verse Link & Preview Modal State
   const [previewVerseData, setPreviewVerseData] = useState<{
     visible: boolean;
     startVerse: number;
     endVerse: number;
+    book?: string;
+    chapter?: number;
+    verses?: number[];
     verseText: string;
-  }>({ visible: false, startVerse: 1, endVerse: 1, verseText: '' });
+    loading: boolean;
+  }>({ visible: false, startVerse: 1, endVerse: 1, verseText: '', loading: false });
 
   const linkedVerseMap = useMemo(() => {
     return buildLinkedVerseMap(sections);
@@ -144,10 +163,17 @@ export default function NoteEditScreen() {
 
       const targetSec = prev[secIdx];
       const existingRefs = targetSec.verseReferences || [];
-      const alreadyExists = existingRefs.some((r) => r.startVerse === min && r.endVerse === max && r.book === book && r.chapter === chapter);
+      const alreadyExists = existingRefs.some((r) => {
+        if (r.book !== book || r.chapter !== chapter) return false;
+        if (r.verses && sorted) {
+          if (r.verses.length !== sorted.length) return false;
+          return r.verses.every((v, i) => v === sorted[i]);
+        }
+        return r.startVerse === min && r.endVerse === max;
+      });
       const updatedRefs = alreadyExists
         ? existingRefs
-        : [...existingRefs, { startVerse: min, endVerse: max, book, chapter }];
+        : [...existingRefs, { startVerse: min, endVerse: max, book, chapter, verses: sorted }];
 
       const currentContent = targetSec.content || '';
       const hasTag = currentContent.includes(tag);
@@ -173,7 +199,17 @@ export default function NoteEditScreen() {
       const targetSec = prev[sectionIndex];
       if (!targetSec || !targetSec.verseReferences) return prev;
       const refToRemove = targetSec.verseReferences[referenceIndex];
-      const tag = formatVerseReferenceTag([refToRemove.startVerse, refToRemove.endVerse]);
+      const versesToPass =
+        refToRemove.verses && refToRemove.verses.length > 0
+          ? refToRemove.verses
+          : Array.from(
+              { length: refToRemove.endVerse - refToRemove.startVerse + 1 },
+              (_, i) => refToRemove.startVerse + i
+            );
+      const tag = formatVerseReferenceTag(
+        versesToPass,
+        refToRemove.book ? { book: refToRemove.book, chapter: refToRemove.chapter } : undefined
+      );
       const updatedRefs = targetSec.verseReferences.filter((_, idx) => idx !== referenceIndex);
       const updatedContent = targetSec.content.replace(tag, '').trim();
 
@@ -189,7 +225,22 @@ export default function NoteEditScreen() {
   }, []);
 
   const handlePreviewVerse = useCallback(
-    async (startVerse: number, endVerse: number, context?: { book?: string; chapter?: number }) => {
+    async (
+      startVerse: number,
+      endVerse: number,
+      context?: { book?: string; chapter?: number; verses?: number[] }
+    ) => {
+      setPreviewVerseData({
+        visible: true,
+        startVerse,
+        endVerse,
+        book: context?.book,
+        chapter: context?.chapter,
+        verses: context?.verses,
+        verseText: '',
+        loading: true,
+      });
+
       let targetPassage = passage;
       if (context?.book) {
         const meta = findCanonicalBook(context.book);
@@ -213,21 +264,27 @@ export default function NoteEditScreen() {
           }
         }
       }
-      if (!targetPassage) return;
+      if (!targetPassage) {
+        setPreviewVerseData((prev) => ({ ...prev, loading: false }));
+        return;
+      }
       try {
         const res = await fetchPassageText(targetPassage, {
           translation: profile?.settings?.preferred_translation || 'ESV',
           esvApiKey: profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key,
         });
-        const text = extractVerseRangeText(res.verses || [], startVerse, endVerse);
-        setPreviewVerseData({
-          visible: true,
-          startVerse,
-          endVerse,
+        const text =
+          context?.verses && context.verses.length > 0
+            ? extractSelectedVersesText(res.verses || [], context.verses)
+            : extractVerseRangeText(res.verses || [], startVerse, endVerse);
+        setPreviewVerseData((prev) => ({
+          ...prev,
           verseText: text,
-        });
+          loading: false,
+        }));
       } catch (err) {
         console.warn('Failed to load verse preview text:', err);
+        setPreviewVerseData((prev) => ({ ...prev, loading: false }));
       }
     },
     [passage, profile]
@@ -272,6 +329,7 @@ export default function NoteEditScreen() {
       try {
         const existing = await notesService.getNote(id);
         if (existing && isMounted) {
+          setTitle(existing.title || '');
           setPassage(existing.passage);
           const tpl = getTemplateById(existing.templateId, profile?.custom_templates);
           setActiveTemplate(tpl);
@@ -494,8 +552,10 @@ export default function NoteEditScreen() {
 
     try {
       let savedNote;
+      const cleanTitle = title.trim() || undefined;
       if (targetId) {
         savedNote = await notesService.updateNote(targetId, {
+          title: cleanTitle,
           passage,
           templateId: activeTemplate.id,
           templateName: activeTemplate.name,
@@ -511,6 +571,7 @@ export default function NoteEditScreen() {
           userId: user?.uid || '',
           authorUsername: profile?.username || user?.displayName || '',
           authorDisplayName: profile?.display_name || user?.displayName || '',
+          title: cleanTitle,
           passage,
           templateId: activeTemplate.id,
           templateName: activeTemplate.name,
@@ -546,15 +607,24 @@ export default function NoteEditScreen() {
       isSavingRef.current = false;
       setIsSaving(false);
     }
-  }, [id, user, profile, passage, activeTemplate, sections, tags, visibility]);
+  }, [id, user, profile, passage, activeTemplate, sections, tags, visibility, title]);
+
+  // Safe back navigation helper to prevent unhandled GO_BACK actions
+  const navigateBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/notes');
+    }
+  }, [router]);
 
   // Explicit Save
   const handleExplicitSave = useCallback(async () => {
     const success = await handleSave();
     if (success) {
-      router.back();
+      navigateBack();
     }
-  }, [handleSave, router]);
+  }, [handleSave, navigateBack]);
 
   // Back confirmation dialog
   const handleBack = useCallback(() => {
@@ -569,7 +639,7 @@ export default function NoteEditScreen() {
             style: 'destructive',
             onPress: () => {
               setIsDirty(false);
-              router.back();
+              navigateBack();
             },
           },
           {
@@ -578,16 +648,16 @@ export default function NoteEditScreen() {
               const success = await handleSave();
               if (success) {
                 setIsDirty(false);
-                router.back();
+                navigateBack();
               }
             },
           },
         ]
       );
     } else {
-      router.back();
+      navigateBack();
     }
-  }, [isDirty, router, handleSave]);
+  }, [isDirty, navigateBack, handleSave]);
 
   // Intercept Android hardware back button when note has unsaved changes
   useEffect(() => {
@@ -677,27 +747,108 @@ export default function NoteEditScreen() {
           ) : null}
         </View>
 
+        {/* Optional Note Title Input Card */}
+        <View style={styles.titleCardRow}>
+          <TextInput
+            value={title}
+            onChangeText={(val) => {
+              setTitle(val);
+              setIsDirty(true);
+            }}
+            placeholder="Note Title (Optional)"
+            placeholderTextColor={colors.text.secondary}
+            style={styles.titleInput}
+            maxLength={100}
+            accessibilityLabel="Note Title"
+          />
+        </View>
+
+        {/* Interactive Table of Contents (Passage Segments) */}
+        {passage?.segments && passage.segments.length > 0 && (
+          <View
+            style={styles.tocContainer}
+            onLayout={(e) => {
+              tocTop.current = e.nativeEvent.layout.y;
+            }}
+          >
+            <View style={styles.tocHeaderRow}>
+              <Ionicons name="list-outline" size={14} color={colors.accent.keyIdea} />
+              <Text style={styles.tocTitle}>Table of Contents</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tocList}>
+              {passage.segments.length > 1 && (
+                <Pressable
+                  onPress={() => setActiveSegmentIndex(null)}
+                  style={[
+                    styles.tocPill,
+                    activeSegmentIndex === null && styles.tocPillActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.tocPillText,
+                      activeSegmentIndex === null && styles.tocPillTextActive,
+                    ]}
+                  >
+                    All Passages ({passage.segments.length})
+                  </Text>
+                </Pressable>
+              )}
+              {passage.segments.map((seg, idx) => {
+                const isActive = activeSegmentIndex === idx;
+                return (
+                  <Pressable
+                    key={idx}
+                    onPress={() => setActiveSegmentIndex(isActive ? null : idx)}
+                    style={[
+                      styles.tocPill,
+                      isActive && styles.tocPillActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.tocPillText,
+                        isActive && styles.tocPillTextActive,
+                      ]}
+                    >
+                      {formatSegmentDisplay(seg)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
         {/* Live Scripture Reader with Translation Switcher */}
         {passage && (
-          <BibleReader
-            passage={passage}
-            preferredTranslation={profile?.settings?.preferred_translation || 'ESV'}
-            customApiKey={profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key}
-            initiallyCollapsed={false}
-            fontSize={readerFontSize}
-            linkedVerseMap={linkedVerseMap}
-            sectionOptions={sectionOptions}
-            onAttachToSection={handleAttachToSection}
-            onJumpToSection={(sectionId) => {
-              const secY = sectionLayoutMap.current[sectionId];
-              if (typeof secY === 'number') {
-                const targetY = editorLayoutY.current + secY;
-                scrollViewRef.current?.scrollTo({ y: Math.max(0, targetY - 16), animated: true });
-              } else {
-                scrollViewRef.current?.scrollToEnd({ animated: true });
-              }
+          <View
+            onLayout={(e) => {
+              bibleReaderTop.current = e.nativeEvent.layout.y;
             }}
-          />
+          >
+            <BibleReader
+              passage={passage}
+              activeSegment={activeSegmentPassage}
+              preferredTranslation={profile?.settings?.preferred_translation || 'ESV'}
+              customApiKey={profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key}
+              initiallyCollapsed={false}
+              fontSize={readerFontSize}
+              linkedVerseMap={linkedVerseMap}
+              sectionOptions={sectionOptions}
+              onAttachToSection={handleAttachToSection}
+              onJumpToSection={(sectionId) => {
+                const secY = sectionLayoutMap.current[sectionId];
+                if (typeof secY === 'number') {
+                  const targetY = editorLayoutY.current + secY;
+                  scrollViewRef.current?.scrollTo({ y: Math.max(0, targetY - 16), animated: true });
+                } else {
+                  scrollViewRef.current?.scrollToEnd({ animated: true });
+                }
+              }}
+              targetHighlightedVerse={targetHighlightedVerse}
+            />
+          </View>
         )}
 
         {/* Dynamic Multi-Section Note Editor */}
@@ -757,10 +908,43 @@ export default function NoteEditScreen() {
         passageRef={passage ? formatPassageDisplay(passage) : ''}
         startVerse={previewVerseData.startVerse}
         endVerse={previewVerseData.endVerse}
+        book={previewVerseData.book}
+        chapter={previewVerseData.chapter}
+        verses={previewVerseData.verses}
         verseText={previewVerseData.verseText}
+        loading={previewVerseData.loading}
         translation={profile?.settings?.preferred_translation || 'ESV'}
         onViewInContext={() => {
-          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+          if (previewVerseData.book && passage?.segments && passage.segments.length > 0) {
+            const targetCanon = findCanonicalBook(previewVerseData.book)?.name || previewVerseData.book;
+            const matchIdx = passage.segments.findIndex((seg) => {
+              const segCanon = findCanonicalBook(seg.book)?.name || seg.book;
+              if (segCanon !== targetCanon) return false;
+              if (typeof previewVerseData.chapter === 'number') {
+                return previewVerseData.chapter >= seg.startChapter && previewVerseData.chapter <= seg.endChapter;
+              }
+              return true;
+            });
+            if (matchIdx >= 0) {
+              setActiveSegmentIndex(matchIdx);
+            }
+          }
+
+          const scrollYTarget = tocTop.current > 0 ? tocTop.current : bibleReaderTop.current;
+          const targetY = scrollYTarget > 0 ? Math.max(0, scrollYTarget - 16) : 0;
+          scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+          if (previewVerseData.book || previewVerseData.chapter || previewVerseData.verses) {
+            setTargetHighlightedVerse({
+              book: previewVerseData.book,
+              chapter: previewVerseData.chapter,
+              verses: previewVerseData.verses || [previewVerseData.startVerse],
+            });
+          } else {
+            setTargetHighlightedVerse(previewVerseData.startVerse);
+          }
+          setTimeout(() => {
+            setTargetHighlightedVerse(null);
+          }, 2500);
         }}
       />
 
@@ -852,6 +1036,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginVertical: spacing.xs,
   },
+  titleCardRow: {
+    marginVertical: spacing.xs,
+  },
+  titleInput: {
+    backgroundColor: colors.bg.surfaceRaised,
+    borderRadius: radii.controls,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderWidth: 1,
+    borderColor: colors.border.hairline,
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.text.primary,
+  },
   pickerTrigger: {
     flex: 1,
     backgroundColor: colors.bg.surfaceRaised,
@@ -886,5 +1084,51 @@ const styles = StyleSheet.create({
   },
   editFontSizeControls: {
     marginLeft: spacing.sm,
+  },
+  tocContainer: {
+    backgroundColor: colors.bg.surface,
+    borderRadius: radii.content,
+    borderWidth: 1,
+    borderColor: colors.border.hairline,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  tocHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: spacing.xs,
+    paddingHorizontal: 2,
+  },
+  tocTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.accent.keyIdea,
+  },
+  tocList: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingVertical: 2,
+  },
+  tocPill: {
+    backgroundColor: colors.bg.surfaceRaised,
+    borderRadius: radii.controls,
+    borderWidth: 1,
+    borderColor: colors.border.hairline,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+  tocPillActive: {
+    backgroundColor: 'rgba(227, 165, 61, 0.15)',
+    borderColor: colors.accent.keyIdea,
+  },
+  tocPillText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.text.secondary,
+  },
+  tocPillTextActive: {
+    color: colors.accent.keyIdea,
+    fontWeight: '700',
   },
 });

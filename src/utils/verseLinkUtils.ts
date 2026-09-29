@@ -10,6 +10,7 @@ export interface VerseReference {
   endVerse: number;
   book?: string;
   chapter?: number;
+  verses?: number[];
 }
 
 export interface LinkedSectionInfo {
@@ -19,11 +20,77 @@ export interface LinkedSectionInfo {
   sectionColor?: string;
 }
 
-// Matches legacy tags like [v. 3], [v. 3-5], [v. 3–5], [v3], [v3-5], [v3–5]
-export const VERSE_TAG_REGEX = /\[v\.?\s*(\d+)(?:\s*[-–—]\s*(\d+))?\]/gi;
+// Matches legacy tags like [v. 3], [v. 3-5], [v. 3–5], [v. 1-3, 10], [v1], [v3-5]
+export const VERSE_TAG_REGEX = /\[v\.?\s*((?:\d+(?:\s*[-–—]\s*\d+)?)(?:\s*,\s*\d+(?:\s*[-–—]\s*\d+)?)*)\]/gi;
 
-// Matches canonical tags like [Matt 1:1], [Matt 1:1-3], [1 Cor 13:4-7], [Rom 8:28]
-export const CANONICAL_VERSE_TAG_REGEX = /\[([0-9]?\s*[A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+)[:.](\d+)(?:\s*[-–—]\s*(\d+))?\]/gi;
+// Matches canonical tags like [Matt 1:1], [Matt 1:1-3], [Matt 1:1-3, 10], [1 Cor 13:4-7], [Rom 8:28]
+export const CANONICAL_VERSE_TAG_REGEX = /\[([0-9]?\s*[A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+)[:.]((?:\d+(?:\s*[-–—]\s*\d+)?)(?:\s*,\s*\d+(?:\s*[-–—]\s*\d+)?)*)\]/gi;
+
+// Matches verse anchor markdown links like [⚓ Matt 1:1](verse:...) or [⚓ v. 1](verse:...)
+export const ANCHOR_VERSE_LINK_REGEX = /\[⚓\s*[^\]]+\]\(verse:[^)]+\)/gi;
+
+/**
+ * Strips all verse reference tags and markdown links from a raw text snippet.
+ */
+export function stripVerseTags(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(new RegExp(ANCHOR_VERSE_LINK_REGEX.source, 'gi'), '')
+    .replace(new RegExp(CANONICAL_VERSE_TAG_REGEX.source, 'gi'), '')
+    .replace(new RegExp(VERSE_TAG_REGEX.source, 'gi'), '');
+}
+
+/**
+ * Parses a comma-separated verse specification (e.g. "1-3, 10" or "1–3, 10–12") into a sorted array of distinct numbers.
+ */
+export function parseVerseNumbersList(listStr: string): number[] {
+  if (!listStr) return [];
+  const parts = listStr.split(',');
+  const resultSet = new Set<number>();
+
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const rangeMatch = trimmed.match(/^(\d+)(?:\s*[-–—]\s*(\d+))?$/);
+    if (rangeMatch) {
+      const s = parseInt(rangeMatch[1], 10);
+      const e = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : s;
+      if (!isNaN(s) && !isNaN(e) && s > 0 && e >= s) {
+        for (let v = s; v <= e; v++) {
+          resultSet.add(v);
+        }
+      }
+    }
+  }
+
+  return Array.from(resultSet).sort((a, b) => a - b);
+}
+
+/**
+ * Formats an array of verse numbers into grouped ranges (for example, [1, 2, 3, 10] becomes "1-3, 10", [1] becomes "1").
+ */
+export function formatVerseRangeNumbers(verses: number[], dashChar: string = '–'): string {
+  if (!verses || verses.length === 0) return '';
+  const sorted = Array.from(new Set(verses)).sort((a, b) => a - b);
+  const groups: string[] = [];
+
+  let start = sorted[0];
+  let prev = sorted[0];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const curr = sorted[i];
+    if (curr === prev + 1) {
+      prev = curr;
+    } else {
+      groups.push(start === prev ? `${start}` : `${start}${dashChar}${prev}`);
+      start = curr;
+      prev = curr;
+    }
+  }
+  groups.push(start === prev ? `${start}` : `${start}${dashChar}${prev}`);
+
+  return groups.join(', ');
+}
 
 /**
  * Extracts all verse reference tags (both canonical and legacy) from markdown/plain text.
@@ -32,40 +99,50 @@ export function extractVerseReferences(text: string): VerseReference[] {
   if (!text) return [];
   const results: VerseReference[] = [];
 
-  // 1. Canonical tags [Book Ch:V] or [Book Ch:V-V]
+  // 1. Canonical tags [Book Ch:V-V, V]
   const canonicalRegex = new RegExp(CANONICAL_VERSE_TAG_REGEX.source, 'gi');
   let cMatch: RegExpExecArray | null;
   while ((cMatch = canonicalRegex.exec(text)) !== null) {
     const rawBook = cMatch[1].trim();
     const chapter = parseInt(cMatch[2], 10);
-    const startVerse = parseInt(cMatch[3], 10);
-    const endVerse = cMatch[4] ? parseInt(cMatch[4], 10) : startVerse;
+    const verseSpec = cMatch[3];
+    const verses = parseVerseNumbersList(verseSpec);
     const canonBook = findCanonicalBook(rawBook);
     const resolvedBook = canonBook ? canonBook.name : rawBook;
 
-    if (!isNaN(startVerse) && !isNaN(endVerse) && startVerse > 0 && endVerse >= startVerse) {
-      results.push({
+    if (verses.length > 0) {
+      const isDiscontinuous = verses.length > 1 && verses[verses.length - 1] - verses[0] + 1 !== verses.length;
+      const refItem: VerseReference = {
         raw: cMatch[0],
         book: resolvedBook,
         chapter,
-        startVerse,
-        endVerse,
-      });
+        startVerse: verses[0],
+        endVerse: verses[verses.length - 1],
+      };
+      if (isDiscontinuous) {
+        refItem.verses = verses;
+      }
+      results.push(refItem);
     }
   }
 
-  // 2. Legacy relative tags [v. N] or [v. N-M]
+  // 2. Legacy relative tags [v. N-M, N]
   const legacyRegex = new RegExp(VERSE_TAG_REGEX.source, 'gi');
   let lMatch: RegExpExecArray | null;
   while ((lMatch = legacyRegex.exec(text)) !== null) {
-    const startVerse = parseInt(lMatch[1], 10);
-    const endVerse = lMatch[2] ? parseInt(lMatch[2], 10) : startVerse;
-    if (!isNaN(startVerse) && !isNaN(endVerse) && startVerse > 0 && endVerse >= startVerse) {
-      results.push({
+    const verseSpec = lMatch[1];
+    const verses = parseVerseNumbersList(verseSpec);
+    if (verses.length > 0) {
+      const isDiscontinuous = verses.length > 1 && verses[verses.length - 1] - verses[0] + 1 !== verses.length;
+      const refItem: VerseReference = {
         raw: lMatch[0],
-        startVerse,
-        endVerse,
-      });
+        startVerse: verses[0],
+        endVerse: verses[verses.length - 1],
+      };
+      if (isDiscontinuous) {
+        refItem.verses = verses;
+      }
+      results.push(refItem);
     }
   }
 
@@ -74,54 +151,47 @@ export function extractVerseReferences(text: string): VerseReference[] {
 
 /**
  * Formats an array of verse numbers into a canonical markdown reference tag:
- * If context has book and chapter, generates e.g. "[Matt 1:1-3]", "[Matt 1:1]".
- * Otherwise falls back to legacy e.g. "[v. 1-3]", "[v. 5]".
+ * Supports compound/discontinuous verses e.g. "[Matt 1:1, 3]" or "[v. 1, 3]".
  */
 export function formatVerseReferenceTag(
   verses: number[],
   context?: { book?: string; chapter?: number }
 ): string {
   if (!verses || verses.length === 0) return '';
-  const sorted = [...verses].sort((a, b) => a - b);
-  const min = sorted[0];
-  const max = sorted[sorted.length - 1];
+
+  const rangeNumbers = formatVerseRangeNumbers(verses, '-');
 
   if (context?.book && typeof context?.chapter === 'number') {
     const canonBook = findCanonicalBook(context.book);
     const abbr = canonBook?.abbreviations?.[0] || context.book;
-    if (min === max) {
-      return `[${abbr} ${context.chapter}:${min}]`;
-    }
-    return `[${abbr} ${context.chapter}:${min}-${max}]`;
+    return `[${abbr} ${context.chapter}:${rangeNumbers}]`;
   }
 
-  if (min === max) {
-    return `[v. ${min}]`;
-  }
-  return `[v. ${min}-${max}]`;
+  return `[v. ${rangeNumbers}]`;
 }
 
 /**
- * Formats a verse range into a clean user-facing label (e.g. "Matt 1:1" or "Matt 1:1–3", or legacy "v. 1")
+ * Formats a verse range into a clean user-facing label (e.g. "Matt 1:1–3, 10", "Matt 1:1–3", or legacy "v. 1")
  */
 export function formatVerseRangeLabel(
   startVerse: number,
   endVerse: number,
-  context?: { book?: string; chapter?: number }
+  context?: { book?: string; chapter?: number },
+  verses?: number[]
 ): string {
+  const rangeStr = (verses && verses.length > 0)
+    ? formatVerseRangeNumbers(verses)
+    : startVerse === endVerse
+    ? `${startVerse}`
+    : `${startVerse}–${endVerse}`;
+
   if (context?.book && typeof context?.chapter === 'number') {
     const canonBook = findCanonicalBook(context.book);
     const abbr = canonBook?.abbreviations?.[0] || context.book;
-    if (startVerse === endVerse) {
-      return `${abbr} ${context.chapter}:${startVerse}`;
-    }
-    return `${abbr} ${context.chapter}:${startVerse}–${endVerse}`;
+    return `${abbr} ${context.chapter}:${rangeStr}`;
   }
 
-  if (startVerse === endVerse) {
-    return `v. ${startVerse}`;
-  }
-  return `v. ${startVerse}–${endVerse}`;
+  return `v. ${rangeStr}`;
 }
 
 export interface LinkedVerseData {
@@ -142,7 +212,7 @@ export function buildLinkedVerseMap(
     content?: string;
     icon?: string;
     color?: string;
-    verseReferences?: Array<{ startVerse: number; endVerse: number; book?: string; chapter?: number }>;
+    verseReferences?: Array<{ startVerse: number; endVerse: number; book?: string; chapter?: number; verses?: number[] }>;
   }>
 ): Record<string | number, LinkedVerseData> {
   const map: Record<string | number, LinkedVerseData> = {};
@@ -173,11 +243,16 @@ export function buildLinkedVerseMap(
     if (sec.verseReferences && sec.verseReferences.length > 0) {
       for (const ref of sec.verseReferences) {
         const bookName = ref.book ? findCanonicalBook(ref.book)?.name || ref.book : undefined;
-        for (let v = ref.startVerse; v <= ref.endVerse; v++) {
+        const targetVerses = ref.verses && ref.verses.length > 0
+          ? ref.verses
+          : Array.from({ length: ref.endVerse - ref.startVerse + 1 }, (_, i) => ref.startVerse + i);
+
+        for (const v of targetVerses) {
           if (bookName && typeof ref.chapter === 'number') {
             addLink(`${bookName}:${ref.chapter}:${v}`, info);
+          } else {
+            addLink(v, info);
           }
-          addLink(v, info);
         }
       }
     }
@@ -187,11 +262,16 @@ export function buildLinkedVerseMap(
       const extracted = extractVerseReferences(sec.content);
       for (const ref of extracted) {
         const bookName = ref.book ? findCanonicalBook(ref.book)?.name || ref.book : undefined;
-        for (let v = ref.startVerse; v <= ref.endVerse; v++) {
+        const targetVerses = ref.verses && ref.verses.length > 0
+          ? ref.verses
+          : Array.from({ length: ref.endVerse - ref.startVerse + 1 }, (_, i) => ref.startVerse + i);
+
+        for (const v of targetVerses) {
           if (bookName && typeof ref.chapter === 'number') {
             addLink(`${bookName}:${ref.chapter}:${v}`, info);
+          } else {
+            addLink(v, info);
           }
-          addLink(v, info);
         }
       }
     }
@@ -205,13 +285,18 @@ export function buildLinkedVerseMap(
  */
 export function getLinkedSectionsForVerses(
   verses: number[],
-  linkedMap: Record<number, LinkedVerseData | LinkedSectionInfo>
+  linkedMap: Record<string | number, LinkedVerseData | LinkedSectionInfo>,
+  context?: { book?: string; chapter?: number }
 ): LinkedSectionInfo[] {
   if (!verses || verses.length === 0 || !linkedMap) return [];
   const mapById: Record<string, LinkedSectionInfo> = {};
 
   for (const v of verses) {
-    const item = linkedMap[v];
+    const canonicalKey =
+      context?.book && typeof context?.chapter === 'number'
+        ? `${context.book}:${context.chapter}:${v}`
+        : undefined;
+    const item = (canonicalKey && linkedMap[canonicalKey]) || linkedMap[v];
     if (!item) continue;
     if ('allSections' in item && Array.isArray(item.allSections)) {
       for (const s of item.allSections) {
@@ -230,7 +315,21 @@ export function getLinkedSectionsForVerses(
 }
 
 /**
+ * Extracts concatenated text only for specified verses from a list of VerseSegment objects.
+ */
+export function extractSelectedVersesText(
+  verses: Array<{ verseNumber: number; text: string }>,
+  selectedVerseNumbers: number[]
+): string {
+  if (!verses || verses.length === 0 || !selectedVerseNumbers || selectedVerseNumbers.length === 0) return '';
+  const selectedSet = new Set(selectedVerseNumbers);
+  const matched = verses.filter((v) => selectedSet.has(v.verseNumber));
+  return matched.map((v) => `${v.verseNumber}. ${v.text.trim()}`).join('\n\n');
+}
+
+/**
  * Extracts concatenated text for a verse range from a list of VerseSegment objects.
+ * (Preserved for backwards compatibility).
  */
 export function extractVerseRangeText(
   verses: Array<{ verseNumber: number; text: string }>,

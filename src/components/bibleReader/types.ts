@@ -1,4 +1,4 @@
-import { PassageReference } from '../../types/note';
+import { PassageReference, TargetVerseHighlight } from '../../types/note';
 import { BibleTranslation } from '../../types/user';
 import {
   PassageFetchResult,
@@ -34,7 +34,7 @@ export interface BibleReaderProps {
   linkedVerseMap?: Record<string | number, LinkedVerseData | LinkedSectionInfo>;
   onAttachToSection?: (verses: number[], sectionId: string, context?: { book?: string; chapter?: number }) => void;
   onJumpToSection?: (sectionId: string) => void;
-  targetHighlightedVerse?: number | null;
+  targetHighlightedVerse?: TargetVerseHighlight | null;
   sectionOptions?: SectionOption[];
 }
 

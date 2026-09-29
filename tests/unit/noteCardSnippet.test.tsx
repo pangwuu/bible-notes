@@ -130,4 +130,25 @@ describe('NoteCard Snippet Cleaning & Bug Fix', () => {
     expect(text).toContain('This is the real text of the note.');
     expect(text).not.toContain('###');
   });
+
+  it('strips verse tags and links from reflection snippets', () => {
+    const noteWithVerseTags: Note = {
+      ...baseNote,
+      sections: [
+        {
+          id: 'light',
+          title: 'Key Idea',
+          content: 'Important observation [Matt 1:1, 3] [v. 5] and [⚓ Rom 8:28](verse:Romans:8:28) for our lives.',
+        },
+      ],
+    };
+
+    const tree = NoteCard({ note: noteWithVerseTags, onPress: jest.fn() });
+    const text = extractText(tree);
+
+    expect(text).toContain('Important observation and for our lives.');
+    expect(text).not.toContain('[Matt 1:1, 3]');
+    expect(text).not.toContain('[v. 5]');
+    expect(text).not.toContain('verse:Romans:8:28');
+  });
 });

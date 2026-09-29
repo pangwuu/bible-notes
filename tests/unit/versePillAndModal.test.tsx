@@ -93,4 +93,145 @@ describe('VersePreviewModal Component', () => {
     expect(allText).toContain('I appeal to you therefore, brothers...');
     expect(allText).toContain('View in Passage');
   });
+
+  it('renders canonical book/chapter and compound verses in header', () => {
+    const element = (
+      <VersePreviewModal
+        visible={true}
+        passageRef="Matthew 1:1-10, Mark 1:1-10"
+        startVerse={1}
+        endVerse={10}
+        book="Matthew"
+        chapter={1}
+        verses={[1, 2, 3, 10]}
+        verseText="1. The book of the genealogy... 10. and Hezekiah the father of Manasseh..."
+        translation="ESV"
+        onClose={jest.fn()}
+      />
+    );
+
+    const tree = (VersePreviewModal as any)(element.props);
+    const allText = extractText(tree);
+
+    expect(allText).toContain('Matt 1:1–3, 10');
+    expect(allText).not.toContain('Matthew 1:1-10, Mark 1:1-10 (v. 1-10)');
+    expect(allText).toContain('1. The book of the genealogy... 10. and Hezekiah the father of Manasseh...');
+  });
+
+  it('renders loading indicator and message when loading is true', () => {
+    const element = (
+      <VersePreviewModal
+        visible={true}
+        passageRef="Romans 12:1–2"
+        startVerse={1}
+        endVerse={2}
+        verseText=""
+        loading={true}
+        translation="ESV"
+        onClose={jest.fn()}
+      />
+    );
+
+    const tree = (VersePreviewModal as any)(element.props);
+    const allText = extractText(tree);
+
+    expect(allText).toContain('Loading Scripture text...');
+  });
+
+  it('triggers onClose when backdrop overlay is pressed', () => {
+    const onCloseMock = jest.fn();
+    const element = (
+      <VersePreviewModal
+        visible={true}
+        passageRef="Romans 12:1–2"
+        startVerse={1}
+        endVerse={2}
+        verseText="Some text"
+        onClose={onCloseMock}
+      />
+    );
+
+    const tree = (VersePreviewModal as any)(element.props);
+    // In Modal, children is View (modalRoot), which contains [Pressable (backdrop), View (sheetContainer)]
+    const modalRoot = tree.props.children;
+    const backdrop = modalRoot.props.children[0];
+    expect(backdrop.props.accessibilityLabel).toBe('Dismiss verse preview');
+    backdrop.props.onPress();
+    expect(onCloseMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves correct book context for secondary passage segments via secIdx', () => {
+    const { ScriptureView } = require('../../src/components/bibleReader/ScriptureView');
+    const onToggleMock = jest.fn();
+
+    const targetPassage = {
+      display: 'Matthew 1:1-3, Mark 1:1-3',
+      segments: [
+        { book: 'Matthew', startChapter: 1, startVerse: 1, endChapter: 1, endVerse: 3 },
+        { book: 'Mark', startChapter: 1, startVerse: 1, endChapter: 1, endVerse: 3 },
+      ],
+    };
+
+    const passageResult = {
+      verses: [
+        { verseNumber: 1, text: 'Matt v1' },
+        { verseNumber: 2, text: 'Matt v2' },
+        { verseNumber: 1, text: 'Mark v1' },
+        { verseNumber: 2, text: 'Mark v2' },
+      ],
+      text: 'Combined text',
+      sections: [
+        {
+          title: 'Matthew 1:1–3',
+          verses: [{ verseNumber: 2, text: 'Matt v2' }],
+          text: 'Matt v2',
+          // no segment property on section to test fallback via secIdx
+        },
+        {
+          title: 'Mark 1:1–3',
+          verses: [{ verseNumber: 2, text: 'Mark v2' }],
+          text: 'Mark v2',
+          // no segment property on section to test fallback via secIdx
+        },
+      ],
+      translation: 'ESV' as const,
+      source: 'cache' as const,
+      cached: true,
+    };
+
+    const element = (
+      <ScriptureView
+        loading={false}
+        isOfflineEmpty={false}
+        passageResult={passageResult}
+        selectedTranslation="ESV"
+        targetPassage={targetPassage as any}
+        fontSize={16}
+        showVerseNumbers={true}
+        selectedVerses={new Set()}
+        onToggleVerse={onToggleMock}
+        onRetry={jest.fn()}
+      />
+    );
+
+    const tree = (ScriptureView as any)(element.props);
+    expect(tree).toBeDefined();
+
+    // Verify sections render
+    const contentWrapper = tree;
+    const scriptureContainer = contentWrapper.props.children[0];
+    const sectionsRendered = scriptureContainer.props.children;
+    expect(sectionsRendered.length).toBe(2);
+
+    // Section 1 (Mark) should render verse 2 with Mark context
+    const markSection = sectionsRendered[1];
+    const verseParagraph = markSection.props.children[1];
+    const markVerseItem = verseParagraph.props.children[0];
+
+    // Toggle verse in Mark section
+    markVerseItem.props.onToggle(2);
+    expect(onToggleMock).toHaveBeenCalledWith(2, { book: 'Mark', chapter: 1 });
+  });
 });
+
+

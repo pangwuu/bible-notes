@@ -4,7 +4,9 @@ import {
   formatVerseRangeLabel,
   buildLinkedVerseMap,
   extractVerseRangeText,
+  extractSelectedVersesText,
   getLinkedSectionsForVerses,
+  stripVerseTags,
 } from '../../src/utils/verseLinkUtils';
 import { noteDocumentToNote } from '../../src/types/note';
 
@@ -46,9 +48,14 @@ describe('verseLinkUtils', () => {
       expect(formatVerseReferenceTag([3])).toBe('[v. 3]');
     });
 
-    it('formats consecutive or multi-selected verses to range [v. start-end] when no context provided', () => {
+    it('formats consecutive verses to range [v. start-end] when no context provided', () => {
       expect(formatVerseReferenceTag([2, 3, 4])).toBe('[v. 2-4]');
-      expect(formatVerseReferenceTag([5, 1])).toBe('[v. 1-5]');
+      expect(formatVerseReferenceTag([1, 2, 3, 4, 5])).toBe('[v. 1-5]');
+    });
+
+    it('formats split/discontinuous verses to comma-separated list [v. 1, 3] when no context provided', () => {
+      expect(formatVerseReferenceTag([1, 3])).toBe('[v. 1, 3]');
+      expect(formatVerseReferenceTag([1, 3, 5])).toBe('[v. 1, 3, 5]');
     });
 
     it('formats canonical single verse with context using common abbreviation [Matt 1:1]', () => {
@@ -58,7 +65,12 @@ describe('verseLinkUtils', () => {
 
     it('formats canonical verse range with context [Mark 1:1-5]', () => {
       expect(formatVerseReferenceTag([1, 2, 3, 4, 5], { book: 'Mark', chapter: 1 })).toBe('[Mark 1:1-5]');
-      expect(formatVerseReferenceTag([4, 7], { book: '1 Corinthians', chapter: 13 })).toBe('[1 Cor 13:4-7]');
+      expect(formatVerseReferenceTag([4, 5, 6, 7], { book: '1 Corinthians', chapter: 13 })).toBe('[1 Cor 13:4-7]');
+    });
+
+    it('formats canonical split verses with context [Matt 1:1, 3]', () => {
+      expect(formatVerseReferenceTag([1, 3], { book: 'Matthew', chapter: 1 })).toBe('[Matt 1:1, 3]');
+      expect(formatVerseReferenceTag([1, 3, 5], { book: 'Mark', chapter: 2 })).toBe('[Mark 2:1, 3, 5]');
     });
 
     it('returns empty string for empty array', () => {
@@ -110,6 +122,25 @@ describe('verseLinkUtils', () => {
 
       // They don't overwrite each other in canonical space
       expect(map['Matthew:1:1'].primary.sectionId).not.toBe(map['Mark:1:1'].primary.sectionId);
+
+      // Scoped references do not pollute bare numeric keys
+      expect(map[1]).toBeUndefined();
+    });
+
+    it('does not leak scoped verse links into bare numeric keys when book is specified', () => {
+      const sections = [
+        {
+          id: 'sec_mark',
+          title: 'Mark Note',
+          content: 'Study [Mark 1:2]',
+          verseReferences: [{ startVerse: 2, endVerse: 2, book: 'Mark', chapter: 1, verses: [2] }],
+        },
+      ];
+
+      const map = buildLinkedVerseMap(sections);
+      expect(map['Mark:1:2']).toBeDefined();
+      expect(map[2]).toBeUndefined();
+      expect(map['Matthew:1:2']).toBeUndefined();
     });
     it('maps verses from both structured verseReferences and inline text tags', () => {
       const sections = [
@@ -187,6 +218,29 @@ describe('verseLinkUtils', () => {
       expect(linked.length).toBe(2);
       expect(linked.map((l) => l.sectionId)).toEqual(['sec_1', 'sec_2']);
     });
+
+    it('prioritizes canonical context over fallback numeric keys when disambiguating multi-passages', () => {
+      const sections = [
+        {
+          id: 'mark_sec',
+          title: 'Mark Key Idea',
+          content: 'See [Mark 1:4]',
+        },
+        {
+          id: 'matt_sec',
+          title: 'Matt Key Idea',
+          content: 'See [Matt 1:4]',
+        },
+      ];
+      const map = buildLinkedVerseMap(sections);
+      // For Matthew 1, verse 4
+      const mattLinked = getLinkedSectionsForVerses([4], map, { book: 'Matthew', chapter: 1 });
+      expect(mattLinked.map((l) => l.sectionId)).toEqual(['matt_sec']);
+
+      // For Mark 1, verse 4
+      const markLinked = getLinkedSectionsForVerses([4], map, { book: 'Mark', chapter: 1 });
+      expect(markLinked.map((l) => l.sectionId)).toEqual(['mark_sec']);
+    });
   });
 
   describe('extractVerseRangeText', () => {
@@ -205,6 +259,106 @@ describe('verseLinkUtils', () => {
 
     it('returns empty string if range does not match', () => {
       expect(extractVerseRangeText(mockVerses, 10, 12)).toBe('');
+    });
+  });
+
+  describe('extractSelectedVersesText', () => {
+    const mockVerses = [
+      { verseNumber: 1, text: 'First verse text' },
+      { verseNumber: 2, text: 'Second verse text' },
+      { verseNumber: 3, text: 'Third verse text' },
+      { verseNumber: 10, text: 'Tenth verse text' },
+    ];
+
+    it('extracts only the selected verses, skipping omitted verses', () => {
+      const text = extractSelectedVersesText(mockVerses, [1, 2, 10]);
+      expect(text).toContain('First verse text');
+      expect(text).toContain('Second verse text');
+      expect(text).not.toContain('Third verse text');
+      expect(text).toContain('Tenth verse text');
+    });
+  });
+
+  describe('compound verse references', () => {
+    it('parses compound canonical tag [Matt 1:1-3, 10]', () => {
+      const refs = extractVerseReferences('See [Matt 1:1-3, 10] for example.');
+      expect(refs).toHaveLength(1);
+      expect(refs[0]).toEqual({
+        raw: '[Matt 1:1-3, 10]',
+        book: 'Matthew',
+        chapter: 1,
+        startVerse: 1,
+        endVerse: 10,
+        verses: [1, 2, 3, 10],
+      });
+    });
+
+    it('formats compound verse reference tag [Matt 1:1-3, 10]', () => {
+      expect(formatVerseReferenceTag([1, 2, 3, 10], { book: 'Matthew', chapter: 1 })).toBe('[Matt 1:1-3, 10]');
+      expect(formatVerseReferenceTag([1, 2, 3, 10])).toBe('[v. 1-3, 10]');
+    });
+
+    it('formats compound verse range label Matt 1:1–3, 10', () => {
+      expect(formatVerseRangeLabel(1, 10, { book: 'Matthew', chapter: 1 }, [1, 2, 3, 10])).toBe('Matt 1:1–3, 10');
+      expect(formatVerseRangeLabel(1, 10, undefined, [1, 2, 3, 10])).toBe('v. 1–3, 10');
+    });
+
+    it('parses split canonical tag [Matt 1:1, 3]', () => {
+      const refs = extractVerseReferences('See [Matt 1:1, 3] for example.');
+      expect(refs).toHaveLength(1);
+      expect(refs[0]).toEqual({
+        raw: '[Matt 1:1, 3]',
+        book: 'Matthew',
+        chapter: 1,
+        startVerse: 1,
+        endVerse: 3,
+        verses: [1, 3],
+      });
+    });
+
+    it('formats split verse reference tag [Matt 1:1, 3]', () => {
+      expect(formatVerseReferenceTag([1, 3], { book: 'Matthew', chapter: 1 })).toBe('[Matt 1:1, 3]');
+      expect(formatVerseReferenceTag([1, 3])).toBe('[v. 1, 3]');
+    });
+
+    it('formats split verse range label Matt 1:1, 3', () => {
+      expect(formatVerseRangeLabel(1, 3, { book: 'Matthew', chapter: 1 }, [1, 3])).toBe('Matt 1:1, 3');
+      expect(formatVerseRangeLabel(1, 3, undefined, [1, 3])).toBe('v. 1, 3');
+    });
+
+    it('builds linked verse map for split verses omitting intermediate verses', () => {
+      const sections = [
+        {
+          id: 'sec_key',
+          title: 'Key Idea',
+          verseReferences: [
+            {
+              startVerse: 1,
+              endVerse: 3,
+              book: 'Matthew',
+              chapter: 1,
+              verses: [1, 3],
+            },
+          ],
+        },
+      ];
+      const map = buildLinkedVerseMap(sections);
+      expect(map['Matthew:1:1']).toBeDefined();
+      expect(map['Matthew:1:2']).toBeUndefined();
+      expect(map['Matthew:1:3']).toBeDefined();
+    });
+  });
+
+  describe('stripVerseTags', () => {
+    it('strips canonical tags, compound tags, relative tags, and anchor links', () => {
+      const input = 'Insight [Matt 1:1, 3] and legacy [v. 5-7] with anchor [⚓ Rom 8:28](verse:Romans:8:28).';
+      const output = stripVerseTags(input);
+      expect(output).toBe('Insight  and legacy  with anchor .');
+    });
+
+    it('returns empty string when input is empty or falsy', () => {
+      expect(stripVerseTags('')).toBe('');
+      expect(stripVerseTags(null as any)).toBe('');
     });
   });
 

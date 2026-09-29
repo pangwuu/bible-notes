@@ -8,10 +8,12 @@ import {
   VerseSegment,
   MultiPassageSection,
 } from '../../services/bibleService';
-import { PassageReference } from '../../types/note';
+import { PassageReference, TargetVerseHighlight } from '../../types/note';
 import { BibleTranslation } from '../../types/user';
 import { LinkedSectionInfo, LinkedVerseData } from '../../utils/verseLinkUtils';
+import { findCanonicalBook } from '../../constants/bibleData';
 import { VerseItem } from './VerseItem';
+import { ActivePassageContext } from './useBibleReader';
 
 interface ScriptureViewProps {
   loading: boolean;
@@ -22,9 +24,10 @@ interface ScriptureViewProps {
   fontSize: number;
   showVerseNumbers: boolean;
   selectedVerses: Set<number>;
-  targetHighlightedVerse?: number | null;
+  activeContext?: ActivePassageContext | null;
+  targetHighlightedVerse?: TargetVerseHighlight | null;
   linkedVerseMap?: Record<string | number, LinkedVerseData | LinkedSectionInfo>;
-  onToggleVerse: (verseNum: number) => void;
+  onToggleVerse: (verseNum: number, context?: ActivePassageContext) => void;
   onRetry: () => void;
   actionSlot?: React.ReactNode;
 }
@@ -38,6 +41,7 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
   fontSize,
   showVerseNumbers,
   selectedVerses,
+  activeContext,
   targetHighlightedVerse,
   linkedVerseMap = {},
   onToggleVerse,
@@ -75,29 +79,50 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
   const sections = passageResult?.sections;
   const verses = passageResult?.verses || [];
 
-  const renderVerse = (v: VerseSegment, sec?: MultiPassageSection) => {
-    const isSelected = selectedVerses.has(v.verseNumber);
-    const isTargetHighlighted = targetHighlightedVerse === v.verseNumber;
-
-    // Resolve book and chapter for canonical link lookup
-    const resolvedSegment = sec?.segment || targetPassage?.segments?.[0];
-    const resolvedBook = resolvedSegment?.book;
+  const renderVerse = (v: VerseSegment, sec?: MultiPassageSection, secIdx?: number) => {
+    // Resolve book and chapter for this section
+    const resolvedSegment =
+      sec?.segment ||
+      (typeof secIdx === 'number' ? targetPassage?.segments?.[secIdx] : undefined) ||
+      targetPassage?.segments?.[0];
+    const rawBook = resolvedSegment?.book;
+    const resolvedBook = rawBook ? findCanonicalBook(rawBook)?.name || rawBook : undefined;
     const resolvedChapter = resolvedSegment?.startChapter;
+    const currentContext: ActivePassageContext = { book: resolvedBook, chapter: resolvedChapter };
+
+    // Selection check: verse must be in selectedVerses AND current context must match activeContext
+    const isContextMatch =
+      !activeContext ||
+      (activeContext.book === currentContext.book && activeContext.chapter === currentContext.chapter);
+    const isSelected = isContextMatch && selectedVerses.has(v.verseNumber);
+
+    // Target highlight check: support object { book, chapter, verses } or simple number
+    let isTargetHighlighted = false;
+    if (typeof targetHighlightedVerse === 'number') {
+      isTargetHighlighted = targetHighlightedVerse === v.verseNumber;
+    } else if (targetHighlightedVerse && typeof targetHighlightedVerse === 'object') {
+      const target = targetHighlightedVerse;
+      const targetBookCanon = target.book ? findCanonicalBook(target.book)?.name || target.book : undefined;
+      const currentBookCanon = currentContext.book ? findCanonicalBook(currentContext.book)?.name || currentContext.book : undefined;
+      const bookMatches = !targetBookCanon || !currentBookCanon || targetBookCanon === currentBookCanon;
+      const chapterMatches = !target.chapter || !currentContext.chapter || target.chapter === currentContext.chapter;
+      isTargetHighlighted = bookMatches && chapterMatches && Array.isArray(target.verses) && target.verses.includes(v.verseNumber);
+    }
 
     const canonicalKey = resolvedBook && resolvedChapter ? `${resolvedBook}:${resolvedChapter}:${v.verseNumber}` : undefined;
-    const linkedItem = (canonicalKey && linkedVerseMap[canonicalKey]) || linkedVerseMap[v.verseNumber];
+    const linkedItem = canonicalKey ? linkedVerseMap[canonicalKey] : linkedVerseMap[v.verseNumber];
     const linked = linkedItem ? ('primary' in linkedItem ? linkedItem.primary : linkedItem) : null;
 
     return (
       <VerseItem
-        key={v.verseNumber}
+        key={`${resolvedBook || ''}:${resolvedChapter || ''}:${v.verseNumber}`}
         verse={v}
         isSelected={isSelected}
         isTargetHighlighted={isTargetHighlighted}
         linkedSection={linked}
         showVerseNumbers={showVerseNumbers}
         fontSize={fontSize}
-        onToggle={onToggleVerse}
+        onToggle={(num) => onToggleVerse(num, currentContext)}
       />
     );
   };
@@ -114,7 +139,7 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
                 </Text>
               ) : null}
               <Text style={styles.verseParagraph}>
-                {sec.verses.map((v) => renderVerse(v, sec))}
+                {sec.verses.map((v) => renderVerse(v, sec, secIdx))}
               </Text>
             </View>
           ))

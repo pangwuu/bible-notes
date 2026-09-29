@@ -21,7 +21,7 @@ import Markdown from 'react-native-markdown-display';
 import { colors, spacing, radii, typography, markdownStyles } from '../../src/constants/theme';
 import { getSectionColor } from '../../src/constants/templates';
 import * as notesService from '../../src/services/notesService';
-import { Note, formatPassageDisplay, PassageReference, PassageSegment } from '../../src/types/note';
+import { Note, formatPassageDisplay, PassageReference, PassageSegment, TargetVerseHighlight } from '../../src/types/note';
 import { formatSegmentDisplay, createPassageReference } from '../../src/utils/passageParser';
 import { findCanonicalBook } from '../../src/constants/bibleData';
 import { useAuth } from '../../src/context/AuthContext';
@@ -31,7 +31,7 @@ import safeStorage from '../../src/utils/safeStorage';
 import { findFriendNoteOverlaps, FriendOverlapItem, segmentsOverlap } from '../../src/services/noteOverlapService';
 import VersePill from '../../src/components/VersePill';
 import VersePreviewModal from '../../src/components/VersePreviewModal';
-import { buildLinkedVerseMap, extractVerseRangeText } from '../../src/utils/verseLinkUtils';
+import { buildLinkedVerseMap, extractVerseRangeText, extractSelectedVersesText } from '../../src/utils/verseLinkUtils';
 import { fetchPassageText } from '../../src/services/bibleService';
 import NoteCard from '../../src/components/NoteCard';
 
@@ -49,16 +49,22 @@ export default function NoteDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [readerFontSize, setReaderFontSize] = useState<number>(16);
   const [activeSegmentIndex, setActiveSegmentIndex] = useState<number | null>(null);
-  const [targetHighlightedVerse, setTargetHighlightedVerse] = useState<number | null>(null);
+  const [targetHighlightedVerse, setTargetHighlightedVerse] = useState<TargetVerseHighlight | null>(null);
   const [previewVerseData, setPreviewVerseData] = useState<{
     visible: boolean;
     startVerse: number;
     endVerse: number;
+    book?: string;
+    chapter?: number;
+    verses?: number[];
     verseText: string;
-  }>({ visible: false, startVerse: 1, endVerse: 1, verseText: '' });
+    loading: boolean;
+  }>({ visible: false, startVerse: 1, endVerse: 1, verseText: '', loading: false });
 
   const scrollViewRef = useRef<ScrollView>(null);
   const sectionsContainerTop = useRef<number>(0);
+  const bibleReaderTop = useRef<number>(0);
+  const tocTop = useRef<number>(0);
   const sectionLayoutMap = useRef<Record<string, number>>({});
   const [targetHighlightedSection, setTargetHighlightedSection] = useState<string | null>(null);
 
@@ -129,6 +135,14 @@ export default function NoteDetailScreen() {
     }, [loadNote])
   );
 
+  const navigateBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/notes');
+    }
+  }, [router]);
+
   const handleDelete = () => {
     if (!note) return;
     Alert.alert('Delete Note', 'Are you sure you want to permanently delete this note?', [
@@ -139,7 +153,7 @@ export default function NoteDetailScreen() {
         onPress: async () => {
           try {
             await notesService.deleteNote(note.id);
-            router.back();
+            navigateBack();
           } catch {
             Alert.alert('Error', 'Failed to delete note.');
           }
@@ -152,7 +166,7 @@ export default function NoteDetailScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: 'Note',
+      title: note?.title || 'Note',
       headerRight: isAuthor
         ? () => (
             <View style={styles.headerActions}>
@@ -189,7 +203,18 @@ export default function NoteDetailScreen() {
   }, [normalizedSections]);
 
   const handleOpenVersePreview = useCallback(
-    async (startVerse: number, endVerse: number, context?: { book?: string; chapter?: number }) => {
+    async (startVerse: number, endVerse: number, context?: { book?: string; chapter?: number; verses?: number[] }) => {
+      setPreviewVerseData({
+        visible: true,
+        startVerse,
+        endVerse,
+        book: context?.book,
+        chapter: context?.chapter,
+        verses: context?.verses,
+        verseText: '',
+        loading: true,
+      });
+
       let targetPassage = note?.passage;
       if (context?.book) {
         const meta = findCanonicalBook(context.book);
@@ -213,44 +238,79 @@ export default function NoteDetailScreen() {
           }
         }
       }
-      if (!targetPassage) return;
+      if (!targetPassage) {
+        setPreviewVerseData((prev) => ({ ...prev, loading: false }));
+        return;
+      }
       try {
         const res = await fetchPassageText(targetPassage, {
           translation: profile?.settings?.preferred_translation || 'ESV',
           esvApiKey: profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key,
         });
-        const text = extractVerseRangeText(res.verses || [], startVerse, endVerse);
-        setPreviewVerseData({
-          visible: true,
-          startVerse,
-          endVerse,
+        const text =
+          context?.verses && context.verses.length > 0
+            ? extractSelectedVersesText(res.verses || [], context.verses)
+            : extractVerseRangeText(res.verses || [], startVerse, endVerse);
+        setPreviewVerseData((prev) => ({
+          ...prev,
           verseText: text,
-        });
+          loading: false,
+        }));
       } catch (err) {
         console.warn('Failed to load verse preview text:', err);
+        setPreviewVerseData((prev) => ({ ...prev, loading: false }));
       }
     },
     [note?.passage, profile]
   );
 
-  const handleScrollToVerse = useCallback((verseNum: number) => {
-    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-    setTargetHighlightedVerse(verseNum);
-    setTimeout(() => {
-      setTargetHighlightedVerse(null);
-    }, 2500);
-  }, []);
+  const handleScrollToVerse = useCallback(
+    (verseNum: number, context?: { book?: string; chapter?: number; verses?: number[] }) => {
+      // If the note has multiple segments, switch activeSegmentIndex to the matching segment (Option A)
+      if (context?.book && note?.passage?.segments && note.passage.segments.length > 0) {
+        const targetCanon = findCanonicalBook(context.book)?.name || context.book;
+        const matchIdx = note.passage.segments.findIndex((seg) => {
+          const segCanon = findCanonicalBook(seg.book)?.name || seg.book;
+          if (segCanon !== targetCanon) return false;
+          if (typeof context.chapter === 'number') {
+            return context.chapter >= seg.startChapter && context.chapter <= seg.endChapter;
+          }
+          return true;
+        });
+        if (matchIdx >= 0) {
+          setActiveSegmentIndex(matchIdx);
+        }
+      }
+
+      const scrollYTarget = tocTop.current > 0 ? tocTop.current : bibleReaderTop.current;
+      const targetY = scrollYTarget > 0 ? Math.max(0, scrollYTarget - 16) : 0;
+      scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+      if (context?.book || context?.chapter || context?.verses) {
+        setTargetHighlightedVerse({
+          book: context.book,
+          chapter: context.chapter,
+          verses: context.verses || [verseNum],
+        });
+      } else {
+        setTargetHighlightedVerse(verseNum);
+      }
+      setTimeout(() => {
+        setTargetHighlightedVerse(null);
+      }, 2500);
+    },
+    [note?.passage?.segments]
+  );
 
   const formatMarkdownWithVerseLinks = (rawText: string) => {
     if (!rawText) return '';
     return rawText
       .replace(
-        /\[([0-9]?\s*[A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+)[:.](\d+)(?:\s*[-–—]\s*(\d+))?\]/gi,
-        (_, b, c, s, e) => `[⚓ ${b.trim()} ${c}:${s}${e ? `–${e}` : ''}](verse:${encodeURIComponent(b.trim())}:${c}:${s}${e ? `-${e}` : ''})`
+        /\[([0-9]?\s*[A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+)[:.]((?:\d+(?:\s*[-–—]\s*\d+)?)(?:\s*,\s*\d+(?:\s*[-–—]\s*\d+)?)*)\]/gi,
+        (_, b, c, spec) => `[⚓ ${b.trim()} ${c}:${spec.replace(/\s+/g, '')}](verse:${encodeURIComponent(b.trim())}:${c}:${spec.replace(/\s+/g, '')})`
       )
       .replace(
-        /\[v\.?\s*(\d+)(?:\s*[-–—]\s*(\d+))?\]/gi,
-        (_, s, e) => `[⚓ v. ${s}${e ? `–${e}` : ''}](verse:${s}-${e || s})`
+        /\[v\.?\s*((?:\d+(?:\s*[-–—]\s*\d+)?)(?:\s*,\s*\d+(?:\s*[-–—]\s*\d+)?)*)\]/gi,
+        (_, spec) => `[⚓ v. ${spec.replace(/\s+/g, '')}](verse:${spec.replace(/\s+/g, '')})`
       );
   };
 
@@ -259,25 +319,42 @@ export default function NoteDetailScreen() {
       const payload = url.replace('verse:', '');
       const colonCount = (payload.match(/:/g) || []).length;
       if (colonCount >= 2) {
-        // Canonical: "Book:Chapter:Start-End" or "Book:Chapter:Verse"
+        // Canonical: "Book:Chapter:VerseSpec"
         const parts = payload.split(':');
         const book = decodeURIComponent(parts[0]);
         const chapter = parseInt(parts[1], 10);
-        const range = parts.slice(2).join(':');
-        const [startStr, endStr] = range.split('-');
-        const s = parseInt(startStr, 10);
-        const e = endStr ? parseInt(endStr, 10) : s;
-        if (!isNaN(s)) {
-          handleOpenVersePreview(s, isNaN(e) ? s : e, { book, chapter: isNaN(chapter) ? undefined : chapter });
+        const spec = parts.slice(2).join(':');
+        // Parse spec into verse list
+        const versesList: number[] = [];
+        spec.split(',').forEach((seg) => {
+          const [sStr, eStr] = seg.split('-');
+          const s = parseInt(sStr, 10);
+          const e = eStr ? parseInt(eStr, 10) : s;
+          if (!isNaN(s)) {
+            for (let v = s; v <= (isNaN(e) ? s : e); v++) versesList.push(v);
+          }
+        });
+        if (versesList.length > 0) {
+          const s = versesList[0];
+          const e = versesList[versesList.length - 1];
+          handleOpenVersePreview(s, e, { book, chapter: isNaN(chapter) ? undefined : chapter, verses: versesList });
           return false;
         }
       } else {
-        // Legacy: "Start-End" or "Start"
-        const [startStr, endStr] = payload.split('-');
-        const s = parseInt(startStr, 10);
-        const e = endStr ? parseInt(endStr, 10) : s;
-        if (!isNaN(s)) {
-          handleOpenVersePreview(s, isNaN(e) ? s : e);
+        // Legacy: "VerseSpec"
+        const versesList: number[] = [];
+        payload.split(',').forEach((seg) => {
+          const [sStr, eStr] = seg.split('-');
+          const s = parseInt(sStr, 10);
+          const e = eStr ? parseInt(eStr, 10) : s;
+          if (!isNaN(s)) {
+            for (let v = s; v <= (isNaN(e) ? s : e); v++) versesList.push(v);
+          }
+        });
+        if (versesList.length > 0) {
+          const s = versesList[0];
+          const e = versesList[versesList.length - 1];
+          handleOpenVersePreview(s, e, { verses: versesList });
           return false;
         }
       }
@@ -297,7 +374,7 @@ export default function NoteDetailScreen() {
     return (
       <View style={[styles.screen, styles.center]}>
         <Text style={styles.errorText}>{error || 'Note not found'}</Text>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable onPress={navigateBack} style={styles.backBtn}>
           <Text style={styles.backBtnText}>Go Back</Text>
         </Pressable>
       </View>
@@ -369,9 +446,22 @@ export default function NoteDetailScreen() {
         </View>
       )}
 
+      {/* Prominent Note Title & Passage Subtitle Header */}
+      {note.title ? (
+        <View style={styles.titleHeaderBox}>
+          <Text style={styles.noteTitleText}>{note.title}</Text>
+          <Text style={styles.noteSubpassageText}>{formatPassageDisplay(note.passage)}</Text>
+        </View>
+      ) : null}
+
       {/* Interactive Table of Contents (Passage Segments) */}
       {note.passage?.segments && note.passage.segments.length > 0 && (
-        <View style={styles.tocContainer}>
+        <View
+          style={styles.tocContainer}
+          onLayout={(e) => {
+            tocTop.current = e.nativeEvent.layout.y;
+          }}
+        >
           <View style={styles.tocHeaderRow}>
             <Ionicons name="list-outline" size={14} color={colors.accent.keyIdea} />
             <Text style={styles.tocTitle}>Table of Contents</Text>
@@ -422,28 +512,34 @@ export default function NoteDetailScreen() {
       )}
 
       {/* Live Scripture Reading Card with Multi-Translation Comparison */}
-      <BibleReader
-        passage={note.passage}
-        activeSegment={activeSegmentPassage}
-        fontSize={readerFontSize}
-        preferredTranslation={profile?.settings?.preferred_translation || 'ESV'}
-        customApiKey={profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key}
-        initiallyCollapsed={false}
-        linkedVerseMap={linkedVerseMap}
-        onJumpToSection={(sectionId) => {
-          setTargetHighlightedSection(sectionId);
-          setTimeout(() => {
-            setTargetHighlightedSection(null);
-          }, 2500);
-
-          const secY = sectionLayoutMap.current[sectionId];
-          if (typeof secY === 'number') {
-            const targetY = sectionsContainerTop.current + secY;
-            scrollViewRef.current?.scrollTo({ y: Math.max(0, targetY - 16), animated: true });
-          }
+      <View
+        onLayout={(e) => {
+          bibleReaderTop.current = e.nativeEvent.layout.y;
         }}
-        targetHighlightedVerse={targetHighlightedVerse}
-      />
+      >
+        <BibleReader
+          passage={note.passage}
+          activeSegment={activeSegmentPassage}
+          fontSize={readerFontSize}
+          preferredTranslation={profile?.settings?.preferred_translation || 'ESV'}
+          customApiKey={profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key}
+          initiallyCollapsed={false}
+          linkedVerseMap={linkedVerseMap}
+          onJumpToSection={(sectionId) => {
+            setTargetHighlightedSection(sectionId);
+            setTimeout(() => {
+              setTargetHighlightedSection(null);
+            }, 2500);
+
+            const secY = sectionLayoutMap.current[sectionId];
+            if (typeof secY === 'number') {
+              const targetY = sectionsContainerTop.current + secY;
+              scrollViewRef.current?.scrollTo({ y: Math.max(0, targetY - 16), animated: true });
+            }
+          }}
+          targetHighlightedVerse={targetHighlightedVerse}
+        />
+      </View>
 
       {/* Note Template Sections */}
       <View
@@ -487,8 +583,11 @@ export default function NoteDetailScreen() {
                       endVerse={ref.endVerse}
                       book={ref.book}
                       chapter={ref.chapter}
+                      verses={ref.verses}
                       color={secColor}
-                      onPress={() => handleOpenVersePreview(ref.startVerse, ref.endVerse, { book: ref.book, chapter: ref.chapter })}
+                      onPress={() => {
+                        handleOpenVersePreview(ref.startVerse, ref.endVerse, { book: ref.book, chapter: ref.chapter, verses: ref.verses });
+                      }}
                     />
                   ))}
                 </View>
@@ -668,10 +767,20 @@ export default function NoteDetailScreen() {
         passageRef={note.passage ? formatPassageDisplay(note.passage) : ''}
         startVerse={previewVerseData.startVerse}
         endVerse={previewVerseData.endVerse}
+        book={previewVerseData.book}
+        chapter={previewVerseData.chapter}
+        verses={previewVerseData.verses}
         verseText={previewVerseData.verseText}
+        loading={previewVerseData.loading}
         translation={profile?.settings?.preferred_translation || 'ESV'}
         onClose={() => setPreviewVerseData((prev) => ({ ...prev, visible: false }))}
-        onViewInContext={() => handleScrollToVerse(previewVerseData.startVerse)}
+        onViewInContext={() =>
+          handleScrollToVerse(previewVerseData.startVerse, {
+            book: previewVerseData.book,
+            chapter: previewVerseData.chapter,
+            verses: previewVerseData.verses,
+          })
+        }
       />
     </ScrollView>
   );
@@ -704,6 +813,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: spacing.sm,
+  },
+  titleHeaderBox: {
+    marginBottom: spacing.md,
+  },
+  noteTitleText: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.text.primary,
+    lineHeight: 30,
+    marginBottom: 4,
+  },
+  noteSubpassageText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: colors.text.secondary,
+    lineHeight: 20,
   },
   emptyReflectionCard: {
     backgroundColor: colors.bg.surface,

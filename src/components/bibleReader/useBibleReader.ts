@@ -10,7 +10,7 @@ import {
 } from '../../services/bibleService';
 import {
   formatVerseRangeLabel,
-  extractVerseRangeText,
+  extractSelectedVersesText,
   getLinkedSectionsForVerses,
   LinkedSectionInfo,
 } from '../../utils/verseLinkUtils';
@@ -19,6 +19,11 @@ import {
   DEFAULT_SECTION_OPTIONS,
   SectionOption,
 } from './types';
+
+export interface ActivePassageContext {
+  book?: string;
+  chapter?: number;
+}
 
 export function useBibleReader({
   passage,
@@ -29,6 +34,7 @@ export function useBibleReader({
   fontSize: propFontSize,
   linkedVerseMap = {},
   sectionOptions,
+  targetHighlightedVerse,
 }: BibleReaderProps) {
   const [selectedTranslation, setSelectedTranslation] = useState<BibleTranslation>(preferredTranslation);
   const [passageResult, setPassageResult] = useState<PassageFetchResult | null>(null);
@@ -37,6 +43,14 @@ export function useBibleReader({
   const [showVerseNumbers, setShowVerseNumbers] = useState<boolean>(true);
   const [fontSize, setFontSize] = useState<number>(propFontSize || 16);
   const [selectedVerses, setSelectedVerses] = useState<Set<number>>(new Set());
+  const [activeContext, setActiveContext] = useState<ActivePassageContext | null>(null);
+
+  // Auto-uncollapse reader when a target verse is highlighted
+  useEffect(() => {
+    if (targetHighlightedVerse && collapsed) {
+      setCollapsed(false);
+    }
+  }, [targetHighlightedVerse, collapsed]);
 
   const targetPassage: PassageReference = useMemo(() => {
     return activeSegment || passage;
@@ -112,6 +126,7 @@ export function useBibleReader({
   );
 
   useEffect(() => {
+    setPassageResult(null);
     loadPassage(selectedTranslation);
   }, [loadPassage, selectedTranslation]);
 
@@ -119,6 +134,7 @@ export function useBibleReader({
     setSelectedTranslation((prev) => {
       if (trans !== prev) {
         setSelectedVerses(new Set());
+        setActiveContext(null);
         return trans;
       }
       return prev;
@@ -136,21 +152,45 @@ export function useBibleReader({
       !loading
   );
 
-  // Verse selection toggle
-  const handleToggleVerse = useCallback((verseNum: number) => {
-    setSelectedVerses((prev) => {
-      const next = new Set(prev);
-      if (next.has(verseNum)) {
-        next.delete(verseNum);
-      } else {
-        next.add(verseNum);
+  // Verse selection toggle with context scoping
+  const handleToggleVerse = useCallback((verseNum: number, context?: ActivePassageContext) => {
+    setActiveContext((prevContext) => {
+      const isSameContext =
+        !prevContext ||
+        !context ||
+        (prevContext.book === context.book && prevContext.chapter === context.chapter);
+
+      if (!isSameContext) {
+        // Switched passage or chapter: reset selection to single newly selected verse
+        setSelectedVerses(new Set([verseNum]));
+        return context || null;
       }
-      return next;
+
+      // Same context: toggle verse
+      setSelectedVerses((prevVerses) => {
+        const next = new Set(prevVerses);
+        if (next.has(verseNum)) {
+          next.delete(verseNum);
+        } else {
+          next.add(verseNum);
+        }
+        return next;
+      });
+
+      return context || prevContext;
     });
   }, []);
 
+  // Reset activeContext if selectedVerses becomes empty
+  useEffect(() => {
+    if (selectedVerses.size === 0) {
+      setActiveContext(null);
+    }
+  }, [selectedVerses]);
+
   const clearSelectedVerses = useCallback(() => {
     setSelectedVerses(new Set());
+    setActiveContext(null);
   }, []);
 
   const sortedSelectedVerses = useMemo(() => {
@@ -159,23 +199,29 @@ export function useBibleReader({
 
   // Compute all unique linked sections across selected verses
   const linkedSectionsToJump: LinkedSectionInfo[] = useMemo(() => {
-    return getLinkedSectionsForVerses(sortedSelectedVerses, linkedVerseMap);
-  }, [sortedSelectedVerses, linkedVerseMap]);
+    return getLinkedSectionsForVerses(sortedSelectedVerses, linkedVerseMap, activeContext || undefined);
+  }, [sortedSelectedVerses, linkedVerseMap, activeContext]);
 
-  // Share selected verses
+  // Share selected verses (discrete verses only)
   const handleShareSelected = useCallback(async () => {
     if (sortedSelectedVerses.length === 0) return;
-    const start = sortedSelectedVerses[0];
-    const end = sortedSelectedVerses[sortedSelectedVerses.length - 1];
-    const text = extractVerseRangeText(passageResult?.verses || [], start, end);
-    const rangeLabel = formatVerseRangeLabel(start, end);
-    const message = `"${text}"\n\n— ${passageDisplay} (${rangeLabel}) [${selectedTranslation}]`;
+    const text = extractSelectedVersesText(passageResult?.verses || [], sortedSelectedVerses);
+    const rangeLabel = formatVerseRangeLabel(
+      sortedSelectedVerses[0],
+      sortedSelectedVerses[sortedSelectedVerses.length - 1],
+      activeContext || undefined,
+      sortedSelectedVerses
+    );
+    const citation = activeContext?.book
+      ? `${rangeLabel} [${selectedTranslation}]`
+      : `${passageDisplay} (${rangeLabel}) [${selectedTranslation}]`;
+    const message = `"${text}"\n\n— ${citation}`;
     try {
       await Share.share({ message });
     } catch (err) {
       console.warn('Share error:', err);
     }
-  }, [sortedSelectedVerses, passageResult?.verses, passageDisplay, selectedTranslation]);
+  }, [sortedSelectedVerses, passageResult?.verses, passageDisplay, selectedTranslation, activeContext]);
 
   const availableSections: SectionOption[] = useMemo(() => {
     return sectionOptions && sectionOptions.length > 0 ? sectionOptions : DEFAULT_SECTION_OPTIONS;
@@ -196,6 +242,7 @@ export function useBibleReader({
     fontSize,
     selectedVerses,
     sortedSelectedVerses,
+    activeContext,
     targetPassage,
     passageDisplay,
     isOfflineEmpty,

@@ -64,7 +64,11 @@ export default function FriendProfileScreen() {
     try {
       await unfriend(friendshipId);
       setShowUnfriendDialog(false);
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)/friends');
+      }
     } catch (err) {
       console.error('Failed to unfriend user:', err);
       setUnfriending(false);

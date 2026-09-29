@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radii, typography } from '../constants/theme';
@@ -17,7 +18,11 @@ export interface VersePreviewModalProps {
   passageRef: string;
   startVerse: number;
   endVerse: number;
+  book?: string;
+  chapter?: number;
+  verses?: number[];
   verseText: string;
+  loading?: boolean;
   translation?: string;
   onViewInContext?: () => void;
 }
@@ -28,11 +33,17 @@ export default function VersePreviewModal({
   passageRef,
   startVerse,
   endVerse,
+  book,
+  chapter,
+  verses,
   verseText,
+  loading = false,
   translation = 'ESV',
   onViewInContext,
 }: VersePreviewModalProps) {
-  const rangeLabel = formatVerseRangeLabel(startVerse, endVerse);
+  const title = book
+    ? formatVerseRangeLabel(startVerse, endVerse, { book, chapter }, verses)
+    : `${passageRef} (${formatVerseRangeLabel(startVerse, endVerse, undefined, verses)})`;
 
   return (
     <Modal
@@ -41,14 +52,23 @@ export default function VersePreviewModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheetContainer} onPress={(e) => e.stopPropagation()}>
+      <View style={styles.modalRoot}>
+        {/* Backdrop overlay */}
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss verse preview"
+        />
+
+        {/* Bottom Sheet Container */}
+        <View style={styles.sheetContainer}>
           {/* Header Row */}
           <View style={styles.headerRow}>
             <View style={styles.headerLeft}>
               <Ionicons name="book-outline" size={18} color={colors.accent.keyIdea} />
               <Text style={styles.headerTitle} numberOfLines={1}>
-                {passageRef} ({rangeLabel})
+                {title}
               </Text>
               <View style={styles.translationBadge}>
                 <Text style={styles.translationText}>{translation}</Text>
@@ -69,11 +89,21 @@ export default function VersePreviewModal({
           <View style={styles.divider} />
 
           {/* Verse Content */}
-          <ScrollView style={styles.scrollBody} contentContainerStyle={styles.scrollContent}>
-            {verseText ? (
+          <ScrollView
+            style={styles.scrollBody}
+            contentContainerStyle={styles.scrollContent}
+            bounces={true}
+            showsVerticalScrollIndicator={true}
+          >
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color={colors.accent.keyIdea} />
+                <Text style={styles.emptyText}>Loading Scripture text...</Text>
+              </View>
+            ) : verseText ? (
               <Text style={styles.verseText}>{verseText}</Text>
             ) : (
-              <Text style={styles.emptyText}>Loading Scripture text...</Text>
+              <Text style={styles.emptyText}>No Scripture text available.</Text>
             )}
           </ScrollView>
 
@@ -94,14 +124,14 @@ export default function VersePreviewModal({
               </Pressable>
             </View>
           )}
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  modalRoot: {
     flex: 1,
     backgroundColor: 'rgba(26, 24, 22, 0.75)',
     justifyContent: 'flex-end',
@@ -112,7 +142,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radii.sheet,
     borderTopWidth: 1,
     borderColor: colors.border.hairline,
-    maxHeight: '60%',
+    maxHeight: '80%',
+    minHeight: 180,
     paddingBottom: spacing.lg,
   },
   headerRow: {
@@ -157,10 +188,18 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md,
   },
   scrollBody: {
-    maxHeight: 280,
+    flexGrow: 0,
+    flexShrink: 1,
   },
   scrollContent: {
     padding: spacing.md,
+    flexGrow: 1,
+  },
+  loadingContainer: {
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
   },
   verseText: {
     fontFamily: typography.body.fontFamily,

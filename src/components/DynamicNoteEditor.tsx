@@ -35,7 +35,7 @@ export interface DynamicNoteEditorProps {
   suggestionTags?: string[];
   templateSelector?: React.ReactNode;
   onFocusTagInput?: () => void;
-  onPreviewVerse?: (startVerse: number, endVerse: number, context?: { book?: string; chapter?: number }) => void;
+  onPreviewVerse?: (startVerse: number, endVerse: number, context?: { book?: string; chapter?: number; verses?: number[] }) => void;
   onRemoveVerseReference?: (sectionIndex: number, referenceIndex: number) => void;
   onSectionLayout?: (sectionId: string, y: number) => void;
 }
@@ -185,8 +185,9 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
                       endVerse={ref.endVerse}
                       book={ref.book}
                       chapter={ref.chapter}
+                      verses={ref.verses}
                       color={color}
-                      onPress={() => onPreviewVerse?.(ref.startVerse, ref.endVerse, { book: ref.book, chapter: ref.chapter })}
+                      onPress={() => onPreviewVerse?.(ref.startVerse, ref.endVerse, { book: ref.book, chapter: ref.chapter, verses: ref.verses })}
                       onRemove={() => onRemoveVerseReference?.(idx, rIdx)}
                     />
                   ))}

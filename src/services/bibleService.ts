@@ -549,7 +549,15 @@ export async function fetchPassageText(
       try {
         const cached = await safeStorage.getItem(compoundCacheKey);
         if (cached) {
-          return JSON.parse(cached) as PassageFetchResult;
+          const parsed = JSON.parse(cached) as PassageFetchResult;
+          if (parsed.sections && passageInput.segments) {
+            parsed.sections.forEach((s, idx) => {
+              if (!s.segment && passageInput.segments[idx]) {
+                s.segment = passageInput.segments[idx];
+              }
+            });
+          }
+          return parsed;
         }
       } catch {}
     }
