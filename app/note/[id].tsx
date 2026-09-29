@@ -26,14 +26,14 @@ import { formatSegmentDisplay, createPassageReference } from '../../src/utils/pa
 import { findCanonicalBook } from '../../src/constants/bibleData';
 import { useAuth } from '../../src/context/AuthContext';
 import BibleReader from '../../src/components/BibleReader';
-import safeStorage from '../../src/utils/safeStorage';
 import { findFriendNoteOverlaps, FriendOverlapItem, segmentsOverlap } from '../../src/services/noteOverlapService';
 import VersePill from '../../src/components/VersePill';
-import VersePreviewModal from '../../src/components/VersePreviewModal';
 import FriendActivityLoadingIndicator from '../../src/components/FriendActivityLoadingIndicator';
-import { buildLinkedVerseMap, extractVerseRangeText, extractSelectedVersesText } from '../../src/utils/verseLinkUtils';
-import { fetchPassageText } from '../../src/services/bibleService';
+import { buildLinkedVerseMap } from '../../src/utils/verseLinkUtils';
 import NoteCard from '../../src/components/NoteCard';
+import { useReaderFontSize } from '../../src/hooks/useReaderFontSize';
+import { useVersePreview } from '../../src/hooks/useVersePreview';
+import { TOCSegmentBar } from '../../src/components/note/TOCSegmentBar';
 
 export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -48,20 +48,10 @@ export default function NoteDetailScreen() {
   const [showRelatedNotes, setShowRelatedNotes] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [readerFontSize, setReaderFontSize] = useState<number>(16);
+  const { readerFontSize, setReaderFontSize } = useReaderFontSize(16);
   const [activeSegmentIndex, setActiveSegmentIndex] = useState<number | null>(null);
   const [targetHighlightedVerse, setTargetHighlightedVerse] = useState<TargetVerseHighlight | null>(null);
   const [showAllOverlaps, setShowAllOverlaps] = useState<boolean>(false);
-  const [previewVerseData, setPreviewVerseData] = useState<{
-    visible: boolean;
-    startVerse: number;
-    endVerse: number;
-    book?: string;
-    chapter?: number;
-    verses?: number[];
-    verseText: string;
-    loading: boolean;
-  }>({ visible: false, startVerse: 1, endVerse: 1, verseText: '', loading: false });
 
   const scrollViewRef = useRef<ScrollView>(null);
   const sectionsContainerTop = useRef<number>(0);
@@ -78,20 +68,57 @@ export default function NoteDetailScreen() {
     return createPassageReference([note.passage.segments[activeSegmentIndex]]);
   }, [note?.passage, activeSegmentIndex]);
 
-  useEffect(() => {
-    let isMounted = true;
-    safeStorage.getItem('bible_font_size').then((stored) => {
-      if (isMounted && stored !== null) {
-        const parsed = parseInt(stored, 10);
-        if (!isNaN(parsed) && parsed >= 12 && parsed <= 26) {
-          setReaderFontSize(parsed);
+  const handleScrollToVerse = useCallback(
+    (verseNum: number, context?: { book?: string; chapter?: number; verses?: number[] }) => {
+      // If the note has multiple segments, switch activeSegmentIndex to the matching segment (Option A)
+      if (context?.book && note?.passage?.segments && note.passage.segments.length > 0) {
+        const targetCanon = findCanonicalBook(context.book)?.name || context.book;
+        const matchIdx = note.passage.segments.findIndex((seg) => {
+          const segCanon = findCanonicalBook(seg.book)?.name || seg.book;
+          if (segCanon !== targetCanon) return false;
+          if (typeof context.chapter === 'number') {
+            return context.chapter >= seg.startChapter && context.chapter <= seg.endChapter;
+          }
+          return true;
+        });
+        if (matchIdx >= 0) {
+          setActiveSegmentIndex(matchIdx);
         }
       }
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+
+      const scrollYTarget = tocTop.current > 0 ? tocTop.current : bibleReaderTop.current;
+      const targetY = scrollYTarget > 0 ? Math.max(0, scrollYTarget - 16) : 0;
+      scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+      if (context?.book || context?.chapter || context?.verses) {
+        setTargetHighlightedVerse({
+          book: context.book,
+          chapter: context.chapter,
+          verses: context.verses || [verseNum],
+        });
+      } else {
+        setTargetHighlightedVerse(verseNum);
+      }
+      setTimeout(() => {
+        setTargetHighlightedVerse(null);
+      }, 2500);
+    },
+    [note?.passage?.segments]
+  );
+
+  const {
+    openVersePreview: handleOpenVersePreview,
+    renderVersePreviewModal,
+  } = useVersePreview({
+    passage: note?.passage,
+    translation: profile?.settings?.preferred_translation || 'ESV',
+    esvApiKey: profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key,
+    onViewInContext: (data) =>
+      handleScrollToVerse(data.startVerse, {
+        book: data.book,
+        chapter: data.chapter,
+        verses: data.verses,
+      }),
+  });
 
   const loadNote = useCallback(async () => {
     try {
@@ -218,105 +245,6 @@ export default function NoteDetailScreen() {
     return buildLinkedVerseMap(normalizedSections);
   }, [normalizedSections]);
 
-  const handleOpenVersePreview = useCallback(
-    async (startVerse: number, endVerse: number, context?: { book?: string; chapter?: number; verses?: number[] }) => {
-      setPreviewVerseData({
-        visible: true,
-        startVerse,
-        endVerse,
-        book: context?.book,
-        chapter: context?.chapter,
-        verses: context?.verses,
-        verseText: '',
-        loading: true,
-      });
-
-      let targetPassage = note?.passage;
-      if (context?.book) {
-        const meta = findCanonicalBook(context.book);
-        if (meta) {
-          const ch =
-            typeof context.chapter === 'number' && context.chapter >= 1 && context.chapter <= meta.chapters
-              ? context.chapter
-              : note?.passage?.segments?.[0]?.startChapter || 1;
-          try {
-            targetPassage = createPassageReference([
-              {
-                book: meta.name,
-                startChapter: ch,
-                startVerse,
-                endChapter: ch,
-                endVerse,
-              },
-            ]);
-          } catch (createErr) {
-            console.warn('Failed to build passage reference for preview:', createErr);
-          }
-        }
-      }
-      if (!targetPassage) {
-        setPreviewVerseData((prev) => ({ ...prev, loading: false }));
-        return;
-      }
-      try {
-        const res = await fetchPassageText(targetPassage, {
-          translation: profile?.settings?.preferred_translation || 'ESV',
-          esvApiKey: profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key,
-        });
-        const text =
-          context?.verses && context.verses.length > 0
-            ? extractSelectedVersesText(res.verses || [], context.verses)
-            : extractVerseRangeText(res.verses || [], startVerse, endVerse);
-        setPreviewVerseData((prev) => ({
-          ...prev,
-          verseText: text,
-          loading: false,
-        }));
-      } catch (err) {
-        console.warn('Failed to load verse preview text:', err);
-        setPreviewVerseData((prev) => ({ ...prev, loading: false }));
-      }
-    },
-    [note?.passage, profile]
-  );
-
-  const handleScrollToVerse = useCallback(
-    (verseNum: number, context?: { book?: string; chapter?: number; verses?: number[] }) => {
-      // If the note has multiple segments, switch activeSegmentIndex to the matching segment (Option A)
-      if (context?.book && note?.passage?.segments && note.passage.segments.length > 0) {
-        const targetCanon = findCanonicalBook(context.book)?.name || context.book;
-        const matchIdx = note.passage.segments.findIndex((seg) => {
-          const segCanon = findCanonicalBook(seg.book)?.name || seg.book;
-          if (segCanon !== targetCanon) return false;
-          if (typeof context.chapter === 'number') {
-            return context.chapter >= seg.startChapter && context.chapter <= seg.endChapter;
-          }
-          return true;
-        });
-        if (matchIdx >= 0) {
-          setActiveSegmentIndex(matchIdx);
-        }
-      }
-
-      const scrollYTarget = tocTop.current > 0 ? tocTop.current : bibleReaderTop.current;
-      const targetY = scrollYTarget > 0 ? Math.max(0, scrollYTarget - 16) : 0;
-      scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
-      if (context?.book || context?.chapter || context?.verses) {
-        setTargetHighlightedVerse({
-          book: context.book,
-          chapter: context.chapter,
-          verses: context.verses || [verseNum],
-        });
-      } else {
-        setTargetHighlightedVerse(verseNum);
-      }
-      setTimeout(() => {
-        setTargetHighlightedVerse(null);
-      }, 2500);
-    },
-    [note?.passage?.segments]
-  );
-
   const formatMarkdownWithVerseLinks = (rawText: string) => {
     if (!rawText) return '';
     return rawText
@@ -380,8 +308,15 @@ export default function NoteDetailScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.screen, styles.center]}>
-        <ActivityIndicator size="large" color={colors.accent.keyIdea} />
+      <View style={[styles.screen, styles.loadingScreen]}>
+        <View style={styles.loadingHeaderPlaceholder}>
+          <View style={styles.loadingTitleBar} />
+          <View style={styles.loadingSubtitleBar} />
+        </View>
+        <View style={styles.loadingCenterContent}>
+          <ActivityIndicator size="small" color={colors.accent.keyIdea} />
+          <Text style={styles.loadingText}>Loading note...</Text>
+        </View>
       </View>
     );
   }
@@ -492,59 +427,14 @@ export default function NoteDetailScreen() {
 
       {/* Interactive Table of Contents (Passage Segments) */}
       {note.passage?.segments && note.passage.segments.length > 0 && (
-        <View
-          style={styles.tocContainer}
-          onLayout={(e) => {
-            tocTop.current = e.nativeEvent.layout.y;
+        <TOCSegmentBar
+          segments={note.passage.segments}
+          activeSegmentIndex={activeSegmentIndex}
+          onSelectSegment={setActiveSegmentIndex}
+          onLayout={(y) => {
+            tocTop.current = y;
           }}
-        >
-          <View style={styles.tocHeaderRow}>
-            <Ionicons name="list-outline" size={14} color={colors.accent.keyIdea} />
-            <Text style={styles.tocTitle}>Table of Contents</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tocList}>
-            {note.passage.segments.length > 1 && (
-              <Pressable
-                onPress={() => setActiveSegmentIndex(null)}
-                style={[
-                  styles.tocPill,
-                  activeSegmentIndex === null && styles.tocPillActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.tocPillText,
-                    activeSegmentIndex === null && styles.tocPillTextActive,
-                  ]}
-                >
-                  All Passages ({note.passage.segments.length})
-                </Text>
-              </Pressable>
-            )}
-            {note.passage.segments.map((seg, idx) => {
-              const isActive = activeSegmentIndex === idx;
-              return (
-                <Pressable
-                  key={idx}
-                  onPress={() => setActiveSegmentIndex(isActive ? null : idx)}
-                  style={[
-                    styles.tocPill,
-                    isActive && styles.tocPillActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.tocPillText,
-                      isActive && styles.tocPillTextActive,
-                    ]}
-                  >
-                    {formatSegmentDisplay(seg)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
+        />
       )}
 
       {/* Live Scripture Reading Card with Multi-Translation Comparison */}
@@ -801,26 +691,7 @@ export default function NoteDetailScreen() {
       )}
 
       {/* Verse Preview Bottom Sheet Modal */}
-      <VersePreviewModal
-        visible={previewVerseData.visible}
-        passageRef={note.passage ? formatPassageDisplay(note.passage) : ''}
-        startVerse={previewVerseData.startVerse}
-        endVerse={previewVerseData.endVerse}
-        book={previewVerseData.book}
-        chapter={previewVerseData.chapter}
-        verses={previewVerseData.verses}
-        verseText={previewVerseData.verseText}
-        loading={previewVerseData.loading}
-        translation={profile?.settings?.preferred_translation || 'ESV'}
-        onClose={() => setPreviewVerseData((prev) => ({ ...prev, visible: false }))}
-        onViewInContext={() =>
-          handleScrollToVerse(previewVerseData.startVerse, {
-            book: previewVerseData.book,
-            chapter: previewVerseData.chapter,
-            verses: previewVerseData.verses,
-          })
-        }
-      />
+      {renderVersePreviewModal()}
     </ScrollView>
   );
 }
@@ -1047,52 +918,6 @@ const styles = StyleSheet.create({
   backBtnText: {
     color: colors.text.primary,
   },
-  tocContainer: {
-    backgroundColor: colors.bg.surface,
-    borderRadius: radii.content,
-    borderWidth: 1,
-    borderColor: colors.border.hairline,
-    padding: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  tocHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: spacing.xs,
-    paddingHorizontal: 2,
-  },
-  tocTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.accent.keyIdea,
-  },
-  tocList: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    paddingVertical: 2,
-  },
-  tocPill: {
-    backgroundColor: colors.bg.surfaceRaised,
-    borderRadius: radii.controls,
-    borderWidth: 1,
-    borderColor: colors.border.hairline,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-  },
-  tocPillActive: {
-    backgroundColor: 'rgba(227, 165, 61, 0.15)',
-    borderColor: colors.accent.keyIdea,
-  },
-  tocPillText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.text.secondary,
-  },
-  tocPillTextActive: {
-    color: colors.accent.keyIdea,
-    fontWeight: '700',
-  },
   pillBar: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1125,5 +950,40 @@ const styles = StyleSheet.create({
   relatedNotesList: {
     gap: spacing.sm,
     marginTop: spacing.xs,
+  },
+  loadingScreen: {
+    padding: spacing.md,
+    paddingTop: spacing.lg,
+  },
+  loadingHeaderPlaceholder: {
+    backgroundColor: colors.bg.surface,
+    borderRadius: radii.controls,
+    borderWidth: 1,
+    borderColor: colors.border.hairline,
+    padding: spacing.md,
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
+  },
+  loadingTitleBar: {
+    height: 22,
+    width: '65%',
+    backgroundColor: colors.bg.surfaceRaised,
+    borderRadius: radii.content,
+  },
+  loadingSubtitleBar: {
+    height: 14,
+    width: '40%',
+    backgroundColor: colors.bg.surfaceRaised,
+    borderRadius: radii.content,
+  },
+  loadingCenterContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xl,
+  },
+  loadingText: {
+    ...typography.caption,
+    color: colors.text.secondary,
   },
 });

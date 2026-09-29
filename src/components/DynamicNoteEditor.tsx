@@ -38,6 +38,7 @@ export interface DynamicNoteEditorProps {
   onPreviewVerse?: (startVerse: number, endVerse: number, context?: { book?: string; chapter?: number; verses?: number[] }) => void;
   onRemoveVerseReference?: (sectionIndex: number, referenceIndex: number) => void;
   onSectionLayout?: (sectionId: string, y: number) => void;
+  onSectionContentSizeChange?: (sectionId: string, width: number, height: number) => void;
 }
 
 const COMMON_TAG_SUGGESTIONS = [
@@ -70,6 +71,7 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
   onPreviewVerse,
   onRemoveVerseReference,
   onSectionLayout,
+  onSectionContentSizeChange,
 }) => {
   const combinedSuggestions = useMemo(() => {
     return Array.from(new Set([...(suggestionTags || []), ...COMMON_TAG_SUGGESTIONS]));
@@ -198,6 +200,15 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
               <TextInput
                 value={section.content}
                 onChangeText={(val) => onChangeSection(idx, val)}
+                onContentSizeChange={(e) => {
+                  if (section.id) {
+                    onSectionContentSizeChange?.(
+                      section.id,
+                      e.nativeEvent.contentSize.width,
+                      e.nativeEvent.contentSize.height
+                    );
+                  }
+                }}
                 onBlur={onBlur}
                 placeholder={placeholder}
                 placeholderTextColor={colors.text.secondary}
@@ -309,7 +320,8 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.text.primary,
     minHeight: 64,
-    paddingVertical: 4,
+    paddingTop: 4,
+    paddingBottom: 28,
     paddingHorizontal: 0,
     backgroundColor: 'transparent',
   },

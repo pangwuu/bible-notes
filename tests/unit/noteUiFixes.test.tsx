@@ -108,4 +108,48 @@ describe('Note UI Bug Fixes', () => {
       expect(note.arrowContent).toBe('Application');
     });
   });
+
+  describe('DynamicNoteEditor keyboard auto-suggestion clearance and callbacks', () => {
+    it('applies paddingBottom to unborderedInput and triggers onSectionContentSizeChange', () => {
+      const onContentSizeChangeMock = jest.fn();
+
+      let component: renderer.ReactTestRenderer | undefined;
+      act(() => {
+        component = renderer.create(
+          <DynamicNoteEditor
+            template={DEFAULT_TEMPLATE}
+            sections={[{ id: 'light', title: 'Key Idea', icon: 'bulb-outline', content: 'Sample' }]}
+            tags={[]}
+            visibility="friends"
+            onChangeSection={jest.fn()}
+            onAddTag={jest.fn()}
+            onRemoveTag={jest.fn()}
+            onChangeVisibility={jest.fn()}
+            onSectionContentSizeChange={onContentSizeChangeMock}
+          />
+        );
+      });
+
+      const root = component!.root;
+      const inputs = root.findAllByType(TextInput);
+      const sectionInput = inputs.find(
+        (i) => i.props.placeholder === DEFAULT_TEMPLATE.sections[0].placeholder
+      );
+      expect(sectionInput).toBeTruthy();
+      expect(sectionInput!.props.style).toEqual(
+        expect.objectContaining({
+          paddingBottom: 28,
+        })
+      );
+
+      act(() => {
+        sectionInput!.props.onContentSizeChange({
+          nativeEvent: { contentSize: { width: 350, height: 120 } },
+        });
+      });
+
+      expect(onContentSizeChangeMock).toHaveBeenCalledWith('light', 350, 120);
+    });
+  });
 });
+

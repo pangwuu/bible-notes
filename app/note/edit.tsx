@@ -18,7 +18,9 @@ import {
   Keyboard,
   TextInput,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRouter, useLocalSearchParams } from 'expo-router';
@@ -29,7 +31,6 @@ import TemplateManagerModal from '../../src/components/TemplateManagerModal';
 import TemplateCreatorModal from '../../src/components/TemplateCreatorModal';
 import PassagePicker, { PassageSelection } from '../../src/components/PassagePicker';
 import BibleReader from '../../src/components/BibleReader';
-import safeStorage from '../../src/utils/safeStorage';
 import { PassageReference, NoteVisibility, NoteSectionValue, TargetVerseHighlight, formatPassageDisplay } from '../../src/types/note';
 import { NoteTemplate } from '../../src/types/template';
 import {
@@ -43,18 +44,18 @@ import * as notesService from '../../src/services/notesService';
 import { updateUserProfile } from '../../src/services/authService';
 import { notifyFriendsOfNoteOverlap } from '../../src/services/noteOverlapService';
 import { useAuth } from '../../src/context/AuthContext';
-import VersePreviewModal from '../../src/components/VersePreviewModal';
 import {
   buildLinkedVerseMap,
   formatVerseReferenceTag,
-  extractVerseRangeText,
-  extractSelectedVersesText,
 } from '../../src/utils/verseLinkUtils';
 import { findCanonicalBook } from '../../src/constants/bibleData';
 import { createPassageReference, formatSegmentDisplay } from '../../src/utils/passageParser';
-import { fetchPassageText } from '../../src/services/bibleService';
+import { useReaderFontSize } from '../../src/hooks/useReaderFontSize';
+import { useVersePreview } from '../../src/hooks/useVersePreview';
+import TOCSegmentBar from '../../src/components/note/TOCSegmentBar';
 
 export default function NoteEditScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -79,7 +80,7 @@ export default function NoteEditScreen() {
 
   // Note State - defaults to null for new notes so users choose their own passage
   const [passage, setPassage] = useState<PassageReference | null>(null);
-  const [readerFontSize, setReaderFontSize] = useState<number>(16);
+  const { readerFontSize, setReaderFontSize } = useReaderFontSize(16);
   const [activeSegmentIndex, setActiveSegmentIndex] = useState<number | null>(null);
 
   const activeSegmentPassage = useMemo(() => {
@@ -109,20 +110,47 @@ export default function NoteEditScreen() {
   const isSavingRef = useRef(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const bibleReaderTop = useRef<number>(0);
+  const bibleReaderBottom = useRef<number>(0);
   const tocTop = useRef<number>(0);
   const [targetHighlightedVerse, setTargetHighlightedVerse] = useState<TargetVerseHighlight | null>(null);
+  const [showScrollToBible, setShowScrollToBible] = useState<boolean>(false);
 
   // Verse Link & Preview Modal State
-  const [previewVerseData, setPreviewVerseData] = useState<{
-    visible: boolean;
-    startVerse: number;
-    endVerse: number;
-    book?: string;
-    chapter?: number;
-    verses?: number[];
-    verseText: string;
-    loading: boolean;
-  }>({ visible: false, startVerse: 1, endVerse: 1, verseText: '', loading: false });
+  const {
+    openVersePreview: handlePreviewVerse,
+    renderVersePreviewModal,
+  } = useVersePreview({
+    passage,
+    translation: profile?.settings?.preferred_translation || 'ESV',
+    esvApiKey: profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key,
+    onViewInContext: (data) => {
+      if (data.book && passage?.segments && passage.segments.length > 0) {
+        const targetCanon = findCanonicalBook(data.book)?.name || data.book;
+        const matchIdx = passage.segments.findIndex((seg) => {
+          const segCanon = findCanonicalBook(seg.book)?.name || seg.book;
+          if (segCanon !== targetCanon) return false;
+          if (typeof data.chapter === 'number') {
+            return data.chapter >= seg.startChapter && data.chapter <= seg.endChapter;
+          }
+          return true;
+        });
+        if (matchIdx >= 0) {
+          setActiveSegmentIndex(matchIdx);
+        }
+      }
+
+      const scrollYTarget = tocTop.current > 0 ? tocTop.current : bibleReaderTop.current;
+      const targetY = scrollYTarget > 0 ? Math.max(0, scrollYTarget - 16) : 0;
+      scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+      if (data.book || data.chapter || data.verses) {
+        setTargetHighlightedVerse({
+          book: data.book,
+          chapter: data.chapter,
+          verses: data.verses || [data.startVerse],
+        });
+      }
+    },
+  });
 
   const linkedVerseMap = useMemo(() => {
     return buildLinkedVerseMap(sections);
@@ -224,91 +252,10 @@ export default function NoteEditScreen() {
     setIsDirty(true);
   }, []);
 
-  const handlePreviewVerse = useCallback(
-    async (
-      startVerse: number,
-      endVerse: number,
-      context?: { book?: string; chapter?: number; verses?: number[] }
-    ) => {
-      setPreviewVerseData({
-        visible: true,
-        startVerse,
-        endVerse,
-        book: context?.book,
-        chapter: context?.chapter,
-        verses: context?.verses,
-        verseText: '',
-        loading: true,
-      });
-
-      let targetPassage = passage;
-      if (context?.book) {
-        const meta = findCanonicalBook(context.book);
-        if (meta) {
-          const ch =
-            typeof context.chapter === 'number' && context.chapter >= 1 && context.chapter <= meta.chapters
-              ? context.chapter
-              : passage?.segments?.[0]?.startChapter || 1;
-          try {
-            targetPassage = createPassageReference([
-              {
-                book: meta.name,
-                startChapter: ch,
-                startVerse,
-                endChapter: ch,
-                endVerse,
-              },
-            ]);
-          } catch (createErr) {
-            console.warn('Failed to build passage reference for preview:', createErr);
-          }
-        }
-      }
-      if (!targetPassage) {
-        setPreviewVerseData((prev) => ({ ...prev, loading: false }));
-        return;
-      }
-      try {
-        const res = await fetchPassageText(targetPassage, {
-          translation: profile?.settings?.preferred_translation || 'ESV',
-          esvApiKey: profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key,
-        });
-        const text =
-          context?.verses && context.verses.length > 0
-            ? extractSelectedVersesText(res.verses || [], context.verses)
-            : extractVerseRangeText(res.verses || [], startVerse, endVerse);
-        setPreviewVerseData((prev) => ({
-          ...prev,
-          verseText: text,
-          loading: false,
-        }));
-      } catch (err) {
-        console.warn('Failed to load verse preview text:', err);
-        setPreviewVerseData((prev) => ({ ...prev, loading: false }));
-      }
-    },
-    [passage, profile]
-  );
-
   const handleFocusTagInput = useCallback(() => {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-    safeStorage.getItem('bible_font_size').then((stored) => {
-      if (isMounted && stored !== null) {
-        const parsed = parseInt(stored, 10);
-        if (!isNaN(parsed) && parsed >= 12 && parsed <= 26) {
-          setReaderFontSize(parsed);
-        }
-      }
-    });
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   // Load user tag history for autocomplete
@@ -713,15 +660,26 @@ export default function NoteEditScreen() {
         </View>
       )}
 
-      <ScrollView
-        ref={scrollViewRef}
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-        onScrollBeginDrag={Keyboard.dismiss}
-        canCancelContentTouches={true}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoider}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 44 : 0}
       >
+        <ScrollView
+          ref={scrollViewRef}
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          onScrollBeginDrag={Keyboard.dismiss}
+          onScroll={(e) => {
+            const offsetY = e.nativeEvent.contentOffset.y;
+            const threshold = bibleReaderBottom.current > 0 ? bibleReaderBottom.current : 350;
+            setShowScrollToBible(offsetY > threshold);
+          }}
+          scrollEventThrottle={16}
+          canCancelContentTouches={true}
+          showsVerticalScrollIndicator={false}
+        >
         {/* Passage Selector Trigger Card */}
         <View style={styles.passageCardRow}>
           <Pressable
@@ -757,66 +715,23 @@ export default function NoteEditScreen() {
 
         {/* Interactive Table of Contents (Passage Segments) */}
         {passage?.segments && passage.segments.length > 0 && (
-          <View
-            style={styles.tocContainer}
-            onLayout={(e) => {
-              tocTop.current = e.nativeEvent.layout.y;
+          <TOCSegmentBar
+            segments={passage.segments}
+            activeSegmentIndex={activeSegmentIndex}
+            onSelectSegment={setActiveSegmentIndex}
+            onLayout={(y) => {
+              tocTop.current = y;
             }}
-          >
-            <View style={styles.tocHeaderRow}>
-              <Ionicons name="list-outline" size={14} color={colors.accent.keyIdea} />
-              <Text style={styles.tocTitle}>Table of Contents</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tocList}>
-              {passage.segments.length > 1 && (
-                <Pressable
-                  onPress={() => setActiveSegmentIndex(null)}
-                  style={[
-                    styles.tocPill,
-                    activeSegmentIndex === null && styles.tocPillActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.tocPillText,
-                      activeSegmentIndex === null && styles.tocPillTextActive,
-                    ]}
-                  >
-                    All Passages ({passage.segments.length})
-                  </Text>
-                </Pressable>
-              )}
-              {passage.segments.map((seg, idx) => {
-                const isActive = activeSegmentIndex === idx;
-                return (
-                  <Pressable
-                    key={idx}
-                    onPress={() => setActiveSegmentIndex(isActive ? null : idx)}
-                    style={[
-                      styles.tocPill,
-                      isActive && styles.tocPillActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.tocPillText,
-                        isActive && styles.tocPillTextActive,
-                      ]}
-                    >
-                      {formatSegmentDisplay(seg)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </View>
+          />
         )}
 
         {/* Live Scripture Reader with Translation Switcher */}
         {passage && (
           <View
             onLayout={(e) => {
-              bibleReaderTop.current = e.nativeEvent.layout.y;
+              const { y, height } = e.nativeEvent.layout;
+              bibleReaderTop.current = y;
+              bibleReaderBottom.current = y + height;
             }}
           >
             <BibleReader
@@ -893,53 +808,29 @@ export default function NoteEditScreen() {
           />
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Floating Quick-Jump to Bible shortcut when scrolled deep into note */}
+      {showScrollToBible && passage && (
+        <Pressable
+          style={styles.floatingBibleJump}
+          onPress={() => {
+            Keyboard.dismiss();
+            const targetY = tocTop.current > 0 ? tocTop.current : bibleReaderTop.current;
+            scrollViewRef.current?.scrollTo({ y: Math.max(0, targetY - 16), animated: true });
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Scroll to Scripture reading"
+          hitSlop={6}
+        >
+          <Ionicons name="book-outline" size={14} color={colors.accent.keyIdea} />
+          <Text style={styles.floatingBibleJumpText}>Scripture</Text>
+          <Ionicons name="arrow-up" size={12} color={colors.accent.keyIdea} />
+        </Pressable>
+      )}
 
       {/* In-Place Verse Preview Modal */}
-      <VersePreviewModal
-        visible={previewVerseData.visible}
-        onClose={() => setPreviewVerseData((p) => ({ ...p, visible: false }))}
-        passageRef={passage ? formatPassageDisplay(passage) : ''}
-        startVerse={previewVerseData.startVerse}
-        endVerse={previewVerseData.endVerse}
-        book={previewVerseData.book}
-        chapter={previewVerseData.chapter}
-        verses={previewVerseData.verses}
-        verseText={previewVerseData.verseText}
-        loading={previewVerseData.loading}
-        translation={profile?.settings?.preferred_translation || 'ESV'}
-        onViewInContext={() => {
-          if (previewVerseData.book && passage?.segments && passage.segments.length > 0) {
-            const targetCanon = findCanonicalBook(previewVerseData.book)?.name || previewVerseData.book;
-            const matchIdx = passage.segments.findIndex((seg) => {
-              const segCanon = findCanonicalBook(seg.book)?.name || seg.book;
-              if (segCanon !== targetCanon) return false;
-              if (typeof previewVerseData.chapter === 'number') {
-                return previewVerseData.chapter >= seg.startChapter && previewVerseData.chapter <= seg.endChapter;
-              }
-              return true;
-            });
-            if (matchIdx >= 0) {
-              setActiveSegmentIndex(matchIdx);
-            }
-          }
-
-          const scrollYTarget = tocTop.current > 0 ? tocTop.current : bibleReaderTop.current;
-          const targetY = scrollYTarget > 0 ? Math.max(0, scrollYTarget - 16) : 0;
-          scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
-          if (previewVerseData.book || previewVerseData.chapter || previewVerseData.verses) {
-            setTargetHighlightedVerse({
-              book: previewVerseData.book,
-              chapter: previewVerseData.chapter,
-              verses: previewVerseData.verses || [previewVerseData.startVerse],
-            });
-          } else {
-            setTargetHighlightedVerse(previewVerseData.startVerse);
-          }
-          setTimeout(() => {
-            setTargetHighlightedVerse(null);
-          }, 2500);
-        }}
-      />
+      {renderVersePreviewModal()}
 
       {/* YouVersion Passage Picker Modal */}
       <PassagePicker
@@ -991,6 +882,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg.base,
   },
+  keyboardAvoider: {
+    flex: 1,
+  },
   center: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -998,7 +892,7 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: spacing.sm,
     paddingTop: spacing.xs,
-    paddingBottom: 120, // 2.5x whitespace for keyboard clearance & tags menu
+    paddingBottom: 200, // Consistent 200px whitespace for keyboard clearance & tags menu
   },
   headerButton: {
     paddingHorizontal: spacing.xs,
@@ -1079,50 +973,24 @@ const styles = StyleSheet.create({
     color: colors.accent.keyIdea,
     fontWeight: 'normal',
   },
-  tocContainer: {
-    backgroundColor: colors.bg.surface,
-    borderRadius: radii.content,
-    borderWidth: 1,
-    borderColor: colors.border.hairline,
-    padding: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  tocHeaderRow: {
+  floatingBibleJump: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: spacing.xs,
-    paddingHorizontal: 2,
+    gap: 4,
+    backgroundColor: colors.bg.surfaceRaised,
+    borderWidth: 1,
+    borderColor: 'rgba(227, 165, 61, 0.4)',
+    borderRadius: radii.controls,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 6,
+    zIndex: 20,
   },
-  tocTitle: {
-    fontSize: 13,
+  floatingBibleJumpText: {
+    ...typography.caption,
     fontWeight: '600',
     color: colors.accent.keyIdea,
-  },
-  tocList: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    paddingVertical: 2,
-  },
-  tocPill: {
-    backgroundColor: colors.bg.surfaceRaised,
-    borderRadius: radii.controls,
-    borderWidth: 1,
-    borderColor: colors.border.hairline,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-  },
-  tocPillActive: {
-    backgroundColor: 'rgba(227, 165, 61, 0.15)',
-    borderColor: colors.accent.keyIdea,
-  },
-  tocPillText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.text.secondary,
-  },
-  tocPillTextActive: {
-    color: colors.accent.keyIdea,
-    fontWeight: '700',
   },
 });

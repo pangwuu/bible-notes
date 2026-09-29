@@ -22,6 +22,7 @@ import { useAuth } from '../../src/context/AuthContext';
 import NoteCard from '../../src/components/NoteCard';
 import EmptyState from '../../src/components/EmptyState';
 import AddNoteFAB from '../../src/components/AddNoteFAB';
+import { findCanonicalBook, CANONICAL_BOOKS } from '../../src/constants/bibleData';
 
 export default function NotesBrowserScreen() {
   const router = useRouter();
@@ -97,7 +98,22 @@ export default function NotesBrowserScreen() {
         map.set(b, existing);
       }
     }
-    return Array.from(map.entries()).sort(([bookA], [bookB]) => bookA.localeCompare(bookB));
+
+    const getBookIndex = (bookName: string): number => {
+      const book = findCanonicalBook(bookName);
+      if (!book) return 999;
+      const idx = CANONICAL_BOOKS.findIndex((b) => b.name === book.name);
+      return idx >= 0 ? idx : 999;
+    };
+
+    return Array.from(map.entries()).sort(([bookA], [bookB]) => {
+      const idxA = getBookIndex(bookA);
+      const idxB = getBookIndex(bookB);
+      if (idxA !== idxB) {
+        return idxA - idxB;
+      }
+      return bookA.localeCompare(bookB);
+    });
   }, [filteredNotes]);
 
   // Tag frequency statistics
@@ -191,13 +207,26 @@ export default function NotesBrowserScreen() {
         )}
 
         {filteredNotes.length === 0 ? (
-          <EmptyState
-            icon="book-outline"
-            title="No notes found"
-            subtitle="Tap the button below to capture your first Swedish Method note."
-            actionLabel="Create note"
-            onAction={() => router.push('/note/edit')}
-          />
+          notes.length > 0 ? (
+            <EmptyState
+              icon="search-outline"
+              title="No matching notes"
+              subtitle="No notes match your search or selected tag filter."
+              actionLabel="Clear filters"
+              onAction={() => {
+                setSearchQuery('');
+                setSelectedTag(null);
+              }}
+            />
+          ) : (
+            <EmptyState
+              icon="book-outline"
+              title="No notes found"
+              subtitle="Tap the button below to capture your first Swedish Method note."
+              actionLabel="Create note"
+              onAction={() => router.push('/note/edit')}
+            />
+          )
         ) : viewMode === 'book' ? (
           notesByBook.map(([book, bookNotes]) => (
             <View key={book} style={styles.group}>
