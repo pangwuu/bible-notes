@@ -46,6 +46,8 @@ export default function DashboardScreen() {
     friendsActivity: false,
     rediscover: false,
   });
+  const [showAllSharedPassages, setShowAllSharedPassages] = useState(false);
+  const [showAllRecentUpdates, setShowAllRecentUpdates] = useState(false);
 
   useEffect(() => {
     safeStorage.getItem(DASHBOARD_HIDDEN_SECTIONS_KEY).then((val) => {
@@ -232,7 +234,10 @@ export default function DashboardScreen() {
                     <Ionicons name="people-outline" size={15} color={colors.accentSocial} />
                     <Text style={styles.subSectionTitle}>Shared Passages</Text>
                   </View>
-                  {friendActivity.intersectingNotes.map((item) => (
+                  {(showAllSharedPassages
+                    ? friendActivity.intersectingNotes
+                    : friendActivity.intersectingNotes.slice(0, 3)
+                  ).map((item) => (
                     <FriendNoteCard
                       key={`intersecting-${item.note.id}`}
                       item={item}
@@ -241,6 +246,29 @@ export default function DashboardScreen() {
                       }
                     />
                   ))}
+                  {friendActivity.intersectingNotes.length > 3 && (
+                    <Pressable
+                      style={styles.showMoreButton}
+                      onPress={() => setShowAllSharedPassages((prev) => !prev)}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        showAllSharedPassages
+                          ? 'Show fewer shared passages'
+                          : `Show all ${friendActivity.intersectingNotes.length} shared passages`
+                      }
+                    >
+                      <Text style={styles.showMoreButtonText}>
+                        {showAllSharedPassages
+                          ? 'Show less'
+                          : `Show all (${friendActivity.intersectingNotes.length})`}
+                      </Text>
+                      <Ionicons
+                        name={showAllSharedPassages ? 'chevron-up' : 'chevron-down'}
+                        size={14}
+                        color={colors.accentSocial}
+                      />
+                    </Pressable>
+                  )}
                 </View>
               ) : null}
 
@@ -253,7 +281,10 @@ export default function DashboardScreen() {
                       <Text style={styles.subSectionTitleSecondary}>Recent Updates</Text>
                     </View>
                   ) : null}
-                  {friendActivity.otherFriendNotes.map((item) => (
+                  {(showAllRecentUpdates
+                    ? friendActivity.otherFriendNotes
+                    : friendActivity.otherFriendNotes.slice(0, 3)
+                  ).map((item) => (
                     <FriendNoteCard
                       key={`other-${item.note.id}`}
                       item={item}
@@ -262,6 +293,29 @@ export default function DashboardScreen() {
                       }
                     />
                   ))}
+                  {friendActivity.otherFriendNotes.length > 3 && (
+                    <Pressable
+                      style={styles.showMoreButton}
+                      onPress={() => setShowAllRecentUpdates((prev) => !prev)}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        showAllRecentUpdates
+                          ? 'Show fewer recent updates'
+                          : `Show all ${friendActivity.otherFriendNotes.length} recent updates`
+                      }
+                    >
+                      <Text style={styles.showMoreButtonText}>
+                        {showAllRecentUpdates
+                          ? 'Show less'
+                          : `Show all (${friendActivity.otherFriendNotes.length})`}
+                      </Text>
+                      <Ionicons
+                        name={showAllRecentUpdates ? 'chevron-up' : 'chevron-down'}
+                        size={14}
+                        color={colors.accentSocial}
+                      />
+                    </Pressable>
+                  )}
                 </View>
               ) : null}
             </>
@@ -404,6 +458,25 @@ const styles = StyleSheet.create({
     borderColor: colors.borderHairline,
   },
   findFriendsButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.accentSocial,
+  },
+  showMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.bgSurfaceRaised,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.borderHairline,
+    marginTop: 2,
+    marginBottom: spacing.xs,
+  },
+  showMoreButtonText: {
     fontSize: 12,
     fontWeight: '600',
     color: colors.accentSocial,

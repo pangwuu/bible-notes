@@ -7,6 +7,9 @@ import {
   formatPassageReference,
   computeCanonicalOrdinals,
   getChapterVerseCount,
+  passagePickerReducer,
+  initialPickerState,
+  findCanonicalBook,
 } from '../../src/components/PassagePicker';
 
 describe('PassagePicker Selection Logic & State Machine', () => {
@@ -269,6 +272,224 @@ describe('PassagePicker Selection Logic & State Machine', () => {
       state = { ...state, endChapter: 9, endVerse: 33, step: 'end_verse' };
       expect(state.endChapter).toBe(9);
       expect(state.step).toBe('end_verse');
+    });
+  });
+
+  describe('passagePickerReducer Formal State Reducer', () => {
+    test('handles clean-slate initialization and SYNC_INITIAL', () => {
+      let state = passagePickerReducer(initialPickerState, {
+        type: 'SYNC_INITIAL',
+        payload: { visible: true },
+      });
+      expect(state.step).toBe('book');
+      expect(state.selectedBook).toBeNull();
+      expect(state.selectedChapter).toBeNull();
+      expect(state.selectedVerseStart).toBeNull();
+      expect(state.segments).toEqual([]);
+
+      // Test with initialPassage with segments
+      state = passagePickerReducer(state, {
+        type: 'SYNC_INITIAL',
+        payload: {
+          visible: true,
+          initialPassage: {
+            segments: [
+              { book: 'Romans', startChapter: 8, startVerse: 1, endChapter: 8, endVerse: 11 },
+            ],
+          },
+        },
+      });
+      expect(state.selectedBook).toBe('Romans');
+      expect(state.selectedChapter).toBe(8);
+      expect(state.selectedVerseStart).toBe(1);
+      expect(state.selectedVerseEnd).toBe(11);
+      expect(state.segments.length).toBe(1);
+    });
+
+    test('selecting multi-chapter book advances to start_chapter', () => {
+      const romans = findCanonicalBook('Romans')!;
+      const state = passagePickerReducer(initialPickerState, {
+        type: 'SELECT_BOOK',
+        payload: { book: romans },
+      });
+      expect(state.selectedBook).toBe('Romans');
+      expect(state.selectedChapter).toBeNull();
+      expect(state.step).toBe('start_chapter');
+    });
+
+    test('selecting single-chapter book (e.g. Jude) auto-selects chapter 1 and advances to start_verse', () => {
+      const jude = findCanonicalBook('Jude')!;
+      const state = passagePickerReducer(initialPickerState, {
+        type: 'SELECT_BOOK',
+        payload: { book: jude },
+      });
+      expect(state.selectedBook).toBe('Jude');
+      expect(state.selectedChapter).toBe(1);
+      expect(state.selectedChapterEnd).toBe(1);
+      expect(state.step).toBe('start_verse');
+    });
+
+    test('step sequence: book -> chapter -> start_verse -> end_verse', () => {
+      const romans = findCanonicalBook('Romans')!;
+      let state = passagePickerReducer(initialPickerState, {
+        type: 'SELECT_BOOK',
+        payload: { book: romans },
+      });
+      state = passagePickerReducer(state, {
+        type: 'SELECT_START_CHAPTER',
+        payload: { chapter: 8 },
+      });
+      expect(state.step).toBe('start_verse');
+      expect(state.selectedChapter).toBe(8);
+      expect(state.selectedChapterEnd).toBe(8);
+
+      state = passagePickerReducer(state, {
+        type: 'SELECT_START_VERSE',
+        payload: { verse: 14 },
+      });
+      expect(state.step).toBe('end_verse');
+      expect(state.selectedVerseStart).toBe(14);
+      expect(state.selectedVerseEnd).toBe(14);
+
+      // Select end verse expands range
+      state = passagePickerReducer(state, {
+        type: 'SELECT_END_VERSE',
+        payload: { verse: 18 },
+      });
+      expect(state.selectedVerseStart).toBe(14);
+      expect(state.selectedVerseEnd).toBe(18);
+
+      // In same chapter, selecting end verse earlier than start verse is clamped
+      state = passagePickerReducer(state, {
+        type: 'SELECT_END_VERSE',
+        payload: { verse: 10 },
+      });
+      expect(state.selectedVerseEnd).toBe(14);
+    });
+
+    test('SELECT_ENTIRE_CHAPTER selects entire chapter verse range', () => {
+      const romans = findCanonicalBook('Romans')!;
+      let state = passagePickerReducer(initialPickerState, {
+        type: 'SELECT_BOOK',
+        payload: { book: romans },
+      });
+      state = passagePickerReducer(state, {
+        type: 'SELECT_START_CHAPTER',
+        payload: { chapter: 8 },
+      });
+      state = passagePickerReducer(state, {
+        type: 'SELECT_ENTIRE_CHAPTER',
+        payload: { totalVerses: 39 },
+      });
+      expect(state.step).toBe('end_verse');
+      expect(state.selectedVerseStart).toBe(1);
+      expect(state.selectedVerseEnd).toBe(39);
+    });
+
+    test('cross-chapter selection via SELECT_END_CHAPTER', () => {
+      const romans = findCanonicalBook('Romans')!;
+      let state = passagePickerReducer(initialPickerState, {
+        type: 'SELECT_BOOK',
+        payload: { book: romans },
+      });
+      state = passagePickerReducer(state, {
+        type: 'SELECT_START_CHAPTER',
+        payload: { chapter: 8 },
+      });
+      state = passagePickerReducer(state, {
+        type: 'SELECT_START_VERSE',
+        payload: { verse: 31 },
+      });
+      state = passagePickerReducer(state, {
+        type: 'SELECT_END_CHAPTER',
+        payload: { chapter: 9 },
+      });
+      expect(state.step).toBe('end_verse');
+      expect(state.selectedChapter).toBe(8);
+      expect(state.selectedChapterEnd).toBe(9);
+      expect(state.selectedVerseEnd).toBe(33); // Romans 9 has 33 verses
+
+      state = passagePickerReducer(state, {
+        type: 'SELECT_END_VERSE',
+        payload: { verse: 5 },
+      });
+      expect(state.selectedVerseEnd).toBe(5);
+    });
+
+    test('STEP_BACK traverses up the selection hierarchy properly', () => {
+      const romans = findCanonicalBook('Romans')!;
+      let state = passagePickerReducer(initialPickerState, {
+        type: 'SELECT_BOOK',
+        payload: { book: romans },
+      });
+      state = passagePickerReducer(state, {
+        type: 'SELECT_START_CHAPTER',
+        payload: { chapter: 8 },
+      });
+      state = passagePickerReducer(state, {
+        type: 'SELECT_START_VERSE',
+        payload: { verse: 1 },
+      });
+      expect(state.step).toBe('end_verse');
+
+      // Step back from end_verse (same chapter) -> start_verse
+      state = passagePickerReducer(state, { type: 'STEP_BACK' });
+      expect(state.step).toBe('start_verse');
+
+      // Step back from start_verse (multi chapter) -> start_chapter
+      state = passagePickerReducer(state, { type: 'STEP_BACK' });
+      expect(state.step).toBe('start_chapter');
+
+      // Step back from start_chapter -> book
+      state = passagePickerReducer(state, { type: 'STEP_BACK' });
+      expect(state.step).toBe('book');
+
+      // For single chapter book (Jude)
+      const jude = findCanonicalBook('Jude')!;
+      state = passagePickerReducer(initialPickerState, {
+        type: 'SELECT_BOOK',
+        payload: { book: jude },
+      });
+      expect(state.step).toBe('start_verse');
+      state = passagePickerReducer(state, { type: 'STEP_BACK' });
+      expect(state.step).toBe('book');
+    });
+
+    test('ADD_SEGMENT stages compound segment and resets current selection', () => {
+      const segment = {
+        book: 'Romans',
+        startChapter: 8,
+        startVerse: 1,
+        endChapter: 8,
+        endVerse: 11,
+      };
+      let state = passagePickerReducer(initialPickerState, {
+        type: 'ADD_SEGMENT',
+        payload: { segment },
+      });
+      expect(state.segments.length).toBe(1);
+      expect(state.segments[0]).toEqual(segment);
+      expect(state.step).toBe('book');
+      expect(state.selectedBook).toBeNull();
+      expect(state.selectedChapter).toBeNull();
+
+      // Remove segment
+      state = passagePickerReducer(state, {
+        type: 'REMOVE_SEGMENT',
+        payload: { index: 0 },
+      });
+      expect(state.segments.length).toBe(0);
+    });
+
+    test('SET_SEARCH_QUERY parses smart reference string into selections', () => {
+      const state = passagePickerReducer(initialPickerState, {
+        type: 'SET_SEARCH_QUERY',
+        payload: { query: 'John 3:16' },
+      });
+      expect(state.selectedBook).toBe('John');
+      expect(state.selectedChapter).toBe(3);
+      expect(state.selectedVerseStart).toBe(16);
+      expect(state.selectedVerseEnd).toBe(16);
     });
   });
 });

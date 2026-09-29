@@ -7,6 +7,7 @@ import { BibleReaderHeader } from './BibleReaderHeader';
 import { TranslationSelector } from './TranslationSelector';
 import { VerseActionBar } from './VerseActionBar';
 import { ScriptureView } from './ScriptureView';
+import FontSizeControls from '../FontSizeControls';
 
 export { SYSTEM_FONTS, buildScriptureHtml, SectionOption, BibleReaderProps };
 
@@ -17,6 +18,7 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
     linkedVerseMap,
     onAttachToSection,
     onJumpToSection,
+    onFontSizeChange,
   } = props;
 
   const {
@@ -56,6 +58,15 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
             selectedTranslation={selectedTranslation}
             onSelectTranslation={setSelectedTranslation}
           />
+
+          {onFontSizeChange && (
+            <View style={styles.readerControlsRow}>
+              <FontSizeControls
+                initialSize={fontSize}
+                onSizeChange={onFontSizeChange}
+              />
+            </View>
+          )}
 
           <ScriptureView
             loading={loading}
@@ -105,6 +116,12 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.border.hairline,
+  },
+  readerControlsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
   },
 });
 

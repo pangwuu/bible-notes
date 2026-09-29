@@ -28,7 +28,6 @@ import TemplateManagerModal from '../../src/components/TemplateManagerModal';
 import TemplateCreatorModal from '../../src/components/TemplateCreatorModal';
 import PassagePicker, { PassageSelection } from '../../src/components/PassagePicker';
 import BibleReader from '../../src/components/BibleReader';
-import FontSizeControls from '../../src/components/FontSizeControls';
 import safeStorage from '../../src/utils/safeStorage';
 import { PassageReference, NoteVisibility, NoteSectionValue, TargetVerseHighlight, formatPassageDisplay } from '../../src/types/note';
 import { NoteTemplate } from '../../src/types/template';
@@ -737,14 +736,6 @@ export default function NoteEditScreen() {
               </Text>
             </View>
           </Pressable>
-
-          {passage ? (
-            <FontSizeControls
-              initialSize={readerFontSize}
-              onSizeChange={setReaderFontSize}
-              style={styles.editFontSizeControls}
-            />
-          ) : null}
         </View>
 
         {/* Optional Note Title Input Card */}
@@ -834,6 +825,7 @@ export default function NoteEditScreen() {
               customApiKey={profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key}
               initiallyCollapsed={false}
               fontSize={readerFontSize}
+              onFontSizeChange={setReaderFontSize}
               linkedVerseMap={linkedVerseMap}
               sectionOptions={sectionOptions}
               onAttachToSection={handleAttachToSection}
@@ -1081,9 +1073,6 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.accent.keyIdea,
     fontWeight: 'normal',
-  },
-  editFontSizeControls: {
-    marginLeft: spacing.sm,
   },
   tocContainer: {
     backgroundColor: colors.bg.surface,

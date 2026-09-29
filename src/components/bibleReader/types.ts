@@ -36,6 +36,7 @@ export interface BibleReaderProps {
   onJumpToSection?: (sectionId: string) => void;
   targetHighlightedVerse?: TargetVerseHighlight | null;
   sectionOptions?: SectionOption[];
+  onFontSizeChange?: (size: number) => void;
 }
 
 export const DEFAULT_SECTION_OPTIONS: SectionOption[] = [

@@ -26,7 +26,6 @@ import { formatSegmentDisplay, createPassageReference } from '../../src/utils/pa
 import { findCanonicalBook } from '../../src/constants/bibleData';
 import { useAuth } from '../../src/context/AuthContext';
 import BibleReader from '../../src/components/BibleReader';
-import FontSizeControls from '../../src/components/FontSizeControls';
 import safeStorage from '../../src/utils/safeStorage';
 import { findFriendNoteOverlaps, FriendOverlapItem, segmentsOverlap } from '../../src/services/noteOverlapService';
 import VersePill from '../../src/components/VersePill';
@@ -50,6 +49,7 @@ export default function NoteDetailScreen() {
   const [readerFontSize, setReaderFontSize] = useState<number>(16);
   const [activeSegmentIndex, setActiveSegmentIndex] = useState<number | null>(null);
   const [targetHighlightedVerse, setTargetHighlightedVerse] = useState<TargetVerseHighlight | null>(null);
+  const [showAllOverlaps, setShowAllOverlaps] = useState<boolean>(false);
   const [previewVerseData, setPreviewVerseData] = useState<{
     visible: boolean;
     startVerse: number;
@@ -395,35 +395,39 @@ export default function NoteDetailScreen() {
       style={styles.screen}
       contentContainerStyle={styles.container}
     >
-      {/* Top Action Row: Visibility Badge (left) & Font Size Stepper (right) */}
-      <View style={styles.topActionRow}>
-        <View style={styles.metaRow}>
-          <View style={styles.visBadge}>
-            <Ionicons
-              name={note.visibility === 'friends' ? 'people' : 'lock-closed'}
-              size={12}
-              color={colors.text.secondary}
-            />
-            <Text style={styles.visBadgeText}>
-              {note.visibility === 'friends' ? 'Friends' : 'Private'}
-            </Text>
-          </View>
+      {/* Prominent Note Title & Passage Subtitle Header with Visibility Pill (Always Rendered) */}
+      <View style={styles.titleHeaderBox}>
+        <View style={styles.titleHeaderTopRow}>
+          <Text style={styles.noteTitleText} numberOfLines={2} ellipsizeMode="tail">
+            {note.title || formatPassageDisplay(note.passage)}
+          </Text>
 
-          {!isAuthor && note.authorUsername && (
-            <Text style={styles.authorText}>By @{note.authorUsername}</Text>
-          )}
+          <View style={styles.metaGroupRow}>
+            {!isAuthor && note.authorUsername ? (
+              <Text style={styles.authorText}>By @{note.authorUsername}</Text>
+            ) : null}
+            <View style={styles.visBadge}>
+              <Ionicons
+                name={note.visibility === 'friends' ? 'people' : 'lock-closed'}
+                size={12}
+                color={colors.text.secondary}
+              />
+              <Text style={styles.visBadgeText}>
+                {note.visibility === 'friends' ? 'Friends' : 'Private'}
+              </Text>
+            </View>
+          </View>
         </View>
 
-        <FontSizeControls
-          initialSize={readerFontSize}
-          onSizeChange={setReaderFontSize}
-        />
+        {note.title ? (
+          <Text style={styles.noteSubpassageText}>{formatPassageDisplay(note.passage)}</Text>
+        ) : null}
       </View>
 
       {/* Letterboxd-style Overlap Badge Pill */}
       {overlaps.length > 0 && (
         <View style={styles.overlapSection}>
-          {overlaps.map((item) => {
+          {(showAllOverlaps ? overlaps : overlaps.slice(0, 3)).map((item) => {
             const friendName = item.friendProfile.display_name || item.friendProfile.username || 'Friend';
             const initial = friendName[0].toUpperCase();
             const passageSummary = formatPassageDisplay(item.note.passage);
@@ -433,6 +437,8 @@ export default function NoteDetailScreen() {
                 key={item.note.id}
                 style={styles.overlapBadge}
                 onPress={() => router.push({ pathname: '/note/[id]', params: { id: item.note.id } })}
+                accessibilityRole="button"
+                accessibilityLabel={`${friendName} also noted ${passageSummary}`}
               >
                 <View style={styles.overlapAvatar}>
                   <Text style={styles.overlapAvatarText}>{initial}</Text>
@@ -443,16 +449,24 @@ export default function NoteDetailScreen() {
               </Pressable>
             );
           })}
+          {overlaps.length > 3 && (
+            <Pressable
+              style={styles.overlapTogglePill}
+              onPress={() => setShowAllOverlaps((prev) => !prev)}
+              accessibilityRole="button"
+              accessibilityLabel={
+                showAllOverlaps
+                  ? 'Show fewer friend notes'
+                  : `Show all ${overlaps.length} friend notes`
+              }
+            >
+              <Text style={styles.overlapToggleText}>
+                {showAllOverlaps ? 'Show less' : `+${overlaps.length - 3} more`}
+              </Text>
+            </Pressable>
+          )}
         </View>
       )}
-
-      {/* Prominent Note Title & Passage Subtitle Header */}
-      {note.title ? (
-        <View style={styles.titleHeaderBox}>
-          <Text style={styles.noteTitleText}>{note.title}</Text>
-          <Text style={styles.noteSubpassageText}>{formatPassageDisplay(note.passage)}</Text>
-        </View>
-      ) : null}
 
       {/* Interactive Table of Contents (Passage Segments) */}
       {note.passage?.segments && note.passage.segments.length > 0 && (
@@ -521,6 +535,7 @@ export default function NoteDetailScreen() {
           passage={note.passage}
           activeSegment={activeSegmentPassage}
           fontSize={readerFontSize}
+          onFontSizeChange={setReaderFontSize}
           preferredTranslation={profile?.settings?.preferred_translation || 'ESV'}
           customApiKey={profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key}
           initiallyCollapsed={false}
@@ -808,27 +823,35 @@ const styles = StyleSheet.create({
   headerButton: {
     padding: 6,
   },
-  topActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
   titleHeaderBox: {
     marginBottom: spacing.md,
   },
+  titleHeaderTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
   noteTitleText: {
-    fontSize: 24,
+    flex: 1,
+    fontSize: 22,
     fontWeight: '700',
     color: colors.text.primary,
-    lineHeight: 30,
-    marginBottom: 4,
+    lineHeight: 28,
+  },
+  metaGroupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs + 2,
+    flexShrink: 0,
+    marginTop: 2,
   },
   noteSubpassageText: {
     fontSize: 15,
-    fontWeight: '500',
-    color: colors.text.secondary,
+    fontWeight: '600',
+    color: colors.accent.keyIdea,
     lineHeight: 20,
+    marginTop: 4,
   },
   emptyReflectionCard: {
     backgroundColor: colors.bg.surface,
@@ -859,12 +882,6 @@ const styles = StyleSheet.create({
     color: colors.accent.keyIdea,
     fontSize: typography.label.fontSize,
     fontWeight: '600',
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
   },
   visBadge: {
     flexDirection: 'row',
@@ -900,8 +917,23 @@ const styles = StyleSheet.create({
     borderRadius: radii.controls,
     paddingHorizontal: spacing.sm,
     paddingVertical: 6,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
     gap: spacing.xs,
+  },
+  overlapTogglePill: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.bg.surfaceRaised,
+    borderRadius: radii.controls,
+    borderWidth: 1,
+    borderColor: colors.accent.social,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    marginBottom: spacing.xs,
+  },
+  overlapToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.accent.social,
   },
   overlapAvatar: {
     width: 20,
