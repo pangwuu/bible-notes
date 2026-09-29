@@ -175,7 +175,7 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
                 </Text>
               </View>
 
-              {/* Section Attached Verse Pills */}
+              {/* Section Attached Verse Pills (temporarily commented out)
               {section.verseReferences && section.verseReferences.length > 0 && (
                 <View style={styles.pillBar}>
                   {section.verseReferences.map((ref, rIdx) => (
@@ -193,6 +193,7 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
                   ))}
                 </View>
               )}
+              */}
 
               <TextInput
                 value={section.content}

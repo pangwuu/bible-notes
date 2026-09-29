@@ -611,6 +611,7 @@ export default function NoteDetailScreen() {
                 </Text>
               </View>
 
+              {/* Section Attached Verse Pills (temporarily commented out)
               {sec.verseReferences && sec.verseReferences.length > 0 && (
                 <View style={styles.pillBar}>
                   {sec.verseReferences.map((ref, rIdx) => (
@@ -629,6 +630,7 @@ export default function NoteDetailScreen() {
                   ))}
                 </View>
               )}
+              */}
 
               {Boolean(sec.content?.trim()) && (
                 <Markdown
