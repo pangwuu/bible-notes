@@ -13,6 +13,7 @@ interface BookStepViewProps {
   onSearchChange: (query: string) => void;
   onClearSearch: () => void;
   onSelectBook: (book: CanonicalBook) => void;
+  onSubmitSearch?: () => void;
 }
 
 export const BookStepView: React.FC<BookStepViewProps> = ({
@@ -24,6 +25,7 @@ export const BookStepView: React.FC<BookStepViewProps> = ({
   onSearchChange,
   onClearSearch,
   onSelectBook,
+  onSubmitSearch,
 }) => {
   return (
     <View style={styles.stepContainer}>
@@ -73,6 +75,8 @@ export const BookStepView: React.FC<BookStepViewProps> = ({
             style={styles.searchInput}
             autoCapitalize="sentences"
             autoCorrect={false}
+            returnKeyType="search"
+            onSubmitEditing={onSubmitSearch}
           />
           {searchQuery.length > 0 && (
             <Pressable onPress={onClearSearch} style={styles.searchClearButton}>

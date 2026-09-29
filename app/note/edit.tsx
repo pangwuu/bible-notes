@@ -17,6 +17,7 @@ import {
   BackHandler,
   Keyboard,
   TextInput,
+  Platform,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
@@ -1035,12 +1036,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg.surfaceRaised,
     borderRadius: radii.controls,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
+    paddingVertical: Platform.OS === 'ios' ? spacing.sm + 2 : 0,
     borderWidth: 1,
     borderColor: colors.border.hairline,
-    ...typography.body,
+    fontSize: 16,
     fontWeight: '600',
+    fontFamily: typography.body.fontFamily,
     color: colors.text.primary,
+    minHeight: 48,
+    textAlignVertical: 'center',
+    includeFontPadding: false,
   },
   pickerTrigger: {
     flex: 1,

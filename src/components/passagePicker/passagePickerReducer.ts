@@ -1,5 +1,5 @@
 import { findCanonicalBook, CANONICAL_BOOKS, CanonicalBook } from '../../constants/bibleData';
-import { parsePassageReferenceString } from '../../utils/passageParser';
+import { parsePassageReferenceString, buildSegment } from '../../utils/passageParser';
 import { PassagePickerState, PassagePickerAction } from './passagePickerTypes';
 import { getChapterVerseCount } from './passagePickerUtils';
 
@@ -246,17 +246,72 @@ export function passagePickerReducer(
       const parsed = parsePassageReferenceString(raw);
 
       if (parsed.length > 0) {
-        const first = parsed[0];
+        const newSegments = [...state.segments];
+
+        // If the search query was previously empty, and there was an existing complete manual draft
+        // that is not yet in state.segments, auto-stage it so the user's manual selection is preserved.
+        const hasManualDraft =
+          state.searchQuery === '' &&
+          state.selectedBook !== null &&
+          state.selectedChapter !== null &&
+          state.selectedVerseStart !== null;
+
+        if (hasManualDraft) {
+          const manualDraft = buildSegment(
+            state.selectedBook!,
+            state.selectedChapter!,
+            state.selectedVerseStart!,
+            state.selectedChapterEnd ?? state.selectedChapter!,
+            state.selectedVerseEnd ?? state.selectedVerseStart!
+          );
+
+          const alreadyInSegments = newSegments.some(
+            (s) =>
+              s.book === manualDraft.book &&
+              s.startChapter === manualDraft.startChapter &&
+              s.endChapter === manualDraft.endChapter &&
+              s.startVerse === manualDraft.startVerse &&
+              s.endVerse === manualDraft.endVerse
+          );
+
+          if (!alreadyInSegments) {
+            newSegments.push(manualDraft);
+          }
+        }
+
+        // If user typed a multi-segment compound string (e.g. "Rom 8:1; 1 Cor 13"),
+        // stage all but the last segment, and set the last one as the active draft.
+        if (parsed.length > 1) {
+          for (let i = 0; i < parsed.length - 1; i++) {
+            const seg = parsed[i];
+            const alreadyIn = newSegments.some(
+              (s) =>
+                s.book === seg.book &&
+                s.startChapter === seg.startChapter &&
+                s.endChapter === seg.endChapter &&
+                s.startVerse === seg.startVerse &&
+                s.endVerse === seg.endVerse
+            );
+            if (!alreadyIn) {
+              newSegments.push(seg);
+            }
+          }
+        }
+
+        const activeSegment = parsed[parsed.length - 1];
+        const bookMeta = findCanonicalBook(activeSegment.book);
+
         return {
           ...state,
           searchQuery: raw,
           smartParseError: null,
-          segments: parsed,
-          selectedBook: first.book,
-          selectedChapter: first.startChapter,
-          selectedChapterEnd: first.endChapter,
-          selectedVerseStart: first.startVerse,
-          selectedVerseEnd: first.endVerse,
+          segments: newSegments,
+          selectedBook: activeSegment.book,
+          selectedChapter: activeSegment.startChapter,
+          selectedChapterEnd: activeSegment.endChapter,
+          selectedVerseStart: activeSegment.startVerse,
+          selectedVerseEnd: activeSegment.endVerse,
+          testamentTab: bookMeta ? bookMeta.testament : state.testamentTab,
         };
       }
 

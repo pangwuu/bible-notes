@@ -491,6 +491,51 @@ describe('PassagePicker Selection Logic & State Machine', () => {
       expect(state.selectedVerseStart).toBe(16);
       expect(state.selectedVerseEnd).toBe(16);
     });
+
+    test('SET_SEARCH_QUERY auto-stages prior manual selection and preserves existing segments', () => {
+      // Simulate user manually selected Romans 8:1-11
+      const stateWithManual: typeof initialPickerState = {
+        ...initialPickerState,
+        selectedBook: 'Romans',
+        selectedChapter: 8,
+        selectedChapterEnd: 8,
+        selectedVerseStart: 1,
+        selectedVerseEnd: 11,
+        searchQuery: '',
+        segments: [],
+      };
+
+      // User starts typing "1 Cor 13" in search
+      const s1 = passagePickerReducer(stateWithManual, {
+        type: 'SET_SEARCH_QUERY',
+        payload: { query: '1 Cor 13' },
+      });
+
+      // Prior manual selection should be auto-staged into segments
+      expect(s1.segments.length).toBe(1);
+      expect(s1.segments[0]).toEqual({
+        book: 'Romans',
+        startChapter: 8,
+        endChapter: 8,
+        startVerse: 1,
+        endVerse: 11,
+      });
+
+      // Active draft should be the newly typed passage
+      expect(s1.selectedBook).toBe('1 Corinthians');
+      expect(s1.selectedChapter).toBe(13);
+      expect(s1.searchQuery).toBe('1 Cor 13');
+
+      // Continuing to type in the same search session should update draft without duplicating segments
+      const s2 = passagePickerReducer(s1, {
+        type: 'SET_SEARCH_QUERY',
+        payload: { query: '1 Cor 13:4-8' },
+      });
+      expect(s2.segments.length).toBe(1);
+      expect(s2.selectedBook).toBe('1 Corinthians');
+      expect(s2.selectedVerseStart).toBe(4);
+      expect(s2.selectedVerseEnd).toBe(8);
+    });
   });
 });
 

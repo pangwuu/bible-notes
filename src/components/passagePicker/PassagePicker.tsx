@@ -86,16 +86,32 @@ export default function PassagePicker({
     return getChapterVerseCount(state.selectedBook, targetEndCh);
   }, [state.selectedBook, state.selectedChapter, state.selectedChapterEnd]);
 
-  // Filtered books for Step 1
   const filteredBooks = useMemo(() => {
+    const rawQuery = state.searchQuery.trim().toLowerCase();
+    if (rawQuery.length === 0) {
+      return CANONICAL_BOOKS.filter((b) => b.testament === state.testamentTab);
+    }
+
+    // If an exact canonical book was already parsed from the input
+    if (state.selectedBook) {
+      const selectedLower = state.selectedBook.toLowerCase();
+      const matched = CANONICAL_BOOKS.filter(
+        (b) => b.name.toLowerCase() === selectedLower
+      );
+      if (matched.length > 0) {
+        return matched;
+      }
+    }
+
+    // Otherwise extract book prefix (e.g. "Rom 8:1" becomes "rom", "1 Cor 13" becomes "1 cor")
+    const bookQuery = rawQuery.replace(/\s*\d+.*$/, '').trim();
+    const queryToUse = bookQuery.length > 0 ? bookQuery : rawQuery;
+
     return CANONICAL_BOOKS.filter((b) => {
       const matchesTab = b.testament === state.testamentTab;
-      if (state.searchQuery.trim().length === 0) {
-        return matchesTab;
-      }
-      return b.name.toLowerCase().includes(state.searchQuery.trim().toLowerCase());
+      return matchesTab && b.name.toLowerCase().includes(queryToUse);
     });
-  }, [state.testamentTab, state.searchQuery]);
+  }, [state.testamentTab, state.searchQuery, state.selectedBook]);
 
   // Current active draft segment
   const activeDraftSegment = useMemo((): PassageSegment | null => {
@@ -262,6 +278,29 @@ export default function PassagePicker({
     dispatch({ type: 'SET_SEARCH_QUERY', payload: { query: '' } });
   }, []);
 
+  const handleSubmitSearch = useCallback(() => {
+    if (state.selectedVerseStart !== null) {
+      dispatch({ type: 'SET_STEP', payload: { step: 'end_verse' } });
+    } else if (state.selectedChapter !== null) {
+      dispatch({ type: 'SET_STEP', payload: { step: 'start_verse' } });
+    } else if (state.selectedBook !== null) {
+      const meta = findCanonicalBook(state.selectedBook);
+      if (meta?.chapters === 1) {
+        dispatch({ type: 'SET_STEP', payload: { step: 'start_verse' } });
+      } else {
+        dispatch({ type: 'SET_STEP', payload: { step: 'start_chapter' } });
+      }
+    } else if (filteredBooks.length === 1) {
+      handleSelectBook(filteredBooks[0]);
+    }
+  }, [
+    state.selectedVerseStart,
+    state.selectedChapter,
+    state.selectedBook,
+    filteredBooks,
+    handleSelectBook,
+  ]);
+
   return (
     <Modal
       visible={visible}
@@ -325,6 +364,7 @@ export default function PassagePicker({
                     onSearchChange={handleSearchChange}
                     onClearSearch={handleClearSearch}
                     onSelectBook={handleSelectBook}
+                    onSubmitSearch={handleSubmitSearch}
                   />
                 )}
 

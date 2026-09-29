@@ -139,13 +139,17 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderHairline,
     paddingHorizontal: spacing.sm,
-    height: 38,
+    height: 40,
   },
   searchInput: {
     flex: 1,
+    height: '100%',
     color: colors.textPrimary,
     fontSize: 14,
+    lineHeight: 18,
     paddingVertical: 0,
+    textAlignVertical: 'center',
+    includeFontPadding: false,
   },
   searchClearButton: {
     padding: spacing.xs,
