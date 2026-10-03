@@ -276,30 +276,7 @@ export default function NoteDetailScreen() {
       );
   };
 
-  const markdownRules = useMemo(
-    () => ({
-      link: (node: any, children: any, _parent: any, styles: any) => {
-        const href = node.attributes?.href || '';
-        const isVerse = href.startsWith('verse:');
-        return (
-          <Text
-            key={node.key}
-            style={isVerse ? styles.verseLinkBadge : styles.link}
-            onPress={() => handleLinkPress(href)}
-          >
-            {isVerse && (
-              <Ionicons name="bookmark" size={12} color={colors.accent.keyIdea} />
-            )}
-            {isVerse ? ' ' : ''}
-            {children}
-          </Text>
-        );
-      },
-    }),
-    []
-  );
-
-  const handleLinkPress = (url: string) => {
+  const handleLinkPress = useCallback((url: string) => {
     if (url.startsWith('verse:')) {
       const payload = url.replace('verse:', '');
       const colonCount = (payload.match(/:/g) || []).length;
@@ -345,7 +322,40 @@ export default function NoteDetailScreen() {
       }
     }
     return true;
-  };
+  }, [handleOpenVersePreview]);
+
+  const markdownRulesCache = useRef<Record<string, any>>({});
+  const getMarkdownRules = useCallback(
+    (secColor: string) => {
+      if (!markdownRulesCache.current[secColor]) {
+        markdownRulesCache.current[secColor] = {
+          link: (node: any, children: any, _parent: any, _styles: any) => {
+            const href = node.attributes?.href || '';
+            const isVerse = href.startsWith('verse:');
+            return (
+              <Text
+                key={node.key}
+                style={
+                  isVerse
+                    ? [styles.verseLinkBadge, { color: secColor }]
+                    : [styles.link, { color: secColor }]
+                }
+                onPress={() => handleLinkPress(href)}
+              >
+                {isVerse && (
+                  <Ionicons name="bookmark" size={12} color={secColor} />
+                )}
+                {isVerse ? ' ' : ''}
+                {children}
+              </Text>
+            );
+          },
+        };
+      }
+      return markdownRulesCache.current[secColor];
+    },
+    [handleLinkPress]
+  );
 
   if (loading) {
     return (
@@ -578,7 +588,7 @@ export default function NoteDetailScreen() {
               {Boolean(sec.content?.trim()) && (
                 <Markdown
                   style={markdownStyles}
-                  rules={markdownRules}
+                  rules={getMarkdownRules(secColor)}
                   onLinkPress={handleLinkPress}
                 >
                   {formatMarkdownWithVerseLinks(sec.content.trim())}
@@ -604,7 +614,7 @@ export default function NoteDetailScreen() {
               </View>
               <Markdown
                 style={markdownStyles}
-                rules={markdownRules}
+                rules={getMarkdownRules(colors.accent.keyIdea)}
                 onLinkPress={handleLinkPress}
               >
                 {formatMarkdownWithVerseLinks(note.lightContent.trim())}
@@ -627,7 +637,7 @@ export default function NoteDetailScreen() {
               </View>
               <Markdown
                 style={markdownStyles}
-                rules={markdownRules}
+                rules={getMarkdownRules(colors.accent.question)}
                 onLinkPress={handleLinkPress}
               >
                 {formatMarkdownWithVerseLinks(note.questionContent.trim())}
@@ -650,7 +660,7 @@ export default function NoteDetailScreen() {
               </View>
               <Markdown
                 style={markdownStyles}
-                rules={markdownRules}
+                rules={getMarkdownRules(colors.accent.application)}
                 onLinkPress={handleLinkPress}
               >
                 {formatMarkdownWithVerseLinks(note.arrowContent.trim())}
@@ -676,7 +686,7 @@ export default function NoteDetailScreen() {
               </View>
               <Markdown
                 style={markdownStyles}
-                rules={markdownRules}
+                rules={getMarkdownRules(colors.accent.keyIdea)}
                 onLinkPress={handleLinkPress}
               >
                 {formatMarkdownWithVerseLinks(note.content.trim())}
@@ -1060,5 +1070,12 @@ const styles = StyleSheet.create({
   loadingText: {
     ...typography.caption,
     color: colors.text.secondary,
+  },
+  verseLinkBadge: {
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  link: {
+    textDecorationLine: 'underline',
   },
 });
