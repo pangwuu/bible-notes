@@ -31,6 +31,12 @@ describe('Auth Route Protection Redirect Matrix', () => {
       expect(getAuthRedirect(true, ['(auth)', 'register'])).toBe('/(tabs)');
     });
 
+    test('authenticated user on register page does not redirect prematurely if hasCompletedProfile is false', () => {
+      expect(getAuthRedirect(true, ['(auth)', 'register'], false, false)).toBeNull();
+      expect(getAuthRedirect(true, ['(auth)', 'register'], false, true)).toBe('/(tabs)');
+      expect(getAuthRedirect(true, ['(auth)', 'login'], false, false)).toBe('/(tabs)');
+    });
+
     test('authenticated user outside (auth) stays on current route (no redirect)', () => {
       expect(getAuthRedirect(true, ['(tabs)'])).toBeNull();
       expect(getAuthRedirect(true, ['note', '456'])).toBeNull();

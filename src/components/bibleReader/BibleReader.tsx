@@ -82,6 +82,7 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
             linkedVerseMap={linkedVerseMap}
             onToggleVerse={handleToggleVerse}
             onRetry={handleRetry}
+            onVerseLayout={props.onVerseLayout}
             actionSlot={
               <VerseActionBar
                 sortedSelectedVerses={sortedSelectedVerses}

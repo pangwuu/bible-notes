@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, typography } from '../../constants/theme';
@@ -30,6 +30,7 @@ interface ScriptureViewProps {
   onToggleVerse: (verseNum: number, context?: ActivePassageContext) => void;
   onRetry: () => void;
   actionSlot?: React.ReactNode;
+  onVerseLayout?: (verseKey: string, y: number) => void;
 }
 
 export const ScriptureView: React.FC<ScriptureViewProps> = ({
@@ -47,7 +48,15 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
   onToggleVerse,
   onRetry,
   actionSlot,
+  onVerseLayout,
 }) => {
+  let sectionYMap: Record<number, number> = {};
+  try {
+    const ref = useRef<Record<number, number>>({});
+    sectionYMap = ref.current;
+  } catch {
+    sectionYMap = {};
+  }
   if (loading && !passageResult) {
     return (
       <View style={styles.loadingContainer}>
@@ -112,6 +121,7 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
     const canonicalKey = resolvedBook && resolvedChapter ? `${resolvedBook}:${resolvedChapter}:${v.verseNumber}` : undefined;
     const linkedItem = canonicalKey ? linkedVerseMap[canonicalKey] : linkedVerseMap[v.verseNumber];
     const linked = linkedItem ? ('primary' in linkedItem ? linkedItem.primary : linkedItem) : null;
+    const sectionBaseY = typeof secIdx === 'number' ? (sectionYMap[secIdx] || 0) : 0;
 
     return (
       <VerseItem
@@ -123,6 +133,13 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
         showVerseNumbers={showVerseNumbers}
         fontSize={fontSize}
         onToggle={(num) => onToggleVerse(num, currentContext)}
+        onLayout={(e) => {
+          const totalY = sectionBaseY + (e.nativeEvent?.layout?.y || 0);
+          if (canonicalKey) {
+            onVerseLayout?.(canonicalKey, totalY);
+          }
+          onVerseLayout?.(String(v.verseNumber), totalY);
+        }}
       />
     );
   };
@@ -132,7 +149,13 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
       <View style={[styles.scriptureContainer, loading && styles.scriptureDimmed]}>
         {sections && sections.length > 0 ? (
           sections.map((sec, secIdx) => (
-            <View key={secIdx} style={styles.sectionBlock}>
+            <View
+              key={secIdx}
+              style={styles.sectionBlock}
+              onLayout={(e) => {
+                sectionYMap[secIdx] = e.nativeEvent.layout.y;
+              }}
+            >
               {sec.title ? (
                 <Text style={[styles.passageSectionTitle, { fontSize: fontSize + 2 }]}>
                   {sec.title}
@@ -144,7 +167,12 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
             </View>
           ))
         ) : verses && verses.length > 0 ? (
-          <View style={styles.sectionBlock}>
+          <View
+            style={styles.sectionBlock}
+            onLayout={(e) => {
+              sectionYMap[0] = e.nativeEvent.layout.y;
+            }}
+          >
             <Text style={styles.verseParagraph}>
               {verses.map((v) => renderVerse(v))}
             </Text>
@@ -177,7 +205,6 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
         <Text style={styles.attributionText}>
           {SUPPORTED_TRANSLATIONS.find((t) => t.id === selectedTranslation)?.fullName ||
             selectedTranslation}
-          {passageResult?.cached ? ' (Cached)' : ''}
         </Text>
       </View>
     </View>

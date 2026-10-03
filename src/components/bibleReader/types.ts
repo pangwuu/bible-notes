@@ -37,6 +37,7 @@ export interface BibleReaderProps {
   targetHighlightedVerse?: TargetVerseHighlight | null;
   sectionOptions?: SectionOption[];
   onFontSizeChange?: (size: number) => void;
+  onVerseLayout?: (verseKey: string, y: number) => void;
 }
 
 export const DEFAULT_SECTION_OPTIONS: SectionOption[] = [

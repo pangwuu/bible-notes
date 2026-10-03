@@ -3,6 +3,7 @@
  */
 
 import { findCanonicalBook } from '../constants/bibleData';
+import { NoteSectionValue, PassageReference } from '../types/note';
 
 export interface VerseReference {
   raw: string;
@@ -143,6 +144,42 @@ export function extractVerseReferences(text: string): VerseReference[] {
         refItem.verses = verses;
       }
       results.push(refItem);
+    }
+  }
+
+  // 3. Verse markdown links [⚓ Book Ch:V](verse:...) or [Book Ch:V](verse:...) or [⚓ v. N](verse:...)
+  const linkRegex = /\[(?:⚓\s*)?(?:(?:([0-9]?\s*[A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+)[:.])|(?:v\.?\s*))?((?:\d+(?:\s*[-–—]\s*\d+)?)(?:\s*,\s*\d+(?:\s*[-–—]\s*\d+)?)*)\]\(verse:[^)]+\)/gi;
+  let linkMatch: RegExpExecArray | null;
+  while ((linkMatch = linkRegex.exec(text)) !== null) {
+    const rawBook = linkMatch[1]?.trim();
+    const chapter = linkMatch[2] ? parseInt(linkMatch[2], 10) : undefined;
+    const verseSpec = linkMatch[3];
+    const verses = parseVerseNumbersList(verseSpec);
+    const canonBook = rawBook ? findCanonicalBook(rawBook) : undefined;
+    const resolvedBook = canonBook ? canonBook.name : rawBook;
+
+    if (verses.length > 0) {
+      const isDiscontinuous = verses.length > 1 && verses[verses.length - 1] - verses[0] + 1 !== verses.length;
+      const refItem: VerseReference = {
+        raw: linkMatch[0],
+        book: resolvedBook,
+        chapter,
+        startVerse: verses[0],
+        endVerse: verses[verses.length - 1],
+      };
+      if (isDiscontinuous) {
+        refItem.verses = verses;
+      }
+      const alreadyAdded = results.some(
+        (r) =>
+          r.book === refItem.book &&
+          r.chapter === refItem.chapter &&
+          r.startVerse === refItem.startVerse &&
+          r.endVerse === refItem.endVerse
+      );
+      if (!alreadyAdded) {
+        results.push(refItem);
+      }
     }
   }
 
@@ -342,3 +379,50 @@ export function extractVerseRangeText(
   );
   return matched.map((v) => `${v.verseNumber}. ${v.text.trim()}`).join('\n\n');
 }
+
+/**
+ * Synchronizes structured verse references for sections based on references typed in content.
+ */
+export function syncSectionVerseReferencesFromContent(
+  sections: NoteSectionValue[],
+  passage?: PassageReference | null
+): NoteSectionValue[] {
+  return sections.map((sec) => {
+    const extracted = extractVerseReferences(sec.content || '');
+    const defaultBook = passage?.segments?.[0]?.book;
+    const defaultChapter = passage?.segments?.[0]?.startChapter;
+
+    const refs = extracted.map((r) => {
+      const book = r.book || defaultBook;
+      const chapter = typeof r.chapter === 'number' ? r.chapter : defaultChapter;
+      const refItem: any = {
+        startVerse: r.startVerse,
+        endVerse: r.endVerse,
+      };
+      if (book) refItem.book = book;
+      if (typeof chapter === 'number') refItem.chapter = chapter;
+      if (Array.isArray(r.verses) && r.verses.length > 0) refItem.verses = r.verses;
+      return refItem;
+    });
+
+    const uniqueRefs: typeof refs = [];
+    for (const ref of refs) {
+      const exists = uniqueRefs.some(
+        (u) =>
+          u.book === ref.book &&
+          u.chapter === ref.chapter &&
+          u.startVerse === ref.startVerse &&
+          u.endVerse === ref.endVerse
+      );
+      if (!exists) {
+        uniqueRefs.push(ref);
+      }
+    }
+
+    return {
+      ...sec,
+      verseReferences: uniqueRefs,
+    };
+  });
+}
+

@@ -44,6 +44,21 @@ export function parseNoteId(param?: string): string {
   return param.trim();
 }
 
+function sanitizeVerseReferences(refs?: any[]): any[] {
+  if (!refs || !Array.isArray(refs)) return [];
+  return refs.map((r) => {
+    const clean: any = {
+      startVerse: r.startVerse,
+      endVerse: r.endVerse,
+    };
+    if (r.book) clean.book = r.book;
+    if (typeof r.chapter === 'number') clean.chapter = r.chapter;
+    if (Array.isArray(r.verses) && r.verses.length > 0) clean.verses = r.verses;
+    if (r.raw) clean.raw = r.raw;
+    return clean;
+  });
+}
+
 /**
  * Create a new note document in Cloud Firestore.
  * Always writes `user_id` matching request.auth.uid.
@@ -108,10 +123,10 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
       books,
       segments: segments.map((s) => ({
         book: s.book,
-        start_chapter: s.startChapter,
-        start_verse: s.startVerse,
-        end_chapter: s.endChapter,
-        end_verse: s.endVerse,
+        start_chapter: s.startChapter ?? 1,
+        start_verse: s.startVerse ?? 1,
+        end_chapter: s.endChapter ?? 1,
+        end_verse: s.endVerse ?? 1,
       })),
     },
     template_id: input.templateId || 'swedish',
@@ -125,7 +140,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
       if (s.icon) secObj.icon = s.icon;
       if (s.color) secObj.color = s.color;
       if (s.verseReferences && s.verseReferences.length > 0) {
-        secObj.verse_references = s.verseReferences;
+        secObj.verse_references = sanitizeVerseReferences(s.verseReferences);
       }
       return secObj;
     }),
@@ -234,7 +249,7 @@ export async function updateNote(noteId: string, updates: UpdateNoteInput): Prom
       if (s.icon) secObj.icon = s.icon;
       if (s.color) secObj.color = s.color;
       if (s.verseReferences && s.verseReferences.length > 0) {
-        secObj.verse_references = s.verseReferences;
+        secObj.verse_references = sanitizeVerseReferences(s.verseReferences);
       }
       return secObj;
     });

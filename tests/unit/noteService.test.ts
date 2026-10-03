@@ -433,4 +433,42 @@ describe('NotesService Unit Tests', () => {
     const updatePayload = mockUpdateDoc.mock.calls[0][1];
     expect(updatePayload.sections[0].color).toBe('#9584B8');
   });
+
+  test('createNote and updateNote sanitize verseReferences and never send undefined properties to Firestore', async () => {
+    mockSetDoc.mockResolvedValueOnce(undefined);
+
+    const inputWithUndefinedProps: CreateNoteInput = {
+      userId: 'user_123',
+      passage: samplePassage,
+      tags: [],
+      sections: [
+        {
+          id: 's1',
+          title: 'Section 1',
+          content: 'Here is verse 3 [v. 3]',
+          verseReferences: [
+            {
+              startVerse: 3,
+              endVerse: 3,
+              book: undefined,
+              chapter: undefined,
+              verses: undefined,
+            } as any,
+          ],
+        },
+      ],
+      visibility: 'private',
+    };
+
+    await createNote(inputWithUndefinedProps);
+    const setPayload = mockSetDoc.mock.calls[mockSetDoc.mock.calls.length - 1][1];
+    const writtenRef = setPayload.sections[0].verse_references[0];
+
+    expect(writtenRef.startVerse).toBe(3);
+    expect(writtenRef.endVerse).toBe(3);
+    expect(Object.prototype.hasOwnProperty.call(writtenRef, 'verses')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(writtenRef, 'book')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(writtenRef, 'chapter')).toBe(false);
+  });
 });
+

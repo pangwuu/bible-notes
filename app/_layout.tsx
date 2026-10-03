@@ -23,7 +23,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 });
 
 function RootNavigationLayout() {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const navigationState = useRootNavigationState();
@@ -34,11 +34,12 @@ function RootNavigationLayout() {
       return;
     }
 
-    const redirectRoute = getAuthRedirect(Boolean(user), segments);
+    const hasCompletedProfile = Boolean(profile && profile.username);
+    const redirectRoute = getAuthRedirect(Boolean(user), segments, loading, hasCompletedProfile);
     if (redirectRoute) {
       router.replace(redirectRoute as any);
     }
-  }, [user, loading, segments, navigationState?.key]);
+  }, [user, profile, loading, segments, navigationState?.key]);
 
   if (loading) {
     return (

@@ -31,7 +31,7 @@ const DASHBOARD_HIDDEN_SECTIONS_KEY = 'dashboard_hidden_sections';
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [allUserNotes, setAllUserNotes] = useState<Note[]>([]);
   const [recentNotes, setRecentNotes] = useState<Note[]>([]);
   const [friendActivity, setFriendActivity] = useState<DashboardFriendActivity>({
@@ -87,18 +87,21 @@ export default function DashboardScreen() {
       setRandomNote((prev) => selectRandomReflectionNote(notes, recentIds, prev?.id));
       setLoading(false);
 
-      // 3. Fetch friend activity & intersection data
-      // Only show the loading indicator on the initial fetch before any activity has loaded
-      if (!hasLoadedFriendActivityOnceRef.current) {
-        setLoadingFriendActivity(true);
-      }
-      try {
-        const socialActivity = await getDashboardFriendActivity(user.uid, notes);
-        setFriendActivity(socialActivity);
-        hasLoadedFriendActivityOnceRef.current = true;
-      } catch (friendErr) {
-        console.warn('Dashboard friend activity fetch error:', friendErr);
-      } finally {
+      // 3. Fetch friend activity & intersection data (if social features are enabled)
+      if (profile?.settings?.enable_friends !== false) {
+        if (!hasLoadedFriendActivityOnceRef.current) {
+          setLoadingFriendActivity(true);
+        }
+        try {
+          const socialActivity = await getDashboardFriendActivity(user.uid, notes);
+          setFriendActivity(socialActivity);
+          hasLoadedFriendActivityOnceRef.current = true;
+        } catch (friendErr) {
+          console.warn('Dashboard friend activity fetch error:', friendErr);
+        } finally {
+          setLoadingFriendActivity(false);
+        }
+      } else {
         setLoadingFriendActivity(false);
       }
     } catch (err) {
@@ -108,7 +111,7 @@ export default function DashboardScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [user?.uid]);
+  }, [user?.uid, profile?.settings?.enable_friends]);
 
   // Re-fetch notes every time screen regains focus
   useFocusEffect(
@@ -195,152 +198,156 @@ export default function DashboardScreen() {
         )}
 
         {/* SECTION 2: FRIENDS' ACTIVITY */}
-        <View style={styles.sectionDivider} />
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionHeading}>Friends' Activity</Text>
-          <Pressable
-            style={styles.hideButton}
-            onPress={() => toggleSection('friendsActivity')}
-            accessibilityRole="button"
-            accessibilityLabel={hiddenSections.friendsActivity ? "Show Friends' Activity" : "Hide Friends' Activity"}
-            hitSlop={8}
-          >
-            <Ionicons
-              name={hiddenSections.friendsActivity ? 'eye-outline' : 'eye-off-outline'}
-              size={14}
-              color={colors.textSecondary}
-            />
-            <Text style={styles.hideButtonText}>
-              {hiddenSections.friendsActivity ? 'Show' : 'Hide'}
-            </Text>
-          </Pressable>
-        </View>
-
-        {!hiddenSections.friendsActivity && (
-          loadingFriendActivity ? (
-            <FriendActivityLoadingIndicator
-              message="Checking friend activity..."
-              style={styles.loadingActivityCard}
-            />
-          ) : !hasFriendNotes ? (
-            <View style={styles.friendEmptyCard}>
-              <Ionicons name="people-outline" size={24} color={colors.accentSocial} />
-              <View style={styles.friendEmptyMeta}>
-                <Text style={styles.friendEmptyTitle}>
-                  {friendActivity.hasFriends ? 'No shared notes yet' : 'Connect with friends'}
-                </Text>
-                <Text style={styles.friendEmptySubtitle}>
-                  {friendActivity.hasFriends
-                    ? 'Notes shared by your friends will appear here.'
-                    : 'Add friends to discover mutual passage reflections and shared study insights.'}
-                </Text>
-              </View>
+        {profile?.settings?.enable_friends !== false && (
+          <>
+            <View style={styles.sectionDivider} />
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionHeading}>Friends' Activity</Text>
               <Pressable
-                style={styles.findFriendsButton}
-                onPress={() => router.push('/(tabs)/friends')}
+                style={styles.hideButton}
+                onPress={() => toggleSection('friendsActivity')}
                 accessibilityRole="button"
-                accessibilityLabel="Find Friends"
+                accessibilityLabel={hiddenSections.friendsActivity ? "Show Friends' Activity" : "Hide Friends' Activity"}
+                hitSlop={8}
               >
-                <Text style={styles.findFriendsButtonText}>
-                  {friendActivity.hasFriends ? 'Friends' : 'Find Friends'}
+                <Ionicons
+                  name={hiddenSections.friendsActivity ? 'eye-outline' : 'eye-off-outline'}
+                  size={14}
+                  color={colors.textSecondary}
+                />
+                <Text style={styles.hideButtonText}>
+                  {hiddenSections.friendsActivity ? 'Show' : 'Hide'}
                 </Text>
               </Pressable>
             </View>
-          ) : (
-            <>
-              {/* Pinned Shared Passages (Intersecting Notes) */}
-              {friendActivity.intersectingNotes.length > 0 ? (
-                <View style={styles.subSectionContainer}>
-                  <View style={styles.subSectionHeader}>
-                    <Ionicons name="people-outline" size={15} color={colors.accentSocial} />
-                    <Text style={styles.subSectionTitle}>Shared Passages</Text>
-                  </View>
-                  {(showAllSharedPassages
-                    ? friendActivity.intersectingNotes
-                    : friendActivity.intersectingNotes.slice(0, 3)
-                  ).map((item) => (
-                    <FriendNoteCard
-                      key={`intersecting-${item.note.id}`}
-                      item={item}
-                      onPress={() =>
-                        router.push({ pathname: '/note/[id]', params: { id: item.note.id } })
-                      }
-                    />
-                  ))}
-                  {friendActivity.intersectingNotes.length > 3 && (
-                    <Pressable
-                      style={styles.showMoreButton}
-                      onPress={() => setShowAllSharedPassages((prev) => !prev)}
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        showAllSharedPassages
-                          ? 'Show fewer shared passages'
-                          : `Show all ${friendActivity.intersectingNotes.length} shared passages`
-                      }
-                    >
-                      <Text style={styles.showMoreButtonText}>
-                        {showAllSharedPassages
-                          ? 'Show less'
-                          : `Show all (${friendActivity.intersectingNotes.length})`}
-                      </Text>
-                      <Ionicons
-                        name={showAllSharedPassages ? 'chevron-up' : 'chevron-down'}
-                        size={14}
-                        color={colors.accentSocial}
-                      />
-                    </Pressable>
-                  )}
-                </View>
-              ) : null}
 
-              {/* Other Friend Updates */}
-              {friendActivity.otherFriendNotes.length > 0 ? (
-                <View style={styles.subSectionContainer}>
+            {!hiddenSections.friendsActivity && (
+              loadingFriendActivity ? (
+                <FriendActivityLoadingIndicator
+                  message="Checking friend activity..."
+                  style={styles.loadingActivityCard}
+                />
+              ) : !hasFriendNotes ? (
+                <View style={styles.friendEmptyCard}>
+                  <Ionicons name="people-outline" size={24} color={colors.accentSocial} />
+                  <View style={styles.friendEmptyMeta}>
+                    <Text style={styles.friendEmptyTitle}>
+                      {friendActivity.hasFriends ? 'No shared notes yet' : 'Connect with friends'}
+                    </Text>
+                    <Text style={styles.friendEmptySubtitle}>
+                      {friendActivity.hasFriends
+                        ? 'Notes shared by your friends will appear here.'
+                        : 'Add friends to discover mutual passage reflections and shared study insights.'}
+                    </Text>
+                  </View>
+                  <Pressable
+                    style={styles.findFriendsButton}
+                    onPress={() => router.push('/(tabs)/friends')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Find Friends"
+                  >
+                    <Text style={styles.findFriendsButtonText}>
+                      {friendActivity.hasFriends ? 'Friends' : 'Find Friends'}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <>
+                  {/* Pinned Shared Passages (Intersecting Notes) */}
                   {friendActivity.intersectingNotes.length > 0 ? (
-                    <View style={styles.subSectionHeader}>
-                      <Ionicons name="newspaper-outline" size={14} color={colors.textSecondary} />
-                      <Text style={styles.subSectionTitleSecondary}>Recent Updates</Text>
+                    <View style={styles.subSectionContainer}>
+                      <View style={styles.subSectionHeader}>
+                        <Ionicons name="people-outline" size={15} color={colors.accentSocial} />
+                        <Text style={styles.subSectionTitle}>Shared Passages</Text>
+                      </View>
+                      {(showAllSharedPassages
+                        ? friendActivity.intersectingNotes
+                        : friendActivity.intersectingNotes.slice(0, 3)
+                      ).map((item) => (
+                        <FriendNoteCard
+                          key={`intersecting-${item.note.id}`}
+                          item={item}
+                          onPress={() =>
+                            router.push({ pathname: '/note/[id]', params: { id: item.note.id } })
+                          }
+                        />
+                      ))}
+                      {friendActivity.intersectingNotes.length > 3 && (
+                        <Pressable
+                          style={styles.showMoreButton}
+                          onPress={() => setShowAllSharedPassages((prev) => !prev)}
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            showAllSharedPassages
+                              ? 'Show fewer shared passages'
+                              : `Show all ${friendActivity.intersectingNotes.length} shared passages`
+                          }
+                        >
+                          <Text style={styles.showMoreButtonText}>
+                            {showAllSharedPassages
+                              ? 'Show less'
+                              : `Show all (${friendActivity.intersectingNotes.length})`}
+                          </Text>
+                          <Ionicons
+                            name={showAllSharedPassages ? 'chevron-up' : 'chevron-down'}
+                            size={14}
+                            color={colors.accentSocial}
+                          />
+                        </Pressable>
+                      )}
                     </View>
                   ) : null}
-                  {(showAllRecentUpdates
-                    ? friendActivity.otherFriendNotes
-                    : friendActivity.otherFriendNotes.slice(0, 3)
-                  ).map((item) => (
-                    <FriendNoteCard
-                      key={`other-${item.note.id}`}
-                      item={item}
-                      onPress={() =>
-                        router.push({ pathname: '/note/[id]', params: { id: item.note.id } })
-                      }
-                    />
-                  ))}
-                  {friendActivity.otherFriendNotes.length > 3 && (
-                    <Pressable
-                      style={styles.showMoreButton}
-                      onPress={() => setShowAllRecentUpdates((prev) => !prev)}
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        showAllRecentUpdates
-                          ? 'Show fewer recent updates'
-                          : `Show all ${friendActivity.otherFriendNotes.length} recent updates`
-                      }
-                    >
-                      <Text style={styles.showMoreButtonText}>
-                        {showAllRecentUpdates
-                          ? 'Show less'
-                          : `Show all (${friendActivity.otherFriendNotes.length})`}
-                      </Text>
-                      <Ionicons
-                        name={showAllRecentUpdates ? 'chevron-up' : 'chevron-down'}
-                        size={14}
-                        color={colors.accentSocial}
-                      />
-                    </Pressable>
-                  )}
-                </View>
-              ) : null}
-            </>
-          )
+
+                  {/* Other Friend Updates */}
+                  {friendActivity.otherFriendNotes.length > 0 ? (
+                    <View style={styles.subSectionContainer}>
+                      {friendActivity.intersectingNotes.length > 0 ? (
+                        <View style={styles.subSectionHeader}>
+                          <Ionicons name="newspaper-outline" size={14} color={colors.textSecondary} />
+                          <Text style={styles.subSectionTitleSecondary}>Recent Updates</Text>
+                        </View>
+                      ) : null}
+                      {(showAllRecentUpdates
+                        ? friendActivity.otherFriendNotes
+                        : friendActivity.otherFriendNotes.slice(0, 3)
+                      ).map((item) => (
+                        <FriendNoteCard
+                          key={`other-${item.note.id}`}
+                          item={item}
+                          onPress={() =>
+                            router.push({ pathname: '/note/[id]', params: { id: item.note.id } })
+                          }
+                        />
+                      ))}
+                      {friendActivity.otherFriendNotes.length > 3 && (
+                        <Pressable
+                          style={styles.showMoreButton}
+                          onPress={() => setShowAllRecentUpdates((prev) => !prev)}
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            showAllRecentUpdates
+                              ? 'Show fewer recent updates'
+                              : `Show all ${friendActivity.otherFriendNotes.length} recent updates`
+                          }
+                        >
+                          <Text style={styles.showMoreButtonText}>
+                            {showAllRecentUpdates
+                              ? 'Show less'
+                              : `Show all (${friendActivity.otherFriendNotes.length})`}
+                          </Text>
+                          <Ionicons
+                            name={showAllRecentUpdates ? 'chevron-up' : 'chevron-down'}
+                            size={14}
+                            color={colors.accentSocial}
+                          />
+                        </Pressable>
+                      )}
+                    </View>
+                  ) : null}
+                </>
+              )
+            )}
+          </>
         )}
 
         {/* SECTION 3: REDISCOVER A REFLECTION */}

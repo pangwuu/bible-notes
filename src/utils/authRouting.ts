@@ -33,7 +33,8 @@ export function isInAuthGroup(segments: readonly string[] | string[]): boolean {
 export function getAuthRedirect(
   isAuthenticated: boolean,
   segments: readonly string[] | string[],
-  loading: boolean = false
+  loading: boolean = false,
+  hasCompletedProfile: boolean = true
 ): string | null {
   if (loading) {
     return null;
@@ -46,6 +47,11 @@ export function getAuthRedirect(
   }
 
   if (isAuthenticated && inAuth) {
+    // If the user is on the register screen, do not auto-redirect away until their profile document exists
+    const isRegisterScreen = Array.isArray(segments) && segments.length > 1 && segments[1] === 'register';
+    if (isRegisterScreen && !hasCompletedProfile) {
+      return null;
+    }
     return TABS_ROUTE;
   }
 

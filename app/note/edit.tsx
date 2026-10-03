@@ -47,12 +47,15 @@ import { useAuth } from '../../src/context/AuthContext';
 import {
   buildLinkedVerseMap,
   formatVerseReferenceTag,
+  extractVerseReferences,
+  syncSectionVerseReferencesFromContent,
 } from '../../src/utils/verseLinkUtils';
 import { findCanonicalBook } from '../../src/constants/bibleData';
 import { createPassageReference, formatSegmentDisplay } from '../../src/utils/passageParser';
 import { useReaderFontSize } from '../../src/hooks/useReaderFontSize';
 import { useVersePreview } from '../../src/hooks/useVersePreview';
 import TOCSegmentBar from '../../src/components/note/TOCSegmentBar';
+import { safeStorage } from '../../src/utils/safeStorage';
 
 export default function NoteEditScreen() {
   const insets = useSafeAreaInsets();
@@ -92,9 +95,18 @@ export default function NoteEditScreen() {
 
   // Active Template & Dynamic Sections
   const [title, setTitle] = useState<string>('');
-  const [activeTemplate, setActiveTemplate] = useState<NoteTemplate>(DEFAULT_TEMPLATE);
+  const preferredDefaultTplId = profile?.settings?.default_template_id || profile?.default_template_id;
+  const initialTpl = useMemo(() => {
+    if (!id && preferredDefaultTplId) {
+      const found = allTemplates.find((t) => t.id === preferredDefaultTplId);
+      if (found) return found;
+    }
+    return DEFAULT_TEMPLATE;
+  }, [id, preferredDefaultTplId, allTemplates]);
+
+  const [activeTemplate, setActiveTemplate] = useState<NoteTemplate>(initialTpl);
   const [sections, setSections] = useState<NoteSectionValue[]>(() =>
-    initializeSectionValues(DEFAULT_TEMPLATE)
+    initializeSectionValues(initialTpl)
   );
 
   const [tags, setTags] = useState<string[]>([]);
@@ -107,6 +119,7 @@ export default function NoteEditScreen() {
   const currentNoteIdRef = useRef<string | undefined>(id);
   const editorLayoutY = useRef<number>(0);
   const sectionLayoutMap = useRef<Record<string, number>>({});
+  const verseLayoutMap = useRef<Record<string, number>>({});
   const isSavingRef = useRef(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const bibleReaderTop = useRef<number>(0);
@@ -114,6 +127,29 @@ export default function NoteEditScreen() {
   const tocTop = useRef<number>(0);
   const [targetHighlightedVerse, setTargetHighlightedVerse] = useState<TargetVerseHighlight | null>(null);
   const [showScrollToBible, setShowScrollToBible] = useState<boolean>(false);
+
+  // Apply default template preference for new notes
+  useEffect(() => {
+    if (!id) {
+      safeStorage.getItem('default_template_id').then((stored) => {
+        const targetId = profile?.settings?.default_template_id || profile?.default_template_id || stored;
+        if (targetId) {
+          const targetTpl = allTemplates.find((t) => t.id === targetId);
+          if (targetTpl && targetTpl.id !== activeTemplate.id && !isDirty) {
+            setActiveTemplate(targetTpl);
+            setSections(initializeSectionValues(targetTpl));
+          }
+        }
+      });
+    }
+  }, [id, profile?.settings?.default_template_id, profile?.default_template_id, allTemplates, isDirty]);
+
+  // If friends are disabled, enforce private visibility
+  useEffect(() => {
+    if (profile?.settings?.enable_friends === false) {
+      setVisibility('private');
+    }
+  }, [profile?.settings?.enable_friends]);
 
   // Verse Link & Preview Modal State
   const {
@@ -124,8 +160,9 @@ export default function NoteEditScreen() {
     translation: profile?.settings?.preferred_translation || 'ESV',
     esvApiKey: profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key,
     onViewInContext: (data) => {
+      let targetCanon: string | undefined;
       if (data.book && passage?.segments && passage.segments.length > 0) {
-        const targetCanon = findCanonicalBook(data.book)?.name || data.book;
+        targetCanon = findCanonicalBook(data.book)?.name || data.book;
         const matchIdx = passage.segments.findIndex((seg) => {
           const segCanon = findCanonicalBook(seg.book)?.name || seg.book;
           if (segCanon !== targetCanon) return false;
@@ -139,9 +176,20 @@ export default function NoteEditScreen() {
         }
       }
 
-      const scrollYTarget = tocTop.current > 0 ? tocTop.current : bibleReaderTop.current;
-      const targetY = scrollYTarget > 0 ? Math.max(0, scrollYTarget - 16) : 0;
+      const canonicalKey = targetCanon && typeof data.chapter === 'number'
+        ? `${targetCanon}:${data.chapter}:${data.startVerse}`
+        : undefined;
+
+      const verseRelY =
+        (canonicalKey && verseLayoutMap.current[canonicalKey]) ??
+        verseLayoutMap.current[String(data.startVerse)] ??
+        0;
+
+      const baseTop = bibleReaderTop.current > 0 ? bibleReaderTop.current : (tocTop.current > 0 ? tocTop.current : 0);
+      const numVerseY = Number(verseRelY) || 0;
+      const targetY = numVerseY > 0 ? Math.max(0, baseTop + numVerseY - 80) : (baseTop > 0 ? Math.max(0, baseTop - 16) : 0);
       scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+
       if (data.book || data.chapter || data.verses) {
         setTargetHighlightedVerse({
           book: data.book,
@@ -234,12 +282,26 @@ export default function NoteEditScreen() {
               { length: refToRemove.endVerse - refToRemove.startVerse + 1 },
               (_, i) => refToRemove.startVerse + i
             );
-      const tag = formatVerseReferenceTag(
+      const generatedTag = formatVerseReferenceTag(
         versesToPass,
         refToRemove.book ? { book: refToRemove.book, chapter: refToRemove.chapter } : undefined
       );
+      const rawTag = (refToRemove as any).raw;
       const updatedRefs = targetSec.verseReferences.filter((_, idx) => idx !== referenceIndex);
-      const updatedContent = targetSec.content.replace(tag, '').trim();
+
+      let updatedContent = targetSec.content || '';
+      if (rawTag && updatedContent.includes(rawTag)) {
+        updatedContent = updatedContent.replace(rawTag, '').trim();
+      } else if (generatedTag && updatedContent.includes(generatedTag)) {
+        updatedContent = updatedContent.replace(generatedTag, '').trim();
+      } else {
+        // Fallback: match tags for startVerse-endVerse
+        const fallbackRegex = new RegExp(
+          `\\[v\\.?\\s*${refToRemove.startVerse}(?:\\s*[-–—]\\s*${refToRemove.endVerse})?\\]`,
+          'i'
+        );
+        updatedContent = updatedContent.replace(fallbackRegex, '').trim();
+      }
 
       const copy = [...prev];
       copy[sectionIndex] = {
@@ -486,11 +548,13 @@ export default function NoteEditScreen() {
 
     const targetId = currentNoteIdRef.current || id;
 
-    // Sanitize sections and Swedish fields by trimming whitespace
-    const sanitizedSections = sections.map((s) => ({
+    // Sync section verse references with in-text tags and sanitize content
+    const syncedSections = syncSectionVerseReferencesFromContent(sections, passage);
+    const sanitizedSections = syncedSections.map((s) => ({
       ...s,
       content: (s.content || '').trim(),
     }));
+    setSections(syncedSections);
 
     // Extract Swedish fields for backwards compatibility
     const lightContent = sanitizedSections.find((s) => s.id === 'light')?.content || '';
@@ -745,6 +809,9 @@ export default function NoteEditScreen() {
               linkedVerseMap={linkedVerseMap}
               sectionOptions={sectionOptions}
               onAttachToSection={handleAttachToSection}
+              onVerseLayout={(key, y) => {
+                verseLayoutMap.current[key] = y;
+              }}
               onJumpToSection={(sectionId) => {
                 const secY = sectionLayoutMap.current[sectionId];
                 if (typeof secY === 'number') {
@@ -770,6 +837,10 @@ export default function NoteEditScreen() {
             sections={sections}
             tags={tags}
             visibility={visibility}
+            hideVisibility={profile?.settings?.enable_friends === false}
+            onBlur={() => {
+              setSections((prev) => syncSectionVerseReferencesFromContent(prev, passage));
+            }}
             templateSelector={
               <TemplateQuickSelector
                 templates={allTemplates}

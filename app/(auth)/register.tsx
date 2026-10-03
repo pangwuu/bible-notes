@@ -6,6 +6,7 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { Text, TextInput, Button } from 'react-native-paper';
 import { useRouter } from 'expo-router';
@@ -137,10 +138,12 @@ export default function RegisterScreen() {
     setIsSubmitting(true);
     try {
       await registerUser(trimmedEmail, password, normalizedUname, fullName.trim());
-      // Upon successful registration, onAuthStateChanged in AuthContext sets user,
-      // and RootNavigationLayout automatically redirects to /(tabs).
+      // Explicitly navigate to tabs upon completed registration and profile setup
+      router.replace('/(tabs)');
     } catch (err: any) {
-      setErrorMessage(err.message || 'Registration failed. Please try again.');
+      const msg = err.message || 'Registration failed. Please try again.';
+      setErrorMessage(msg);
+      Alert.alert('Registration Failed', msg);
     } finally {
       setIsSubmitting(false);
     }

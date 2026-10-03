@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import {
   Text,
@@ -14,6 +14,7 @@ import { colors, spacing, radius, typography } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/AuthContext';
 import { updateUserProfile } from '../../src/services/authService';
 import { clearPassageCache, SUPPORTED_TRANSLATIONS } from '../../src/services/bibleService';
+import { BUILT_IN_TEMPLATES } from '../../src/constants/templates';
 import FontSizeControls from '../../src/components/FontSizeControls';
 import safeStorage from '../../src/utils/safeStorage';
 import type { NoteVisibility, BibleTranslation } from '../../src/types/user';
@@ -24,6 +25,8 @@ export default function SettingsScreen() {
   // Preferences state
   const [defaultVisibility, setDefaultVisibility] = useState<NoteVisibility>('friends');
   const [preferredTranslation, setPreferredTranslation] = useState<BibleTranslation>('ESV');
+  const [defaultTemplateId, setDefaultTemplateId] = useState<string>('swedish');
+  const [enableFriends, setEnableFriends] = useState<boolean>(true);
   const [showVerseNumbers, setShowVerseNumbers] = useState<boolean>(true);
   const [defaultFontSize, setDefaultFontSize] = useState<number>(16);
   const [esvKey, setEsvKey] = useState('');
@@ -38,6 +41,11 @@ export default function SettingsScreen() {
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  // Available templates (built-in + custom)
+  const availableTemplates = useMemo(() => {
+    return [...BUILT_IN_TEMPLATES, ...(profile?.custom_templates || [])];
+  }, [profile?.custom_templates]);
+
   // Populate initial values when profile loads
   useEffect(() => {
     if (profile) {
@@ -46,6 +54,12 @@ export default function SettingsScreen() {
       }
       if (profile.preferred_translation || profile.settings?.preferred_translation) {
         setPreferredTranslation(profile.preferred_translation || profile.settings?.preferred_translation || 'ESV');
+      }
+      if (profile.settings?.default_template_id) {
+        setDefaultTemplateId(profile.settings.default_template_id);
+      }
+      if (typeof profile.settings?.enable_friends === 'boolean') {
+        setEnableFriends(profile.settings.enable_friends);
       }
       if (profile.settings?.default_font_size) {
         setDefaultFontSize(profile.settings.default_font_size);
@@ -73,6 +87,20 @@ export default function SettingsScreen() {
         const parsed = parseInt(stored, 10);
         if (!isNaN(parsed) && parsed >= 12 && parsed <= 26) {
           setDefaultFontSize(parsed);
+        }
+      }
+    });
+
+    safeStorage.getItem('default_template_id').then((stored) => {
+      if (stored) setDefaultTemplateId(stored);
+    });
+
+    safeStorage.getItem('enable_friends').then((stored) => {
+      if (stored !== null) {
+        try {
+          setEnableFriends(JSON.parse(stored));
+        } catch {
+          setEnableFriends(stored !== 'false');
         }
       }
     });
@@ -148,6 +176,42 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleTemplateChange = async (templateId: string) => {
+    setDefaultTemplateId(templateId);
+    await safeStorage.setItem('default_template_id', templateId);
+    if (user?.uid) {
+      try {
+        await updateUserProfile(user.uid, {
+          default_template_id: templateId,
+          settings: {
+            ...profile?.settings,
+            default_template_id: templateId,
+          },
+        });
+      } catch (err) {
+        console.warn('Failed to update default template in profile:', err);
+      }
+    }
+  };
+
+  const handleToggleEnableFriends = async (enabled: boolean) => {
+    setEnableFriends(enabled);
+    await safeStorage.setItem('enable_friends', JSON.stringify(enabled));
+    if (user?.uid) {
+      try {
+        await updateUserProfile(user.uid, {
+          enable_friends: enabled,
+          settings: {
+            ...profile?.settings,
+            enable_friends: enabled,
+          },
+        });
+      } catch (err) {
+        console.warn('Failed to update enable_friends in profile:', err);
+      }
+    }
+  };
+
   const handleSaveEsvKey = async () => {
     if (!user?.uid) return;
     setIsSavingKey(true);
@@ -203,21 +267,71 @@ export default function SettingsScreen() {
       </View>
 
       <Text style={styles.sectionHeader}>Preferences</Text>
+
+      {/* Friends & Social Features Toggle */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Default note visibility</Text>
-        <Text style={styles.cardDescription}>
-          Choose the default visibility when drafting new study notes.
-        </Text>
-        <SegmentedButtons
-          value={defaultVisibility}
-          onValueChange={handleVisibilityChange}
-          buttons={[
-            { value: 'friends', label: 'Friends' },
-            { value: 'private', label: 'Private' },
-          ]}
-          style={styles.segmentedButtons}
-        />
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleTextContainer}>
+            <Text style={styles.cardTitle}>Social & Friends features</Text>
+            <Text style={styles.cardDescription}>
+              Enable friend reflections, shared notes, and the Friends tab. Disable if you prefer a solo study experience.
+            </Text>
+          </View>
+          <Switch
+            value={enableFriends}
+            onValueChange={handleToggleEnableFriends}
+            color={colors.accentKeyIdea}
+          />
+        </View>
       </View>
+
+      {/* Default note template */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Default note template</Text>
+        <Text style={styles.cardDescription}>
+          The template used when creating new study notes.
+        </Text>
+        <View style={styles.translationChipGrid}>
+          {availableTemplates.map((t) => {
+            const isSelected = t.id === defaultTemplateId;
+            return (
+              <Button
+                key={t.id}
+                mode={isSelected ? 'contained' : 'outlined'}
+                buttonColor={isSelected ? colors.accentKeyIdea : undefined}
+                textColor={isSelected ? colors.bgBase : colors.textPrimary}
+                style={[
+                  styles.translationChip,
+                  !isSelected && styles.translationChipOutlined,
+                ]}
+                labelStyle={styles.translationChipLabel}
+                onPress={() => handleTemplateChange(t.id)}
+              >
+                {t.name}
+              </Button>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Default note visibility */}
+      {enableFriends && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Default note visibility</Text>
+          <Text style={styles.cardDescription}>
+            Choose the default visibility when drafting new study notes.
+          </Text>
+          <SegmentedButtons
+            value={defaultVisibility}
+            onValueChange={handleVisibilityChange}
+            buttons={[
+              { value: 'friends', label: 'Friends' },
+              { value: 'private', label: 'Private' },
+            ]}
+            style={styles.segmentedButtons}
+          />
+        </View>
+      )}
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Preferred Bible translation</Text>

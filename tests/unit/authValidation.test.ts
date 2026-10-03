@@ -71,6 +71,7 @@ import {
   logoutUser,
   sendPasswordReset,
   formatAuthError,
+  updateUserProfile,
 } from '../../src/services/authService';
 
 describe('Authentication Validation Utility Tests', () => {
@@ -430,6 +431,33 @@ describe('AuthService Integration Tests (Mocked Firebase)', () => {
       expect(mockSendPasswordResetEmail).toHaveBeenCalledWith(
         expect.anything(),
         'valid@example.com'
+      );
+    });
+  });
+
+  describe('updateUserProfile settings', () => {
+    test('persists default_template_id and enable_friends in user settings', async () => {
+      mockUpdateDoc.mockResolvedValueOnce(undefined);
+
+      await updateUserProfile('uid_123', {
+        default_template_id: 'soap',
+        enable_friends: false,
+        settings: {
+          default_template_id: 'soap',
+          enable_friends: false,
+        },
+      });
+
+      expect(mockUpdateDoc).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          default_template_id: 'soap',
+          enable_friends: false,
+          settings: expect.objectContaining({
+            default_template_id: 'soap',
+            enable_friends: false,
+          }),
+        })
       );
     });
   });

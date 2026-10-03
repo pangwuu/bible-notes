@@ -3,9 +3,12 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../src/constants/theme';
+import { useAuth } from '../../src/context/AuthContext';
 import HeaderNotificationBell from '../../src/components/HeaderNotificationBell';
 
 export default function TabsLayout() {
+  const { profile } = useAuth();
+  const enableFriends = profile?.settings?.enable_friends !== false;
   const insets = useSafeAreaInsets();
   const bottomInset = insets.bottom > 0 ? insets.bottom : 8;
 
@@ -79,6 +82,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="friends"
         options={{
+          href: enableFriends ? '/(tabs)/friends' : null,
           title: 'Friends',
           tabBarLabel: 'Friends',
           tabBarIcon: ({ color, size, focused }) => (

@@ -47,6 +47,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const preferredTrans: any =
                   data.preferred_translation || data.settings?.preferred_translation || 'ESV';
 
+                const defaultTemplateId =
+                  data.settings?.default_template_id || data.default_template_id || 'swedish';
+                const enableFriends =
+                  data.settings?.enable_friends !== false && data.enable_friends !== false;
+
                 const normalizedProfile: UserProfile = {
                   id: firebaseUser.uid,
                   uid: firebaseUser.uid,
@@ -57,9 +62,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   default_visibility: defaultVis,
                   preferred_translation: preferredTrans,
                   settings: {
+                    ...(data.settings || {}),
                     default_visibility: defaultVis,
                     custom_esv_api_key: data.settings?.custom_esv_api_key || data.custom_esv_api_key || '',
                     preferred_translation: preferredTrans,
+                    default_template_id: defaultTemplateId,
+                    enable_friends: enableFriends,
                   },
                   custom_esv_api_key: data.custom_esv_api_key || data.settings?.custom_esv_api_key || '',
                   custom_templates: Array.isArray(data.custom_templates) ? data.custom_templates : [],
@@ -132,6 +140,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const preferredTrans: any =
           data.preferred_translation || data.settings?.preferred_translation || 'ESV';
 
+        const defaultTemplateId =
+          data.settings?.default_template_id || data.default_template_id || 'swedish';
+        const enableFriends =
+          data.settings?.enable_friends !== false && data.enable_friends !== false;
+
         setProfile({
           id: auth.currentUser.uid,
           uid: auth.currentUser.uid,
@@ -142,9 +155,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           default_visibility: defaultVis,
           preferred_translation: preferredTrans,
           settings: {
+            ...(data.settings || {}),
             default_visibility: defaultVis,
             custom_esv_api_key: data.settings?.custom_esv_api_key || data.custom_esv_api_key || '',
             preferred_translation: preferredTrans,
+            default_template_id: defaultTemplateId,
+            enable_friends: enableFriends,
           },
           custom_esv_api_key: data.custom_esv_api_key || data.settings?.custom_esv_api_key || '',
           created_at: data.created_at,

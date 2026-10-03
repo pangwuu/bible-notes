@@ -13,10 +13,14 @@ interface HeaderNotificationBellProps {
 
 export default function HeaderNotificationBell({ unreadCount }: HeaderNotificationBellProps) {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [liveUnreadCount, setLiveUnreadCount] = useState<number>(unreadCount ?? 0);
 
   useEffect(() => {
+    if (profile?.settings?.enable_friends === false) {
+      return;
+    }
+
     // If explicit unreadCount prop provided (e.g. testing), respect it
     if (unreadCount !== undefined) {
       setLiveUnreadCount(unreadCount);
@@ -33,7 +37,11 @@ export default function HeaderNotificationBell({ unreadCount }: HeaderNotificati
     });
 
     return () => unsubscribe();
-  }, [user?.uid, unreadCount]);
+  }, [user?.uid, unreadCount, profile?.settings?.enable_friends]);
+
+  if (profile?.settings?.enable_friends === false) {
+    return null;
+  }
 
   const countToDisplay = liveUnreadCount;
 

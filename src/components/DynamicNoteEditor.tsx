@@ -39,6 +39,7 @@ export interface DynamicNoteEditorProps {
   onRemoveVerseReference?: (sectionIndex: number, referenceIndex: number) => void;
   onSectionLayout?: (sectionId: string, y: number) => void;
   onSectionContentSizeChange?: (sectionId: string, width: number, height: number) => void;
+  hideVisibility?: boolean;
 }
 
 const COMMON_TAG_SUGGESTIONS = [
@@ -72,6 +73,7 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
   onRemoveVerseReference,
   onSectionLayout,
   onSectionContentSizeChange,
+  hideVisibility = false,
 }) => {
   const combinedSuggestions = useMemo(() => {
     return Array.from(new Set([...(suggestionTags || []), ...COMMON_TAG_SUGGESTIONS]));
@@ -84,63 +86,67 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
   return (
     <View style={styles.container}>
       {/* Visibility Toggle Row */}
-      <View style={styles.metaRow}>
-        <View style={styles.headerLeft}>
-          <Ionicons name="eye-outline" size={15} color={colors.text.secondary} />
-          <Text style={styles.metaLabel}>Visibility</Text>
-        </View>
-        <View style={styles.visibilityToggle}>
-          <Pressable
-            accessibilityRole="switch"
-            accessibilityLabel="Note visibility: friends"
-            onPress={() => onChangeVisibility('friends')}
-            style={[
-              styles.visOption,
-              visibility === 'friends' && styles.visOptionActive,
-            ]}
-          >
-            <Ionicons
-              name="people"
-              size={14}
-              color={visibility === 'friends' ? colors.bg.base : colors.text.secondary}
-            />
-            <Text
-              style={[
-                styles.visText,
-                visibility === 'friends' && styles.visTextActive,
-              ]}
-            >
-              Friends
-            </Text>
-          </Pressable>
+      {!hideVisibility && (
+        <>
+          <View style={styles.metaRow}>
+            <View style={styles.headerLeft}>
+              <Ionicons name="eye-outline" size={15} color={colors.text.secondary} />
+              <Text style={styles.metaLabel}>Visibility</Text>
+            </View>
+            <View style={styles.visibilityToggle}>
+              <Pressable
+                accessibilityRole="switch"
+                accessibilityLabel="Note visibility: friends"
+                onPress={() => onChangeVisibility('friends')}
+                style={[
+                  styles.visOption,
+                  visibility === 'friends' && styles.visOptionActive,
+                ]}
+              >
+                <Ionicons
+                  name="people"
+                  size={14}
+                  color={visibility === 'friends' ? colors.bg.base : colors.text.secondary}
+                />
+                <Text
+                  style={[
+                    styles.visText,
+                    visibility === 'friends' && styles.visTextActive,
+                  ]}
+                >
+                  Friends
+                </Text>
+              </Pressable>
 
-          <Pressable
-            accessibilityRole="switch"
-            accessibilityLabel="Note visibility: private"
-            onPress={() => onChangeVisibility('private')}
-            style={[
-              styles.visOption,
-              visibility === 'private' && styles.visOptionActive,
-            ]}
-          >
-            <Ionicons
-              name="lock-closed"
-              size={14}
-              color={visibility === 'private' ? colors.bg.base : colors.text.secondary}
-            />
-            <Text
-              style={[
-                styles.visText,
-                visibility === 'private' && styles.visTextActive,
-              ]}
-            >
-              Private
-            </Text>
-          </Pressable>
-        </View>
-      </View>
+              <Pressable
+                accessibilityRole="switch"
+                accessibilityLabel="Note visibility: private"
+                onPress={() => onChangeVisibility('private')}
+                style={[
+                  styles.visOption,
+                  visibility === 'private' && styles.visOptionActive,
+                ]}
+              >
+                <Ionicons
+                  name="lock-closed"
+                  size={14}
+                  color={visibility === 'private' ? colors.bg.base : colors.text.secondary}
+                />
+                <Text
+                  style={[
+                    styles.visText,
+                    visibility === 'private' && styles.visTextActive,
+                  ]}
+                >
+                  Private
+                </Text>
+              </Pressable>
+            </View>
+          </View>
 
-      <View style={styles.divider} accessibilityRole="none" importantForAccessibility="no" />
+          <View style={styles.divider} accessibilityRole="none" importantForAccessibility="no" />
+        </>
+      )}
 
       {/* Template Quick Selector (Underneath Scripture Component, Below Visibility) */}
       {templateSelector && (
@@ -177,7 +183,7 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
                 </Text>
               </View>
 
-              {/* Section Attached Verse Pills (temporarily commented out)
+              {/* Section Attached Verse Pills */}
               {section.verseReferences && section.verseReferences.length > 0 && (
                 <View style={styles.pillBar}>
                   {section.verseReferences.map((ref, rIdx) => (
@@ -195,7 +201,6 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
                   ))}
                 </View>
               )}
-              */}
 
               <TextInput
                 value={section.content}

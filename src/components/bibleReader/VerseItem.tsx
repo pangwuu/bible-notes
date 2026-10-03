@@ -12,6 +12,7 @@ interface VerseItemProps {
   showVerseNumbers: boolean;
   fontSize: number;
   onToggle: (verseNumber: number) => void;
+  onLayout?: (e: any) => void;
 }
 
 const VerseItemComponent: React.FC<VerseItemProps> = ({
@@ -22,9 +23,11 @@ const VerseItemComponent: React.FC<VerseItemProps> = ({
   showVerseNumbers,
   fontSize,
   onToggle,
+  onLayout,
 }) => {
   return (
     <Text
+      onLayout={onLayout}
       onPress={() => onToggle(verse.verseNumber)}
       style={[
         styles.verseTextUnit,

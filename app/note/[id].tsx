@@ -58,6 +58,7 @@ export default function NoteDetailScreen() {
   const bibleReaderTop = useRef<number>(0);
   const tocTop = useRef<number>(0);
   const sectionLayoutMap = useRef<Record<string, number>>({});
+  const verseLayoutMap = useRef<Record<string, number>>({});
   const [targetHighlightedSection, setTargetHighlightedSection] = useState<string | null>(null);
   const previousPassageKeyRef = useRef<string | null>(null);
 
@@ -70,9 +71,9 @@ export default function NoteDetailScreen() {
 
   const handleScrollToVerse = useCallback(
     (verseNum: number, context?: { book?: string; chapter?: number; verses?: number[] }) => {
-      // If the note has multiple segments, switch activeSegmentIndex to the matching segment (Option A)
+      let targetCanon: string | undefined;
       if (context?.book && note?.passage?.segments && note.passage.segments.length > 0) {
-        const targetCanon = findCanonicalBook(context.book)?.name || context.book;
+        targetCanon = findCanonicalBook(context.book)?.name || context.book;
         const matchIdx = note.passage.segments.findIndex((seg) => {
           const segCanon = findCanonicalBook(seg.book)?.name || seg.book;
           if (segCanon !== targetCanon) return false;
@@ -86,9 +87,20 @@ export default function NoteDetailScreen() {
         }
       }
 
-      const scrollYTarget = tocTop.current > 0 ? tocTop.current : bibleReaderTop.current;
-      const targetY = scrollYTarget > 0 ? Math.max(0, scrollYTarget - 16) : 0;
+      const canonicalKey = targetCanon && typeof context?.chapter === 'number'
+        ? `${targetCanon}:${context.chapter}:${verseNum}`
+        : undefined;
+
+      const verseRelY =
+        (canonicalKey && verseLayoutMap.current[canonicalKey]) ??
+        verseLayoutMap.current[String(verseNum)] ??
+        0;
+
+      const baseTop = bibleReaderTop.current > 0 ? bibleReaderTop.current : (tocTop.current > 0 ? tocTop.current : 0);
+      const numVerseY = Number(verseRelY) || 0;
+      const targetY = numVerseY > 0 ? Math.max(0, baseTop + numVerseY - 80) : (baseTop > 0 ? Math.max(0, baseTop - 16) : 0);
       scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+
       if (context?.book || context?.chapter || context?.verses) {
         setTargetHighlightedVerse({
           book: context.book,
@@ -137,15 +149,20 @@ export default function NoteDetailScreen() {
           }
 
           // 1. Friend overlaps (decoupled background fetch)
-          setLoadingOverlaps(true);
-          findFriendNoteOverlaps(user.uid, fetched.passage)
-            .then((items) => setOverlaps(items))
-            .catch((err) => {
-              console.warn('Failed to query friend note overlaps:', err);
-            })
-            .finally(() => {
-              setLoadingOverlaps(false);
-            });
+          if (profile?.settings?.enable_friends !== false) {
+            setLoadingOverlaps(true);
+            findFriendNoteOverlaps(user.uid, fetched.passage)
+              .then((items) => setOverlaps(items))
+              .catch((err) => {
+                console.warn('Failed to query friend note overlaps:', err);
+              })
+              .finally(() => {
+                setLoadingOverlaps(false);
+              });
+          } else {
+            setLoadingOverlaps(false);
+            setOverlaps([]);
+          }
 
           // 2. User's own related notes (Point 3)
           notesService.getUserNotes(user.uid)
@@ -247,16 +264,40 @@ export default function NoteDetailScreen() {
 
   const formatMarkdownWithVerseLinks = (rawText: string) => {
     if (!rawText) return '';
-    return rawText
+    const cleaned = rawText.replace(/\[⚓\s*/g, '[');
+    return cleaned
       .replace(
         /\[([0-9]?\s*[A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+)[:.]((?:\d+(?:\s*[-–—]\s*\d+)?)(?:\s*,\s*\d+(?:\s*[-–—]\s*\d+)?)*)\]/gi,
-        (_, b, c, spec) => `[⚓ ${b.trim()} ${c}:${spec.replace(/\s+/g, '')}](verse:${encodeURIComponent(b.trim())}:${c}:${spec.replace(/\s+/g, '')})`
+        (_, b, c, spec) => `[${b.trim()} ${c}:${spec.replace(/\s+/g, '')}](verse:${encodeURIComponent(b.trim())}:${c}:${spec.replace(/\s+/g, '')})`
       )
       .replace(
         /\[v\.?\s*((?:\d+(?:\s*[-–—]\s*\d+)?)(?:\s*,\s*\d+(?:\s*[-–—]\s*\d+)?)*)\]/gi,
-        (_, spec) => `[⚓ v. ${spec.replace(/\s+/g, '')}](verse:${spec.replace(/\s+/g, '')})`
+        (_, spec) => `[v. ${spec.replace(/\s+/g, '')}](verse:${spec.replace(/\s+/g, '')})`
       );
   };
+
+  const markdownRules = useMemo(
+    () => ({
+      link: (node: any, children: any, _parent: any, styles: any) => {
+        const href = node.attributes?.href || '';
+        const isVerse = href.startsWith('verse:');
+        return (
+          <Text
+            key={node.key}
+            style={isVerse ? styles.verseLinkBadge : styles.link}
+            onPress={() => handleLinkPress(href)}
+          >
+            {isVerse && (
+              <Ionicons name="bookmark" size={12} color={colors.accent.keyIdea} />
+            )}
+            {isVerse ? ' ' : ''}
+            {children}
+          </Text>
+        );
+      },
+    }),
+    []
+  );
 
   const handleLinkPress = (url: string) => {
     if (url.startsWith('verse:')) {
@@ -376,53 +417,63 @@ export default function NoteDetailScreen() {
       </View>
 
       {/* Letterboxd-style Overlap Badge Pill */}
-      {loadingOverlaps && overlaps.length === 0 && (
-        <FriendActivityLoadingIndicator
-          compact
-          message="Checking for friend reflections..."
-        />
-      )}
-      {overlaps.length > 0 && (
-        <View style={styles.overlapSection}>
-          {(showAllOverlaps ? overlaps : overlaps.slice(0, 3)).map((item) => {
-            const friendName = item.friendProfile.display_name || item.friendProfile.username || 'Friend';
-            const initial = friendName[0].toUpperCase();
-            const passageSummary = formatPassageDisplay(item.note.passage);
-
-            return (
-              <Pressable
-                key={item.note.id}
-                style={styles.overlapBadge}
-                onPress={() => router.push({ pathname: '/note/[id]', params: { id: item.note.id } })}
-                accessibilityRole="button"
-                accessibilityLabel={`${friendName} also noted ${passageSummary}`}
-              >
-                <View style={styles.overlapAvatar}>
-                  <Text style={styles.overlapAvatarText}>{initial}</Text>
-                </View>
-                <Text style={styles.overlapText} numberOfLines={2} ellipsizeMode="tail">
-                  {friendName} also noted {passageSummary}
-                </Text>
-              </Pressable>
-            );
-          })}
-          {overlaps.length > 3 && (
-            <Pressable
-              style={styles.overlapTogglePill}
-              onPress={() => setShowAllOverlaps((prev) => !prev)}
-              accessibilityRole="button"
-              accessibilityLabel={
-                showAllOverlaps
-                  ? 'Show fewer friend notes'
-                  : `Show all ${overlaps.length} friend notes`
-              }
-            >
-              <Text style={styles.overlapToggleText}>
-                {showAllOverlaps ? 'Show less' : `+${overlaps.length - 3} more`}
-              </Text>
-            </Pressable>
+      {profile?.settings?.enable_friends !== false && (
+        <>
+          {loadingOverlaps && overlaps.length === 0 && (
+            <FriendActivityLoadingIndicator
+              compact
+              message="Checking for friend reflections..."
+            />
           )}
-        </View>
+          {!loadingOverlaps && overlaps.length === 0 && (
+            <View style={styles.emptyOverlapsBadge}>
+              <Ionicons name="people-outline" size={13} color={colors.text.secondary} />
+              <Text style={styles.emptyOverlapsText}>No friend reflections yet</Text>
+            </View>
+          )}
+          {overlaps.length > 0 && (
+            <View style={styles.overlapSection}>
+              {(showAllOverlaps ? overlaps : overlaps.slice(0, 3)).map((item) => {
+                const friendName = item.friendProfile.display_name || item.friendProfile.username || 'Friend';
+                const initial = friendName[0].toUpperCase();
+                const passageSummary = formatPassageDisplay(item.note.passage);
+
+                return (
+                  <Pressable
+                    key={item.note.id}
+                    style={styles.overlapBadge}
+                    onPress={() => router.push({ pathname: '/note/[id]', params: { id: item.note.id } })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${friendName} also noted ${passageSummary}`}
+                  >
+                    <View style={styles.overlapAvatar}>
+                      <Text style={styles.overlapAvatarText}>{initial}</Text>
+                    </View>
+                    <Text style={styles.overlapText} numberOfLines={2} ellipsizeMode="tail">
+                      {friendName} also noted {passageSummary}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              {overlaps.length > 3 && (
+                <Pressable
+                  style={styles.overlapTogglePill}
+                  onPress={() => setShowAllOverlaps((prev) => !prev)}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    showAllOverlaps
+                      ? 'Show fewer friend notes'
+                      : `Show all ${overlaps.length} friend notes`
+                  }
+                >
+                  <Text style={styles.overlapToggleText}>
+                    {showAllOverlaps ? 'Show less' : `+${overlaps.length - 3} more`}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+        </>
       )}
 
       {/* Interactive Table of Contents (Passage Segments) */}
@@ -452,6 +503,9 @@ export default function NoteDetailScreen() {
           customApiKey={profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key}
           initiallyCollapsed={false}
           linkedVerseMap={linkedVerseMap}
+          onVerseLayout={(key, y) => {
+            verseLayoutMap.current[key] = y;
+          }}
           onJumpToSection={(sectionId) => {
             setTargetHighlightedSection(sectionId);
             setTimeout(() => {
@@ -501,7 +555,7 @@ export default function NoteDetailScreen() {
                 </Text>
               </View>
 
-              {/* Section Attached Verse Pills (temporarily commented out)
+              {/* Section Attached Verse Pills */}
               {sec.verseReferences && sec.verseReferences.length > 0 && (
                 <View style={styles.pillBar}>
                   {sec.verseReferences.map((ref, rIdx) => (
@@ -520,11 +574,11 @@ export default function NoteDetailScreen() {
                   ))}
                 </View>
               )}
-              */}
 
               {Boolean(sec.content?.trim()) && (
                 <Markdown
                   style={markdownStyles}
+                  rules={markdownRules}
                   onLinkPress={handleLinkPress}
                 >
                   {formatMarkdownWithVerseLinks(sec.content.trim())}
@@ -550,6 +604,7 @@ export default function NoteDetailScreen() {
               </View>
               <Markdown
                 style={markdownStyles}
+                rules={markdownRules}
                 onLinkPress={handleLinkPress}
               >
                 {formatMarkdownWithVerseLinks(note.lightContent.trim())}
@@ -572,6 +627,7 @@ export default function NoteDetailScreen() {
               </View>
               <Markdown
                 style={markdownStyles}
+                rules={markdownRules}
                 onLinkPress={handleLinkPress}
               >
                 {formatMarkdownWithVerseLinks(note.questionContent.trim())}
@@ -594,6 +650,7 @@ export default function NoteDetailScreen() {
               </View>
               <Markdown
                 style={markdownStyles}
+                rules={markdownRules}
                 onLinkPress={handleLinkPress}
               >
                 {formatMarkdownWithVerseLinks(note.arrowContent.trim())}
@@ -619,6 +676,7 @@ export default function NoteDetailScreen() {
               </View>
               <Markdown
                 style={markdownStyles}
+                rules={markdownRules}
                 onLinkPress={handleLinkPress}
               >
                 {formatMarkdownWithVerseLinks(note.content.trim())}
@@ -800,6 +858,23 @@ const styles = StyleSheet.create({
   overlapSection: {
     marginBottom: spacing.sm,
     gap: spacing.xs,
+  },
+  emptyOverlapsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    backgroundColor: colors.bg.surfaceRaised,
+    borderRadius: radii.controls,
+    alignSelf: 'flex-start',
+    marginBottom: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border.hairline,
+  },
+  emptyOverlapsText: {
+    fontSize: 12,
+    color: colors.text.secondary,
   },
   overlapBadge: {
     flexDirection: 'row',

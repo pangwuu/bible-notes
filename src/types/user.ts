@@ -14,6 +14,8 @@ export interface UserSettings {
   custom_esv_api_key?: string;
   preferred_translation?: BibleTranslation;
   default_font_size?: number;
+  default_template_id?: string;
+  enable_friends?: boolean;
 }
 
 export interface UserDocument {
@@ -24,6 +26,8 @@ export interface UserDocument {
   display_name: string;
   full_name: string; // alias for display_name
   default_visibility: NoteVisibility;
+  default_template_id?: string;
+  enable_friends?: boolean;
   preferred_translation?: BibleTranslation;
   settings?: UserSettings;
   custom_esv_api_key?: string;
