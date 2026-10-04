@@ -43,6 +43,9 @@ describe('TemplateCreatorModal Keyboard Avoidance & Spacing', () => {
     const expectedBehavior = Platform.OS === 'ios' ? 'padding' : undefined;
     expect(keyboardAvoider.props.behavior).toBe(expectedBehavior);
 
+    const expectedOffset = Platform.OS === 'ios' ? 40 : 0;
+    expect(keyboardAvoider.props.keyboardVerticalOffset).toBe(expectedOffset);
+
     const flatStyle = StyleSheet.flatten(keyboardAvoider.props.style);
     expect(flatStyle).toEqual(
       expect.objectContaining({
@@ -52,7 +55,28 @@ describe('TemplateCreatorModal Keyboard Avoidance & Spacing', () => {
     );
   });
 
-  it('provides extensive bottom clearance (paddingBottom >= 200) in ScrollView body', () => {
+  it('renders section cards with distinct separation and 40px internal prompt clearance', () => {
+    let component: renderer.ReactTestRenderer | undefined;
+    act(() => {
+      component = renderer.create(
+        <TemplateCreatorModal
+          visible={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />
+      );
+    });
+
+    const root = component!.root;
+    const promptInput = root.findAllByType(TextInput).find(
+      (ti) => ti.props.placeholder && ti.props.placeholder.includes('Helper prompt')
+    );
+    expect(promptInput).toBeTruthy();
+    const promptStyle = StyleSheet.flatten(promptInput!.props.style);
+    expect(promptStyle.paddingBottom).toBe(40);
+  });
+
+  it('provides balanced bottom clearance (paddingBottom: 140) in ScrollView body', () => {
     let component: renderer.ReactTestRenderer | undefined;
     act(() => {
       component = renderer.create(
@@ -74,8 +98,7 @@ describe('TemplateCreatorModal Keyboard Avoidance & Spacing', () => {
 
     expect(bodyScrollView).toBeTruthy();
     const flatContainerStyle = StyleSheet.flatten(bodyScrollView!.props.contentContainerStyle);
-    expect(flatContainerStyle.paddingBottom).toBeGreaterThanOrEqual(200);
-    expect(flatContainerStyle.paddingBottom).toBe(240);
+    expect(flatContainerStyle.paddingBottom).toBe(140);
   });
 
   it('configures ScrollView with keyboard handling attributes', () => {
@@ -97,7 +120,6 @@ describe('TemplateCreatorModal Keyboard Avoidance & Spacing', () => {
     expect(bodyScrollView).toBeTruthy();
     expect(bodyScrollView!.props.keyboardShouldPersistTaps).toBe('handled');
     expect(bodyScrollView!.props.keyboardDismissMode).toBe('on-drag');
-    expect(bodyScrollView!.props.automaticallyAdjustKeyboardInsets).toBe(Platform.OS === 'ios');
   });
 
   it('allows typing into multiple section titles and placeholders without layout hindrance', () => {
@@ -193,6 +215,6 @@ describe('TemplateCreatorModal Keyboard Avoidance & Spacing', () => {
       const style = StyleSheet.flatten(sv.props.contentContainerStyle);
       return style && style.paddingBottom !== undefined;
     });
-    expect(StyleSheet.flatten(bodyScrollView!.props.contentContainerStyle).paddingBottom).toBe(240);
+    expect(StyleSheet.flatten(bodyScrollView!.props.contentContainerStyle).paddingBottom).toBe(140);
   });
 });

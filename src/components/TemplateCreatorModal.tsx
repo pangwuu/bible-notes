@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -36,6 +36,8 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const scrollViewRef = useRef<ScrollView>(null);
+  const sectionLayoutMap = useRef<Record<string, number>>({});
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [icon, setIcon] = useState('bulb-outline');
@@ -163,6 +165,7 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
       <View style={styles.overlay}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
           style={styles.keyboardAvoider}
         >
           <View style={styles.sheet}>
@@ -180,10 +183,10 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
             </View>
 
             <ScrollView
+              ref={scrollViewRef}
               contentContainerStyle={styles.body}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
-              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
               showsVerticalScrollIndicator={false}
             >
             {/* Template Identity */}
@@ -248,8 +251,24 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
 
             {sections.map((sec, idx) => {
               const secColor = sec.color || colors.accent.keyIdea;
+              const handleScrollToCard = () => {
+                const targetY = sectionLayoutMap.current[sec.id];
+                if (typeof targetY === 'number') {
+                  scrollViewRef.current?.scrollTo({
+                    y: Math.max(0, targetY - 12),
+                    animated: true,
+                  });
+                }
+              };
+
               return (
-                <View key={sec.id} style={styles.sectionCard}>
+                <View
+                  key={sec.id}
+                  style={styles.sectionCard}
+                  onLayout={(e) => {
+                    sectionLayoutMap.current[sec.id] = e.nativeEvent.layout.y;
+                  }}
+                >
                   <View style={styles.secCardHeader}>
                     <Pressable
                       onPress={() => openPicker(idx)}
@@ -268,6 +287,7 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
                     <TextInput
                       value={sec.title}
                       onChangeText={(val) => handleUpdateSection(idx, 'title', val)}
+                      onFocus={handleScrollToCard}
                       placeholder={`Section ${idx + 1} Title (e.g. Observation)`}
                       placeholderTextColor={colors.text.secondary}
                       style={styles.secTitleInput}
@@ -289,6 +309,7 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
                   <TextInput
                     value={sec.placeholder || ''}
                     onChangeText={(val) => handleUpdateSection(idx, 'placeholder', val)}
+                    onFocus={handleScrollToCard}
                     placeholder="Helper prompt / placeholder (optional)..."
                     placeholderTextColor={colors.text.secondary}
                     style={styles.secPromptInput}
@@ -423,7 +444,7 @@ const styles = StyleSheet.create({
   },
   body: {
     padding: spacing.md,
-    paddingBottom: 240, // 200px+ clearance for virtual keyboard avoidance
+    paddingBottom: 140, // Balanced clearance above virtual keyboard
   },
   card: {
     backgroundColor: colors.bg.surfaceRaised,
@@ -514,10 +535,10 @@ const styles = StyleSheet.create({
   sectionCard: {
     backgroundColor: colors.bg.surfaceRaised,
     borderRadius: radii.controls,
-    padding: spacing.sm,
+    padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border.hairline,
-    marginTop: spacing.sm,
+    marginTop: spacing.lg, // 24px distinct separation between section blocks (~10% card height)
   }, 
   secCardHeader: {
     flexDirection: 'row',
@@ -538,8 +559,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text.primary,
     flex: 1,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     backgroundColor: colors.bg.surface,
     borderRadius: radii.content,
     borderWidth: 1,
@@ -551,9 +572,10 @@ const styles = StyleSheet.create({
   secPromptInput: {
     ...typography.caption,
     color: colors.text.primary,
-    marginTop: spacing.xs,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    marginTop: spacing.sm,
+    paddingTop: 8,
+    paddingBottom: 40, // 40px internal breathing room above keyboard/borders
+    paddingHorizontal: 10,
     backgroundColor: colors.bg.surface,
     borderRadius: radii.content,
     borderWidth: 1,
