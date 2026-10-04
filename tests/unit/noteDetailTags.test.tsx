@@ -35,9 +35,10 @@ jest.mock('@expo/vector-icons', () => {
   };
 });
 jest.mock('../../src/components/bibleReader/BibleReader', () => () => null);
+const mockOpenVersePreview = jest.fn();
 jest.mock('../../src/hooks/useVersePreview', () => ({
   useVersePreview: () => ({
-    openVersePreview: jest.fn(),
+    openVersePreview: mockOpenVersePreview,
     renderVersePreviewModal: () => null,
   }),
 }));
@@ -117,5 +118,49 @@ describe('NoteViewScreen inline verse tag color adaptation', () => {
     expect(linkBadges.length).toBeGreaterThan(0);
     const appLinkBadges = root.findAllByType(Text).filter((t) => isColored(t.props.style, '#7BA05B'));
     expect(appLinkBadges.length).toBeGreaterThan(0);
+  });
+
+  it('correctly handles clicking [Heb 5:12] without chapter/verse transposition', async () => {
+    const noteWithHebrews = {
+      ...mockNote,
+      sections: [
+        {
+          id: 'light',
+          title: 'Key Idea',
+          color: '#D4AF37',
+          content: 'Consider [Heb 5:12] closely.',
+        },
+      ],
+    };
+    (notesService.getNote as jest.Mock).mockResolvedValue(noteWithHebrews);
+
+    let component: renderer.ReactTestRenderer | undefined;
+    await act(async () => {
+      component = renderer.create(<NoteViewScreen />);
+    });
+    await act(async () => {
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+      }
+    });
+
+    const root = component!.root;
+    const linkBadge = root.findAllByType(Text).find((t) => {
+      if (!t.props.onPress) return false;
+      const textChildren = t.findAllByType(Text);
+      return textChildren.some((c) => c.props.children === 'Heb 5:12');
+    });
+
+    expect(linkBadge).toBeDefined();
+    act(() => {
+      linkBadge!.props.onPress();
+    });
+
+    expect(mockOpenVersePreview).toHaveBeenCalledWith(
+      12,
+      12,
+      { book: 'Hebrews', chapter: 5, verses: [12] },
+      false
+    );
   });
 });

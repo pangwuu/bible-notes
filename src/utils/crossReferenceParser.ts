@@ -375,7 +375,7 @@ export function formatMarkdownCrossReferences(
     const inTab = isInTab(item.parsed, tabPassage) ? 1 : 0;
     const seg = item.parsed.segments[0];
     const versesStr = formatVerseRangeString(seg.verses);
-    const href = `verse:${encodeURIComponent(seg.book)}:${seg.chapter}:${versesStr}?inTab=${inTab}`;
+    const href = `verse:/${encodeURIComponent(seg.book)}/${seg.chapter}/${versesStr}?inTab=${inTab}`;
     const replacement = `${item.raw}(${href})`;
 
     result =

@@ -61,7 +61,16 @@ export default function NoteDetailScreen() {
   const sectionLayoutMap = useRef<Record<string, number>>({});
   const verseLayoutMap = useRef<Record<string, number>>({});
   const [targetHighlightedSection, setTargetHighlightedSection] = useState<string | null>(null);
+  const highlightTimerRef = useRef<NodeJS.Timeout | null>(null);
   const previousPassageKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
+      }
+    };
+  }, []);
 
   const activeSegmentPassage = useMemo(() => {
     if (activeSegmentIndex === null || !note?.passage?.segments?.[activeSegmentIndex]) {
@@ -102,6 +111,10 @@ export default function NoteDetailScreen() {
       const targetY = numVerseY > 0 ? Math.max(0, baseTop + numVerseY - 80) : (baseTop > 0 ? Math.max(0, baseTop - 16) : 0);
       scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
 
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
+      }
+
       if (context?.book || context?.chapter || context?.verses) {
         setTargetHighlightedVerse({
           book: context.book,
@@ -111,9 +124,9 @@ export default function NoteDetailScreen() {
       } else {
         setTargetHighlightedVerse(verseNum);
       }
-      setTimeout(() => {
+      highlightTimerRef.current = setTimeout(() => {
         setTargetHighlightedVerse(null);
-      }, 2500);
+      }, 10000);
     },
     [note?.passage?.segments]
   );
@@ -274,13 +287,16 @@ export default function NoteDetailScreen() {
       const [payload, queryStr] = fullPayload.split('?');
       const inTab = queryStr ? queryStr.includes('inTab=1') : true;
 
-      const colonCount = (payload.match(/:/g) || []).length;
-      if (colonCount >= 2) {
-        // Canonical: "Book:Chapter:VerseSpec"
-        const parts = payload.split(':');
+      // Strip leading slashes e.g. "verse:/Hebrews/5/12" => "Hebrews/5/12"
+      const cleanPayload = payload.replace(/^\/+/, '');
+      const isSlashDelimited = cleanPayload.includes('/');
+      const parts = isSlashDelimited ? cleanPayload.split('/') : cleanPayload.split(':');
+
+      if (parts.length >= 3) {
+        // Canonical: "Book/Chapter/VerseSpec" or "Book:Chapter:VerseSpec"
         const book = decodeURIComponent(parts[0]);
         const chapter = parseInt(parts[1], 10);
-        const spec = parts.slice(2).join(':');
+        const spec = parts.slice(2).join(isSlashDelimited ? '/' : ':');
         // Parse spec into verse list
         const versesList: number[] = [];
         spec.split(',').forEach((seg) => {

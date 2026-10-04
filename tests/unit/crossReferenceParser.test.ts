@@ -345,14 +345,14 @@ describe('crossReferenceParser', () => {
     it('Case 2 (Valid, NOT in tab): formats cross ref tag with inTab=0', () => {
       const input = 'Compare with [Luke 1:1-3].';
       const output = formatMarkdownCrossReferences(input, mockTabPassage);
-      expect(output).toContain('(verse:Luke:1:1-3?inTab=0)');
+      expect(output).toContain('(verse:/Luke/1/1-3?inTab=0)');
       expect(output).toContain('[Luke 1:1-3]');
     });
 
     it('Case 3 (Valid, IN tab): formats cross ref tag with inTab=1', () => {
       const input = 'Notice [Matt 1:1-3] in this chapter.';
       const output = formatMarkdownCrossReferences(input, mockTabPassage);
-      expect(output).toContain('(verse:Matthew:1:1-3?inTab=1)');
+      expect(output).toContain('(verse:/Matthew/1/1-3?inTab=1)');
       expect(output).toContain('[Matt 1:1-3]');
     });
   });
