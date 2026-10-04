@@ -6,8 +6,6 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
-  TouchableWithoutFeedback,
-  Keyboard,
 } from 'react-native';
 import {
   Text,
@@ -104,14 +102,13 @@ export default function LoginScreen() {
       style={styles.keyboardContainer}
       behavior={Platform.OS === 'ios' ? undefined : 'height'}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          automaticallyAdjustKeyboardInsets={true}
-          showsVerticalScrollIndicator={false}
-        >
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets={true}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.headerArea}>
           <Text style={styles.title}>Bible Notes</Text>
           <Text style={styles.subtitle}>Swedish Method Study Journal</Text>
@@ -255,7 +252,6 @@ export default function LoginScreen() {
           </Dialog>
         </Portal>
         </ScrollView>
-      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }
