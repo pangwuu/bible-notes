@@ -91,7 +91,31 @@ describe('VersePreviewModal Component', () => {
     expect(allText).toContain('Romans 12:1–2');
     expect(allText).toContain('v. 1–2');
     expect(allText).toContain('I appeal to you therefore, brothers...');
-    expect(allText).toContain('View in Passage');
+    expect(allText).toContain('Jump to Passage');
+  });
+
+  it('hides jump button when canJumpToPassage is false', () => {
+    const onViewInContextMock = jest.fn();
+    const onCloseMock = jest.fn();
+
+    const element = (
+      <VersePreviewModal
+        visible={true}
+        passageRef="Romans 12:1–2"
+        startVerse={1}
+        endVerse={2}
+        verseText="I appeal to you therefore, brothers..."
+        translation="ESV"
+        canJumpToPassage={false}
+        onClose={onCloseMock}
+        onViewInContext={onViewInContextMock}
+      />
+    );
+
+    const tree = (VersePreviewModal as any)(element.props);
+    const allText = extractText(tree);
+
+    expect(allText).not.toContain('Jump to Passage');
   });
 
   it('renders canonical book/chapter and compound verses in header', () => {

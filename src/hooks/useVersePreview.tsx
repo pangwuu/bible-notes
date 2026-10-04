@@ -5,6 +5,7 @@ import { findCanonicalBook } from '../constants/bibleData';
 import { fetchPassageText } from '../services/bibleService';
 import { extractVerseRangeText, extractSelectedVersesText } from '../utils/verseLinkUtils';
 import VersePreviewModal from '../components/VersePreviewModal';
+import { isInTab } from '../utils/crossReferenceParser';
 
 export interface VersePreviewContext {
   book?: string;
@@ -23,6 +24,7 @@ export interface PreviewVerseData {
   verses?: number[];
   verseText: string;
   loading: boolean;
+  canJumpToPassage?: boolean;
 }
 
 export interface UseVersePreviewOptions {
@@ -44,10 +46,45 @@ export function useVersePreview({
     endVerse: 1,
     verseText: '',
     loading: false,
+    canJumpToPassage: true,
   });
 
   const openVersePreview = useCallback(
-    async (startVerse: number, endVerse: number, context?: VersePreviewContext) => {
+    async (
+      startVerse: number,
+      endVerse: number,
+      context?: VersePreviewContext,
+      canJumpToPassage?: boolean
+    ) => {
+      let computedCanJump = canJumpToPassage;
+      if (computedCanJump === undefined) {
+        if (context?.book && typeof context?.chapter === 'number') {
+          const targetVerses =
+            context.verses && context.verses.length > 0
+              ? context.verses
+              : Array.from({ length: endVerse - startVerse + 1 }, (_, i) => startVerse + i);
+          computedCanJump = isInTab(
+            {
+              type: 'simple',
+              raw: '',
+              segments: [
+                {
+                  book: context.book,
+                  chapter: context.chapter,
+                  verses: targetVerses,
+                  startVerse,
+                  endVerse,
+                },
+              ],
+            },
+            passage
+          );
+        } else {
+          // Legacy relative without explicit book/chapter
+          computedCanJump = false;
+        }
+      }
+
       setPreviewVerseData({
         visible: true,
         startVerse,
@@ -57,6 +94,7 @@ export function useVersePreview({
         verses: context?.verses,
         verseText: '',
         loading: true,
+        canJumpToPassage: computedCanJump,
       });
 
       let targetPassage = passage;
@@ -136,6 +174,7 @@ export function useVersePreview({
         verseText={previewVerseData.verseText}
         loading={previewVerseData.loading}
         translation={translation}
+        canJumpToPassage={previewVerseData.canJumpToPassage}
         onViewInContext={onViewInContext ? handleViewInContext : undefined}
       />
     );

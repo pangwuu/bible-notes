@@ -54,13 +54,13 @@ describe('NoteViewScreen inline verse tag color adaptation', () => {
         id: 'question',
         title: 'Question',
         color: '#5B93C4',
-        content: 'Why does [v. 16] mention God so loved?',
+        content: 'Why does [Rom 8:28] mention God so loved?',
       },
       {
         id: 'arrow',
         title: 'Application',
         color: '#7BA05B',
-        content: 'Apply [v. 16] to daily life.',
+        content: 'Apply [Rom 8:28] to daily life.',
       },
     ],
     created_at: 1000,
@@ -104,7 +104,7 @@ describe('NoteViewScreen inline verse tag color adaptation', () => {
     expect(bookmarkIcons[1].props.color).not.toBe(colors.accent.keyIdea);
 
     // Verify verse link text style
-    const verseTexts = root.findAllByType(Text).filter((t) => t.props.children === 'v. 16');
+    const verseTexts = root.findAllByType(Text).filter((t) => t.props.children === 'Rom 8:28');
     expect(verseTexts.length).toBe(2);
 
     // Find the enclosing verse link badge Text elements

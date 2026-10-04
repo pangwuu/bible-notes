@@ -4,6 +4,7 @@
 
 import { findCanonicalBook } from '../constants/bibleData';
 import { NoteSectionValue, PassageReference } from '../types/note';
+import { extractCrossReferences } from './crossReferenceParser';
 
 export interface VerseReference {
   raw: string;
@@ -100,28 +101,22 @@ export function extractVerseReferences(text: string): VerseReference[] {
   if (!text) return [];
   const results: VerseReference[] = [];
 
-  // 1. Canonical tags [Book Ch:V-V, V]
-  const canonicalRegex = new RegExp(CANONICAL_VERSE_TAG_REGEX.source, 'gi');
-  let cMatch: RegExpExecArray | null;
-  while ((cMatch = canonicalRegex.exec(text)) !== null) {
-    const rawBook = cMatch[1].trim();
-    const chapter = parseInt(cMatch[2], 10);
-    const verseSpec = cMatch[3];
-    const verses = parseVerseNumbersList(verseSpec);
-    const canonBook = findCanonicalBook(rawBook);
-    const resolvedBook = canonBook ? canonBook.name : rawBook;
-
-    if (verses.length > 0) {
-      const isDiscontinuous = verses.length > 1 && verses[verses.length - 1] - verses[0] + 1 !== verses.length;
+  // 1. Valid Canonical tags using strict cross-reference parser
+  const crossRefs = extractCrossReferences(text);
+  for (const item of crossRefs) {
+    for (const seg of item.parsed.segments) {
+      const isDiscontinuous =
+        seg.verses.length > 1 &&
+        seg.verses[seg.verses.length - 1] - seg.verses[0] + 1 !== seg.verses.length;
       const refItem: VerseReference = {
-        raw: cMatch[0],
-        book: resolvedBook,
-        chapter,
-        startVerse: verses[0],
-        endVerse: verses[verses.length - 1],
+        raw: item.raw,
+        book: seg.book,
+        chapter: seg.chapter,
+        startVerse: seg.startVerse,
+        endVerse: seg.endVerse,
       };
       if (isDiscontinuous) {
-        refItem.verses = verses;
+        refItem.verses = seg.verses;
       }
       results.push(refItem);
     }

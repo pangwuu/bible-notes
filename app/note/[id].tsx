@@ -34,6 +34,7 @@ import NoteCard from '../../src/components/NoteCard';
 import { useReaderFontSize } from '../../src/hooks/useReaderFontSize';
 import { useVersePreview } from '../../src/hooks/useVersePreview';
 import { TOCSegmentBar } from '../../src/components/note/TOCSegmentBar';
+import { formatMarkdownCrossReferences } from '../../src/utils/crossReferenceParser';
 
 export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -263,22 +264,16 @@ export default function NoteDetailScreen() {
   }, [normalizedSections]);
 
   const formatMarkdownWithVerseLinks = (rawText: string) => {
-    if (!rawText) return '';
-    const cleaned = rawText.replace(/\[⚓\s*/g, '[');
-    return cleaned
-      .replace(
-        /\[([0-9]?\s*[A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+)[:.]((?:\d+(?:\s*[-–—]\s*\d+)?)(?:\s*,\s*\d+(?:\s*[-–—]\s*\d+)?)*)\]/gi,
-        (_, b, c, spec) => `[${b.trim()} ${c}:${spec.replace(/\s+/g, '')}](verse:${encodeURIComponent(b.trim())}:${c}:${spec.replace(/\s+/g, '')})`
-      )
-      .replace(
-        /\[v\.?\s*((?:\d+(?:\s*[-–—]\s*\d+)?)(?:\s*,\s*\d+(?:\s*[-–—]\s*\d+)?)*)\]/gi,
-        (_, spec) => `[v. ${spec.replace(/\s+/g, '')}](verse:${spec.replace(/\s+/g, '')})`
-      );
+    return formatMarkdownCrossReferences(rawText, note?.passage);
   };
 
   const handleLinkPress = useCallback((url: string) => {
     if (url.startsWith('verse:')) {
-      const payload = url.replace('verse:', '');
+      const fullPayload = url.replace('verse:', '');
+      // Check query parameter ?inTab=1 or 0
+      const [payload, queryStr] = fullPayload.split('?');
+      const inTab = queryStr ? queryStr.includes('inTab=1') : true;
+
       const colonCount = (payload.match(/:/g) || []).length;
       if (colonCount >= 2) {
         // Canonical: "Book:Chapter:VerseSpec"
@@ -299,7 +294,12 @@ export default function NoteDetailScreen() {
         if (versesList.length > 0) {
           const s = versesList[0];
           const e = versesList[versesList.length - 1];
-          handleOpenVersePreview(s, e, { book, chapter: isNaN(chapter) ? undefined : chapter, verses: versesList });
+          handleOpenVersePreview(
+            s,
+            e,
+            { book, chapter: isNaN(chapter) ? undefined : chapter, verses: versesList },
+            inTab
+          );
           return false;
         }
       } else {
@@ -316,13 +316,13 @@ export default function NoteDetailScreen() {
         if (versesList.length > 0) {
           const s = versesList[0];
           const e = versesList[versesList.length - 1];
-          handleOpenVersePreview(s, e, { verses: versesList });
+          handleOpenVersePreview(s, e, { verses: versesList }, inTab);
           return false;
         }
       }
     }
     return true;
-  }, [handleOpenVersePreview]);
+  }, [handleOpenVersePreview, note?.passage]);
 
   const markdownRulesCache = useRef<Record<string, any>>({});
   const getMarkdownRules = useCallback(

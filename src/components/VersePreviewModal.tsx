@@ -25,6 +25,7 @@ export interface VersePreviewModalProps {
   loading?: boolean;
   translation?: string;
   onViewInContext?: () => void;
+  canJumpToPassage?: boolean;
 }
 
 export default function VersePreviewModal({
@@ -40,6 +41,7 @@ export default function VersePreviewModal({
   loading = false,
   translation = 'ESV',
   onViewInContext,
+  canJumpToPassage = true,
 }: VersePreviewModalProps) {
   const title = book
     ? formatVerseRangeLabel(startVerse, endVerse, { book, chapter }, verses)
@@ -108,7 +110,7 @@ export default function VersePreviewModal({
           </ScrollView>
 
           {/* Bottom Action Footer */}
-          {onViewInContext && (
+          {onViewInContext && canJumpToPassage && (
             <View style={styles.footerRow}>
               <Pressable
                 style={styles.viewInContextButton}
@@ -117,10 +119,10 @@ export default function VersePreviewModal({
                   onViewInContext();
                 }}
                 accessibilityRole="button"
-                accessibilityLabel="View in Scripture reader"
+                accessibilityLabel="Jump to Scripture passage"
               >
                 <Ionicons name="arrow-up-circle-outline" size={17} color={colors.accent.keyIdea} />
-                <Text style={styles.viewInContextText}>View in Passage</Text>
+                <Text style={styles.viewInContextText}>Jump to Passage</Text>
               </Pressable>
             </View>
           )}
