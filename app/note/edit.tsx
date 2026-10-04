@@ -12,7 +12,6 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Alert,
   ActivityIndicator,
   BackHandler,
   Keyboard,
@@ -20,6 +19,7 @@ import {
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
+import { Alert } from '../../src/utils/alert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';

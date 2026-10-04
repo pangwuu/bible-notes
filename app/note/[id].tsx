@@ -10,9 +10,9 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
+import { Alert } from '../../src/utils/alert';
 import { Text } from 'react-native-paper';
 import { useLocalSearchParams, useNavigation, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';

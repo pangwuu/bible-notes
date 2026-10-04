@@ -6,8 +6,8 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
+import { Alert } from '../../src/utils/alert';
 import { Text, TextInput, Button } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { colors, spacing, radius } from '../../src/constants/theme';
