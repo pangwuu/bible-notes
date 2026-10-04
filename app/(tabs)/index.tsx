@@ -182,7 +182,7 @@ export default function DashboardScreen() {
             <EmptyState
               icon="book-outline"
               title="No notes yet"
-              subtitle="Capture reflections on Scripture using the Swedish Method."
+              subtitle="Start reflecting on the Word of God today!"
               actionLabel="Start a note"
               onAction={() => router.push('/note/edit')}
             />

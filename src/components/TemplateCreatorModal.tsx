@@ -8,6 +8,8 @@ import {
   ScrollView,
   Pressable,
   Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Alert } from '../utils/alert';
 import { Ionicons } from '@expo/vector-icons';
@@ -159,25 +161,31 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <View style={styles.sheet}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Pressable onPress={onClose} style={styles.headerBtn} hitSlop={8}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </Pressable>
-            <Text style={styles.headerTitle}>
-              {initialTemplate ? 'Edit Template' : 'New Template'}
-            </Text>
-            <Pressable onPress={handleSave} style={styles.headerBtn} hitSlop={8}>
-              <Text style={styles.saveText}>Save</Text>
-            </Pressable>
-          </View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.keyboardAvoider}
+        >
+          <View style={styles.sheet}>
+            {/* Header */}
+            <View style={styles.header}>
+              <Pressable onPress={onClose} style={styles.headerBtn} hitSlop={8}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+              <Text style={styles.headerTitle}>
+                {initialTemplate ? 'Edit Template' : 'New Template'}
+              </Text>
+              <Pressable onPress={handleSave} style={styles.headerBtn} hitSlop={8}>
+                <Text style={styles.saveText}>Save</Text>
+              </Pressable>
+            </View>
 
-          <ScrollView
-            contentContainerStyle={styles.body}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
+            <ScrollView
+              contentContainerStyle={styles.body}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+              showsVerticalScrollIndicator={false}
+            >
             {/* Template Identity */}
             <View style={styles.card}>
               <Text style={styles.label}>Template Name</Text>
@@ -230,6 +238,8 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
                   styles.addSecBtn,
                   sections.length >= TEMPLATE_MAX_SECTIONS && { opacity: 0.4 },
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel="Add section"
               >
                 <Ionicons name="add" size={16} color={colors.accent.keyIdea} />
                 <Text style={styles.addSecText}>Add Section</Text>
@@ -364,15 +374,20 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
             </View>
           )}
         </View>
-      </View>
-    </Modal>
-  );
+      </KeyboardAvoidingView>
+    </View>
+  </Modal>
+);
 };
 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  keyboardAvoider: {
+    width: '100%',
     justifyContent: 'flex-end',
   },
   sheet: {
@@ -408,7 +423,7 @@ const styles = StyleSheet.create({
   },
   body: {
     padding: spacing.md,
-    paddingBottom: spacing.xxl,
+    paddingBottom: 240, // 200px+ clearance for virtual keyboard avoidance
   },
   card: {
     backgroundColor: colors.bg.surfaceRaised,
