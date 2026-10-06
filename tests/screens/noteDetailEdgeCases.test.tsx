@@ -21,7 +21,9 @@ const mockBack = jest.fn();
 const mockReplace = jest.fn();
 const mockPush = jest.fn();
 const mockCanGoBack = jest.fn().mockReturnValue(true);
-const mockSetOptions = jest.fn();
+const mockSetOptions = jest.fn((options) => {
+  // console.log('mockSetOptions call:', options.title, typeof options.headerRight);
+});
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: 'test_note_id' }),
@@ -34,9 +36,11 @@ jest.mock('expo-router', () => ({
   useNavigation: () => ({
     setOptions: mockSetOptions,
   }),
-  useFocusEffect: (cb: any) => {
+  useFocusEffect: (cb: () => void) => {
     const React = require('react');
-    React.useEffect(cb, []);
+    React.useEffect(() => {
+      cb();
+    }, [cb]);
   },
 }));
 
@@ -87,7 +91,7 @@ describe('Area 3: Note Detail Screen 404 & Authorization Bounds', () => {
     });
     (notesService.getNote as jest.Mock).mockResolvedValueOnce(null);
 
-    const { getByText, queryByText } = render(
+    const { getByText, queryByText } = await render(
       <PaperProvider>
         <NoteDetailScreen />
       </PaperProvider>
@@ -114,7 +118,7 @@ describe('Area 3: Note Detail Screen 404 & Authorization Bounds', () => {
       new Error('Firestore network timeout')
     );
 
-    const { getByText } = render(
+    const { getByText } = await render(
       <PaperProvider>
         <NoteDetailScreen />
       </PaperProvider>
@@ -152,7 +156,7 @@ describe('Area 3: Note Detail Screen 404 & Authorization Bounds', () => {
 
     (notesService.getNote as jest.Mock).mockResolvedValueOnce(mockNote);
 
-    render(
+    await render(
       <PaperProvider>
         <NoteDetailScreen />
       </PaperProvider>
@@ -193,7 +197,7 @@ describe('Area 3: Note Detail Screen 404 & Authorization Bounds', () => {
 
     (notesService.getNote as jest.Mock).mockResolvedValueOnce(mockNote);
 
-    render(
+    const screen = await render(
       <PaperProvider>
         <NoteDetailScreen />
       </PaperProvider>
@@ -209,9 +213,9 @@ describe('Area 3: Note Detail Screen 404 & Authorization Bounds', () => {
 
     // Render header actions component
     const HeaderActions = lastCall.headerRight;
-    const { getByTestId } = render(<HeaderActions />);
+    const headerScreen = await render(<HeaderActions />);
 
-    const trashBtn = getByTestId('ionicon-trash-outline');
+    const trashBtn = headerScreen.getByTestId('ionicon-trash-outline');
     expect(trashBtn).toBeTruthy();
 
     // Simulate clicking trash
@@ -241,56 +245,25 @@ describe('Area 3: Note Detail Screen 404 & Authorization Bounds', () => {
     // Verify Error alert displayed and navigation back NOT triggered
     expect(Alert.alert).toHaveBeenCalledWith('Error', 'Failed to delete note.');
     expect(mockBack).not.toHaveBeenCalled();
-  });
 
-  test('successfully deletes note and navigates back on confirmed deletion', async () => {
-    (useAuth as jest.Mock).mockReturnValue({
-      user: { uid: 'author_user_123' },
-      profile: { settings: { enable_friends: false } },
-    });
-
-    const mockNote = {
-      id: 'test_note_id',
-      userId: 'author_user_123',
-      user_id: 'author_user_123',
-      title: 'Successful Delete Note',
-      passage: {
-        display: 'Romans 1:1',
-        books: ['Romans'],
-        segments: [{ book: 'Romans', startChapter: 1, startVerse: 1, endChapter: 1, endVerse: 1 }],
-      },
-      sections: [],
-      tags: [],
-      visibility: 'private' as const,
-      createdAt: 1000,
-      updatedAt: 1000,
-    };
-
-    (notesService.getNote as jest.Mock).mockResolvedValueOnce(mockNote);
+    // Now test successful deletion flow
     (notesService.deleteNote as jest.Mock).mockResolvedValueOnce(undefined);
+    (Alert.alert as jest.Mock).mockClear();
 
-    render(
-      <PaperProvider>
-        <NoteDetailScreen />
-      </PaperProvider>
+    fireEvent.press(trashBtn);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Delete Note',
+      'Are you sure you want to permanently delete this note?',
+      expect.any(Array)
     );
 
-    await waitFor(() => {
-      expect(mockSetOptions).toHaveBeenCalled();
-    });
-
-    const lastCall = mockSetOptions.mock.calls[mockSetOptions.mock.calls.length - 1][0];
-    const HeaderActions = lastCall.headerRight;
-    const { getByTestId } = render(<HeaderActions />);
-
-    fireEvent.press(getByTestId('ionicon-trash-outline'));
-
-    const alertCalls = (Alert.alert as jest.Mock).mock.calls;
-    const alertButtons = alertCalls[alertCalls.length - 1][2];
-    const deleteOption = alertButtons.find((btn: any) => btn.text === 'Delete');
+    const successAlertCalls = (Alert.alert as jest.Mock).mock.calls;
+    const successAlertButtons = successAlertCalls[successAlertCalls.length - 1][2];
+    const successDeleteOption = successAlertButtons.find((btn: any) => btn.text === 'Delete');
+    expect(successDeleteOption).toBeDefined();
 
     await act(async () => {
-      await deleteOption.onPress();
+      await successDeleteOption.onPress();
     });
 
     expect(notesService.deleteNote).toHaveBeenCalledWith('test_note_id');
