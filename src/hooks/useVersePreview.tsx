@@ -3,7 +3,7 @@ import { PassageReference, formatPassageDisplay } from '../types/note';
 import { createPassageReference } from '../utils/passageParser';
 import { findCanonicalBook } from '../constants/bibleData';
 import { fetchPassageText } from '../services/bibleService';
-import { extractVerseRangeText, extractSelectedVersesText } from '../utils/verseLinkUtils';
+import { extractVerseRangeText, extractSelectedVersesText, formatVerseRangeLabel } from '../utils/verseLinkUtils';
 import VersePreviewModal from '../components/VersePreviewModal';
 import { isInTab } from '../utils/crossReferenceParser';
 
@@ -11,6 +11,14 @@ export interface VersePreviewContext {
   book?: string;
   chapter?: number;
   verses?: number[];
+  segments?: Array<{
+    book: string;
+    chapter: number;
+    verses: number[];
+    startVerse: number;
+    endVerse: number;
+  }>;
+  customTitle?: string;
 }
 
 import { BibleTranslation } from '../types/user';
@@ -25,6 +33,7 @@ export interface PreviewVerseData {
   verseText: string;
   loading: boolean;
   canJumpToPassage?: boolean;
+  customTitle?: string;
 }
 
 export interface UseVersePreviewOptions {
@@ -57,8 +66,12 @@ export function useVersePreview({
       canJumpToPassage?: boolean
     ) => {
       let computedCanJump = canJumpToPassage;
+      const isCompound = context?.segments && context.segments.length > 1;
+
       if (computedCanJump === undefined) {
-        if (context?.book && typeof context?.chapter === 'number') {
+        if (isCompound) {
+          computedCanJump = false;
+        } else if (context?.book && typeof context?.chapter === 'number') {
           const targetVerses =
             context.verses && context.verses.length > 0
               ? context.verses
@@ -95,7 +108,49 @@ export function useVersePreview({
         verseText: '',
         loading: true,
         canJumpToPassage: computedCanJump,
+        customTitle: context?.customTitle,
       });
+
+      // Handle Compound Multi-Segment Fetching
+      if (isCompound && context?.segments) {
+        try {
+          const segmentBlocks: string[] = [];
+          for (const seg of context.segments) {
+            const meta = findCanonicalBook(seg.book);
+            const bookName = meta ? meta.name : seg.book;
+            const heading = `${bookName} ${seg.chapter}:${formatVerseRangeLabel(seg.startVerse, seg.endVerse, undefined, seg.verses)}`;
+            try {
+              const segPassage = createPassageReference([
+                {
+                  book: bookName,
+                  startChapter: seg.chapter,
+                  startVerse: seg.startVerse,
+                  endChapter: seg.chapter,
+                  endVerse: seg.endVerse,
+                },
+              ]);
+              const res = await fetchPassageText(segPassage, { translation, esvApiKey });
+              const segText = seg.verses && seg.verses.length > 0
+                ? extractSelectedVersesText(res.verses || [], seg.verses)
+                : extractVerseRangeText(res.verses || [], seg.startVerse, seg.endVerse);
+              segmentBlocks.push(`${heading}\n${segText || 'No Scripture text available.'}`);
+            } catch (segErr) {
+              console.warn(`Failed to fetch segment ${heading}:`, segErr);
+              segmentBlocks.push(`${heading}\nCould not load [${heading}].`);
+            }
+          }
+
+          setPreviewVerseData((prev) => ({
+            ...prev,
+            verseText: segmentBlocks.join('\n\n'),
+            loading: false,
+          }));
+        } catch (err) {
+          console.warn('Failed to load compound verse preview text:', err);
+          setPreviewVerseData((prev) => ({ ...prev, loading: false }));
+        }
+        return;
+      }
 
       let targetPassage = passage;
       if (context?.book) {
@@ -175,6 +230,7 @@ export function useVersePreview({
         loading={previewVerseData.loading}
         translation={translation}
         canJumpToPassage={previewVerseData.canJumpToPassage}
+        customTitle={previewVerseData.customTitle}
         onViewInContext={onViewInContext ? handleViewInContext : undefined}
       />
     );

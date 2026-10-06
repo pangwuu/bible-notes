@@ -287,6 +287,71 @@ export default function NoteDetailScreen() {
       const [payload, queryStr] = fullPayload.split('?');
       const inTab = queryStr ? queryStr.includes('inTab=1') : true;
 
+      // Compound Reference Handler: verse:/compound?refs=...
+      if (payload.includes('compound') && queryStr) {
+        const params = new URLSearchParams(queryStr);
+        const refsParam = params.get('refs');
+        if (refsParam) {
+          const rawRefs = decodeURIComponent(refsParam);
+          // Split by semicolon: e.g. "Matthew:1:1-3;Luke:3:10"
+          const parsedSegments: Array<{
+            book: string;
+            chapter: number;
+            verses: number[];
+            startVerse: number;
+            endVerse: number;
+          }> = [];
+
+          rawRefs.split(';').forEach((segStr) => {
+            const parts = segStr.split(':');
+            if (parts.length >= 3) {
+              const book = parts[0];
+              const chapter = parseInt(parts[1], 10);
+              const spec = parts.slice(2).join(':');
+              const versesList: number[] = [];
+              spec.split(',').forEach((seg) => {
+                const [sStr, eStr] = seg.split('-');
+                const s = parseInt(sStr, 10);
+                const e = eStr ? parseInt(eStr, 10) : s;
+                if (!isNaN(s)) {
+                  for (let v = s; v <= (isNaN(e) ? s : e); v++) versesList.push(v);
+                }
+              });
+              if (versesList.length > 0) {
+                parsedSegments.push({
+                  book,
+                  chapter,
+                  verses: versesList,
+                  startVerse: versesList[0],
+                  endVerse: versesList[versesList.length - 1],
+                });
+              }
+            }
+          });
+
+          if (parsedSegments.length > 0) {
+            const first = parsedSegments[0];
+            const title = parsedSegments
+              .map((s) => `${s.book} ${s.chapter}:${s.startVerse === s.endVerse ? s.startVerse : `${s.startVerse}-${s.endVerse}`}`)
+              .join('; ');
+
+            handleOpenVersePreview(
+              first.startVerse,
+              first.endVerse,
+              {
+                book: first.book,
+                chapter: first.chapter,
+                verses: first.verses,
+                segments: parsedSegments,
+                customTitle: title,
+              },
+              false
+            );
+            return false;
+          }
+        }
+      }
+
       // Strip leading slashes e.g. "verse:/Hebrews/5/12" => "Hebrews/5/12"
       const cleanPayload = payload.replace(/^\/+/, '');
       const isSlashDelimited = cleanPayload.includes('/');

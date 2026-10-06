@@ -65,6 +65,7 @@ export type PassagePickerAction =
   | { type: 'SELECT_END_VERSE'; payload: { verse: number } }
   | { type: 'SELECT_ENTIRE_CHAPTER'; payload: { totalVerses: number } }
   | { type: 'ADD_SEGMENT'; payload: { segment: PassageSegment } }
+  | { type: 'ADD_SEGMENTS'; payload: { segments: PassageSegment[] } }
   | { type: 'REMOVE_SEGMENT'; payload: { index: number } }
   | { type: 'STEP_BACK' }
   | { type: 'SET_STEP'; payload: { step: PickerStep } }

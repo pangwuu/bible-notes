@@ -527,7 +527,7 @@ export async function fetchFromBibleApi(translation: BibleTranslation, passageQu
   return parseBracketVerses(data.text, parsedRef.startVerse);
 }
 
-import { formatSegmentDisplay } from '../utils/passageParser';
+import { formatSegmentDisplay, splitSegmentByChapters } from '../utils/passageParser';
 
 /**
  * Primary Unified Passage Fetcher.
@@ -540,9 +540,19 @@ export async function fetchPassageText(
 ): Promise<PassageFetchResult> {
   const translation: BibleTranslation = options.translation || 'ESV';
 
+  let normalizedInput = passageInput;
+  if (typeof normalizedInput !== 'string' && normalizedInput?.segments) {
+    if (normalizedInput.segments.some((s) => s.startChapter !== s.endChapter)) {
+      normalizedInput = {
+        ...normalizedInput,
+        segments: normalizedInput.segments.flatMap(splitSegmentByChapters),
+      };
+    }
+  }
+
   // Multi-segment handling:
-  if (typeof passageInput !== 'string' && passageInput.segments && passageInput.segments.length > 1) {
-    const combinedTitle = passageInput.displayString || formatPassageQuery(passageInput);
+  if (typeof normalizedInput !== 'string' && normalizedInput.segments && normalizedInput.segments.length > 1) {
+    const combinedTitle = normalizedInput.displayString || formatPassageQuery(normalizedInput);
     const compoundCacheKey = buildBibleCacheKey(translation, combinedTitle);
 
     if (!options.forceRefresh) {
@@ -550,10 +560,10 @@ export async function fetchPassageText(
         const cached = await safeStorage.getItem(compoundCacheKey);
         if (cached) {
           const parsed = JSON.parse(cached) as PassageFetchResult;
-          if (parsed.sections && passageInput.segments) {
+          if (parsed.sections && normalizedInput.segments) {
             parsed.sections.forEach((s, idx) => {
-              if (!s.segment && passageInput.segments[idx]) {
-                s.segment = passageInput.segments[idx];
+              if (!s.segment && normalizedInput.segments[idx]) {
+                s.segment = normalizedInput.segments[idx];
               }
             });
           }
@@ -565,7 +575,7 @@ export async function fetchPassageText(
     try {
       // Fetch each segment in parallel
       const segmentResults = await Promise.all(
-        passageInput.segments.map(async (seg) => {
+        normalizedInput.segments.map(async (seg) => {
           const segQuery = formatPassageQuery(seg);
           const res = await fetchPassageText(segQuery, options);
           return {
@@ -606,7 +616,7 @@ export async function fetchPassageText(
     }
   }
 
-  const query = typeof passageInput === 'string' ? passageInput : formatPassageQuery(passageInput);
+  const query = typeof normalizedInput === 'string' ? normalizedInput : formatPassageQuery(normalizedInput);
   const cacheKey = buildBibleCacheKey(translation, query);
 
   // 1. Check local AsyncStorage cache
@@ -632,12 +642,12 @@ export async function fetchPassageText(
   }
 
   const parsed: { book: string; startChapter: number; startVerse: number; endChapter: number; endVerse: number } =
-    typeof passageInput === 'string'
-      ? parsePassageQuery(passageInput)
-      : passageInput.segments && passageInput.segments.length > 0
-      ? passageInput.segments[0]
-      : (passageInput as any).book
-      ? (passageInput as any)
+    typeof normalizedInput === 'string'
+      ? parsePassageQuery(normalizedInput)
+      : normalizedInput.segments && normalizedInput.segments.length > 0
+      ? normalizedInput.segments[0]
+      : (normalizedInput as any).book
+      ? (normalizedInput as any)
       : parsePassageQuery(query);
   let verses: VerseSegment[] = [];
   let source: 'esv' | 'bolls' | 'web' = 'esv';

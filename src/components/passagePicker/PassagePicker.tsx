@@ -19,6 +19,7 @@ import {
   formatCompoundDisplay,
   buildSegment,
   createPassageReference,
+  splitSegmentByChapters,
 } from '../../utils/passageParser';
 import {
   PassagePickerProps,
@@ -144,20 +145,26 @@ export default function PassagePicker({
 
     if (state.segments.length > 0) {
       if (activeDraftSegment) {
-        const alreadyInList = state.segments.some(
-          (s) =>
-            s.book === activeDraftSegment.book &&
-            s.startChapter === activeDraftSegment.startChapter &&
-            s.endChapter === activeDraftSegment.endChapter &&
-            s.startVerse === activeDraftSegment.startVerse &&
-            s.endVerse === activeDraftSegment.endVerse
-        );
-        finalSegments = alreadyInList ? [...state.segments] : [...state.segments, activeDraftSegment];
+        const splitDraft = splitSegmentByChapters(activeDraftSegment);
+        finalSegments = [...state.segments];
+        for (const s of splitDraft) {
+          const alreadyInList = finalSegments.some(
+            (ex) =>
+              ex.book === s.book &&
+              ex.startChapter === s.startChapter &&
+              ex.endChapter === s.endChapter &&
+              ex.startVerse === s.startVerse &&
+              ex.endVerse === s.endVerse
+          );
+          if (!alreadyInList) {
+            finalSegments.push(s);
+          }
+        }
       } else {
         finalSegments = [...state.segments];
       }
     } else if (activeDraftSegment) {
-      finalSegments = [activeDraftSegment];
+      finalSegments = splitSegmentByChapters(activeDraftSegment);
     } else {
       return;
     }
@@ -186,23 +193,25 @@ export default function PassagePicker({
   ]);
 
   const currentSummary = useMemo(() => {
-    if (state.segments.length > 0) {
-      if (activeDraftSegment) {
-        const alreadyInList = state.segments.some(
-          (s) =>
-            s.book === activeDraftSegment.book &&
-            s.startChapter === activeDraftSegment.startChapter &&
-            s.endChapter === activeDraftSegment.endChapter &&
-            s.startVerse === activeDraftSegment.startVerse &&
-            s.endVerse === activeDraftSegment.endVerse
-        );
-        const all = alreadyInList ? state.segments : [...state.segments, activeDraftSegment];
-        return formatCompoundDisplay(all);
-      }
-      return formatCompoundDisplay(state.segments);
-    }
+    const rawSegments = [...state.segments];
     if (activeDraftSegment) {
-      return formatSegmentDisplay(activeDraftSegment);
+      const splitDraft = splitSegmentByChapters(activeDraftSegment);
+      for (const s of splitDraft) {
+        const alreadyInList = rawSegments.some(
+          (ex) =>
+            ex.book === s.book &&
+            ex.startChapter === s.startChapter &&
+            ex.endChapter === s.endChapter &&
+            ex.startVerse === s.startVerse &&
+            ex.endVerse === s.endVerse
+        );
+        if (!alreadyInList) {
+          rawSegments.push(s);
+        }
+      }
+    }
+    if (rawSegments.length > 0) {
+      return formatCompoundDisplay(rawSegments);
     }
     return state.selectedBook
       ? state.selectedChapter
@@ -252,9 +261,10 @@ export default function PassagePicker({
 
   const handleAddCurrentSegment = useCallback(() => {
     if (!activeDraftSegment) return;
+    const splitSegs = splitSegmentByChapters(activeDraftSegment);
     dispatch({
-      type: 'ADD_SEGMENT',
-      payload: { segment: activeDraftSegment },
+      type: 'ADD_SEGMENTS',
+      payload: { segments: splitSegs },
     });
   }, [activeDraftSegment]);
 

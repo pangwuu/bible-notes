@@ -26,6 +26,7 @@ export interface VersePreviewModalProps {
   translation?: string;
   onViewInContext?: () => void;
   canJumpToPassage?: boolean;
+  customTitle?: string;
 }
 
 export default function VersePreviewModal({
@@ -42,10 +43,11 @@ export default function VersePreviewModal({
   translation = 'ESV',
   onViewInContext,
   canJumpToPassage = true,
+  customTitle,
 }: VersePreviewModalProps) {
-  const title = book
+  const title = customTitle || (book
     ? formatVerseRangeLabel(startVerse, endVerse, { book, chapter }, verses)
-    : `${passageRef} (${formatVerseRangeLabel(startVerse, endVerse, undefined, verses)})`;
+    : `${passageRef} (${formatVerseRangeLabel(startVerse, endVerse, undefined, verses)})`);
 
   return (
     <Modal

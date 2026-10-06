@@ -226,6 +226,21 @@ export function formatVerseRangeLabel(
   return `v. ${rangeStr}`;
 }
 
+/**
+ * Appends a verse tag to content on the nearest clear line:
+ * - If content is empty, returns the tag.
+ * - If content already ends with a newline, appends the tag directly.
+ * - Otherwise, appends a newline followed by the tag.
+ */
+export function appendVerseTagOnNearestClearLine(currentContent: string, tag: string): string {
+  if (!tag) return currentContent || '';
+  if (!currentContent) return tag;
+  if (currentContent.endsWith('\n')) {
+    return `${currentContent}${tag}`;
+  }
+  return `${currentContent}\n${tag}`;
+}
+
 export interface LinkedVerseData {
   primary: LinkedSectionInfo;
   allSections: LinkedSectionInfo[];

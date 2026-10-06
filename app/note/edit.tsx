@@ -49,6 +49,7 @@ import {
   formatVerseReferenceTag,
   extractVerseReferences,
   syncSectionVerseReferencesFromContent,
+  appendVerseTagOnNearestClearLine,
 } from '../../src/utils/verseLinkUtils';
 import { findCanonicalBook } from '../../src/constants/bibleData';
 import { createPassageReference, formatSegmentDisplay } from '../../src/utils/passageParser';
@@ -126,7 +127,16 @@ export default function NoteEditScreen() {
   const bibleReaderBottom = useRef<number>(0);
   const tocTop = useRef<number>(0);
   const [targetHighlightedVerse, setTargetHighlightedVerse] = useState<TargetVerseHighlight | null>(null);
+  const highlightTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [showScrollToBible, setShowScrollToBible] = useState<boolean>(false);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
+      }
+    };
+  }, []);
 
   // Apply default template preference for new notes
   useEffect(() => {
@@ -190,13 +200,23 @@ export default function NoteEditScreen() {
       const targetY = numVerseY > 0 ? Math.max(0, baseTop + numVerseY - 80) : (baseTop > 0 ? Math.max(0, baseTop - 16) : 0);
       scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
 
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
+      }
+
       if (data.book || data.chapter || data.verses) {
         setTargetHighlightedVerse({
           book: data.book,
           chapter: data.chapter,
           verses: data.verses || [data.startVerse],
         });
+      } else {
+        setTargetHighlightedVerse(data.startVerse);
       }
+
+      highlightTimerRef.current = setTimeout(() => {
+        setTargetHighlightedVerse(null);
+      }, 10000);
     },
   });
 
@@ -255,9 +275,7 @@ export default function NoteEditScreen() {
       const hasTag = currentContent.includes(tag);
       const updatedContent = hasTag
         ? currentContent
-        : currentContent.trim()
-        ? `${currentContent.trim()} ${tag}`
-        : tag;
+        : appendVerseTagOnNearestClearLine(currentContent, tag);
 
       const copy = [...prev];
       copy[secIdx] = {

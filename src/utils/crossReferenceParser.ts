@@ -138,15 +138,64 @@ export function parseReference(text: string): ParsedReference {
     return { type: 'invalid', raw: text, segments: [] };
   }
 
-  // Split compound parts by semicolon
-  const semicolonParts = raw.split(';');
+  // Split candidate by semicolon and comma while distinguishing verse-commas from segment-commas
+  const rawSegments: string[] = [];
+  const semiParts = raw.split(';');
+
+  for (let sIdx = 0; sIdx < semiParts.length; sIdx++) {
+    const sPart = semiParts[sIdx].trim();
+    if (!sPart || sPart.startsWith(',') || sPart.endsWith(',')) {
+      return { type: 'invalid', raw: text, segments: [] };
+    }
+
+    // Within each semicolon part, check if commas separate verse numbers or distinct segments
+    const commaParts = sPart.split(',');
+    for (let cIdx = 0; cIdx < commaParts.length; cIdx++) {
+      if (commaParts[cIdx].trim() === '') {
+        return { type: 'invalid', raw: text, segments: [] };
+      }
+    }
+
+    let currentSegmentAccumulator: string[] = [];
+    for (let cIdx = 0; cIdx < commaParts.length; cIdx++) {
+      const part = commaParts[cIdx].trim();
+      const hasColon = part.includes(':');
+
+      if (cIdx === 0) {
+        currentSegmentAccumulator.push(part);
+      } else if (hasColon) {
+        // Starts a new chapter or book segment (e.g. "Luke 3:10" or "2:3")
+        // Check if `part` introduces a new book name (has non-digit before colon)
+        const colonIdx = part.indexOf(':');
+        const beforeColon = part.slice(0, colonIdx).trim();
+        const isPureChapter = parseStrictInteger(beforeColon) !== null;
+
+        if (!isPureChapter && currentSegmentAccumulator.length > 1) {
+          // Rule 7.1: [Matt 1:1, 2, Luke 3:4]
+          // Here, "2" was accumulated as a verse continuation, and the next token is a NEW BOOK ("Luke 3:4").
+          // An ambiguous bare int between commas where the next comma leads to a book is REJECTED.
+          return { type: 'invalid', raw: text, segments: [] };
+        }
+
+        rawSegments.push(currentSegmentAccumulator.join(', '));
+        currentSegmentAccumulator = [part];
+      } else {
+        // Bare integer or verse range without colon
+        currentSegmentAccumulator.push(part);
+      }
+    }
+
+    if (currentSegmentAccumulator.length > 0) {
+      rawSegments.push(currentSegmentAccumulator.join(', '));
+    }
+  }
+
   const segments: VerseSegmentRef[] = [];
   let currentBook: string | null = null;
 
-  for (let part of semicolonParts) {
+  for (let part of rawSegments) {
     part = part.trim();
-    if (!part || part.startsWith(',') || part.endsWith(',')) {
-      // Empty segment like trailing semicolon or leading comma
+    if (!part) {
       return { type: 'invalid', raw: text, segments: [] };
     }
 
@@ -373,9 +422,19 @@ export function formatMarkdownCrossReferences(
 
   for (const item of sorted) {
     const inTab = isInTab(item.parsed, tabPassage) ? 1 : 0;
-    const seg = item.parsed.segments[0];
-    const versesStr = formatVerseRangeString(seg.verses);
-    const href = `verse:/${encodeURIComponent(seg.book)}/${seg.chapter}/${versesStr}?inTab=${inTab}`;
+    let href: string;
+
+    if (item.parsed.type === 'compound') {
+      const refsStr = item.parsed.segments
+        .map((s) => `${s.book}:${s.chapter}:${formatVerseRangeString(s.verses)}`)
+        .join(';');
+      href = `verse:/compound?refs=${encodeURIComponent(refsStr)}&inTab=${inTab}`;
+    } else {
+      const seg = item.parsed.segments[0];
+      const versesStr = formatVerseRangeString(seg.verses);
+      href = `verse:/${encodeURIComponent(seg.book)}/${seg.chapter}/${versesStr}?inTab=${inTab}`;
+    }
+
     const replacement = `${item.raw}(${href})`;
 
     result =

@@ -1,5 +1,5 @@
 import { findCanonicalBook, CANONICAL_BOOKS, CanonicalBook } from '../../constants/bibleData';
-import { parsePassageReferenceString, buildSegment } from '../../utils/passageParser';
+import { parsePassageReferenceString, buildSegment, splitSegmentByChapters } from '../../utils/passageParser';
 import { PassagePickerState, PassagePickerAction } from './passagePickerTypes';
 import { getChapterVerseCount } from './passagePickerUtils';
 
@@ -29,12 +29,13 @@ export function passagePickerReducer(
 
       const initPassage = initialPassage as any;
       if (initPassage?.segments && Array.isArray(initPassage.segments) && initPassage.segments.length > 0) {
-        const first = initPassage.segments[0];
+        const normalizedSegments = initPassage.segments.flatMap(splitSegmentByChapters);
+        const first = normalizedSegments[0];
         const bookMeta = findCanonicalBook(first.book);
         return {
           ...state,
           step: 'book',
-          segments: initPassage.segments,
+          segments: normalizedSegments,
           selectedBook: first.book,
           selectedChapter: first.startChapter,
           selectedChapterEnd: first.endChapter,
@@ -172,9 +173,26 @@ export function passagePickerReducer(
     }
 
     case 'ADD_SEGMENT': {
+      const split = splitSegmentByChapters(action.payload.segment);
       return {
         ...state,
-        segments: [...state.segments, action.payload.segment],
+        segments: [...state.segments, ...split],
+        selectedBook: null,
+        selectedChapter: null,
+        selectedChapterEnd: null,
+        selectedVerseStart: null,
+        selectedVerseEnd: null,
+        searchQuery: '',
+        smartParseError: null,
+        step: 'book',
+      };
+    }
+
+    case 'ADD_SEGMENTS': {
+      const split = action.payload.segments.flatMap(splitSegmentByChapters);
+      return {
+        ...state,
+        segments: [...state.segments, ...split],
         selectedBook: null,
         selectedChapter: null,
         selectedChapterEnd: null,
@@ -266,18 +284,21 @@ export function passagePickerReducer(
             state.selectedChapterEnd ?? state.selectedChapter!,
             state.selectedVerseEnd ?? state.selectedVerseStart!
           );
+          const splitManual = splitSegmentByChapters(manualDraft);
 
-          const alreadyInSegments = newSegments.some(
-            (s) =>
-              s.book === manualDraft.book &&
-              s.startChapter === manualDraft.startChapter &&
-              s.endChapter === manualDraft.endChapter &&
-              s.startVerse === manualDraft.startVerse &&
-              s.endVerse === manualDraft.endVerse
-          );
+          for (const s of splitManual) {
+            const alreadyInSegments = newSegments.some(
+              (ex) =>
+                ex.book === s.book &&
+                ex.startChapter === s.startChapter &&
+                ex.endChapter === s.endChapter &&
+                ex.startVerse === s.startVerse &&
+                ex.endVerse === s.endVerse
+            );
 
-          if (!alreadyInSegments) {
-            newSegments.push(manualDraft);
+            if (!alreadyInSegments) {
+              newSegments.push(s);
+            }
           }
         }
 

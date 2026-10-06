@@ -50,8 +50,35 @@ export function formatSegmentDisplay(segment: PassageSegment): string {
 }
 
 /**
+ * Decomposes any cross-chapter segment into discrete single-chapter segments.
+ * Single-chapter segments are returned as-is in a single-element array.
+ */
+export function splitSegmentByChapters(segment: PassageSegment): PassageSegment[] {
+  if (!segment) return [];
+  const { book, startChapter, startVerse, endChapter, endVerse } = segment;
+
+  if (startChapter === endChapter) {
+    return [segment];
+  }
+
+  const bookMeta = findCanonicalBook(book);
+  const segments: PassageSegment[] = [];
+
+  for (let ch = startChapter; ch <= endChapter; ch++) {
+    const maxVerses = bookMeta ? getChapterVerseCount(book, ch) : 30;
+    const sV = ch === startChapter ? startVerse : 1;
+    const eV = ch === endChapter ? endVerse : maxVerses;
+
+    segments.push(buildSegment(book, ch, sV, ch, eV));
+  }
+
+  return segments;
+}
+
+/**
  * Builds the canonical display string for an array of segments.
- * Groups segments of the same book where appropriate (e.g. "Genesis 1:1–3, 3:2–6").
+ * Groups segments of the same book where appropriate (e.g. "Genesis 1:1–3, 3:2–6"),
+ * while preserving literal discrete formatting for cross-chapter spans ("Hebrews 5, Hebrews 6").
  */
 export function formatCompoundDisplay(segments: PassageSegment[]): string {
   if (!segments || segments.length === 0) return '';
@@ -60,16 +87,35 @@ export function formatCompoundDisplay(segments: PassageSegment[]): string {
   const parts: string[] = [];
   let currentBook = '';
   let prevChapter: number | null = null;
+  let prevEndVerse: number | null = null;
 
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
     const bookMeta = findCanonicalBook(seg.book);
     const bookName = bookMeta ? bookMeta.name : seg.book;
+    const totalVerses = bookMeta ? getChapterVerseCount(bookName, seg.startChapter) : 0;
+    const isWholeChapter =
+      seg.startChapter === seg.endChapter &&
+      seg.startVerse === 1 &&
+      seg.endVerse === totalVerses &&
+      totalVerses > 0;
 
     if (bookName === currentBook) {
-      // Same book as previous segment: format without repeating book name
-      if (seg.startChapter === seg.endChapter) {
-        const verseStr = seg.startVerse === seg.endVerse ? `${seg.startVerse}` : `${seg.startVerse}–${seg.endVerse}`;
+      // Same book as previous segment
+      const prevTotalVerses =
+        prevChapter !== null && bookMeta ? getChapterVerseCount(bookName, prevChapter) : 0;
+      const wasContinuousCrossChapter =
+        prevChapter !== null &&
+        seg.startChapter === prevChapter + 1 &&
+        prevEndVerse === prevTotalVerses &&
+        seg.startVerse === 1;
+
+      if (isWholeChapter || wasContinuousCrossChapter) {
+        // Literal discrete formatting for multi-chapter spans: e.g. "Hebrews 5, Hebrews 6" or "Romans 7:21–25, Romans 8:1–4"
+        parts.push(formatSegmentDisplay(seg));
+      } else if (seg.startChapter === seg.endChapter) {
+        const verseStr =
+          seg.startVerse === seg.endVerse ? `${seg.startVerse}` : `${seg.startVerse}–${seg.endVerse}`;
         if (prevChapter !== null && seg.startChapter === prevChapter) {
           // Same chapter: omit repeating chapter e.g. "Matthew 1:1, 3"
           parts.push(verseStr);
@@ -77,13 +123,15 @@ export function formatCompoundDisplay(segments: PassageSegment[]): string {
           parts.push(`${seg.startChapter}:${verseStr}`);
         }
       } else {
-        parts.push(`${seg.startChapter}:${seg.startVerse}–${seg.endChapter}:${seg.endVerse}`);
+        parts.push(formatSegmentDisplay(seg));
       }
       prevChapter = seg.endChapter;
+      prevEndVerse = seg.endVerse;
     } else {
       // New book
       currentBook = bookName;
       prevChapter = seg.endChapter;
+      prevEndVerse = seg.endVerse;
       parts.push(formatSegmentDisplay(seg));
     }
   }
@@ -93,27 +141,29 @@ export function formatCompoundDisplay(segments: PassageSegment[]): string {
 
 /**
  * Creates a fully validated, complete PassageReference from an array of PassageSegments.
+ * Automatically decomposes any cross-chapter segments into discrete single-chapter segments.
  */
 export function createPassageReference(segments: PassageSegment[]): PassageReference {
   if (!segments || segments.length === 0) {
     throw new Error('PassageReference must contain at least one segment');
   }
 
+  const normalizedSegments = segments.flatMap(splitSegmentByChapters);
   const booksSet = new Set<string>();
 
-  for (const seg of segments) {
+  for (const seg of normalizedSegments) {
     const meta = findCanonicalBook(seg.book);
     const canonicalName = meta ? meta.name : seg.book;
     booksSet.add(canonicalName);
   }
 
-  const display = formatCompoundDisplay(segments);
+  const display = formatCompoundDisplay(normalizedSegments);
 
   return {
     display,
     displayString: display,
     books: Array.from(booksSet),
-    segments,
+    segments: normalizedSegments,
   };
 }
 
@@ -230,7 +280,8 @@ export function parsePassageReferenceString(raw: string): PassageSegment[] {
       const eCh = parseInt(crossChapterVerseMatch[3], 10);
       const eV = parseInt(crossChapterVerseMatch[4], 10);
       currentChapter = eCh;
-      segments.push(buildSegment(currentBook, sCh, sV, eCh, eV));
+      const rawSeg = buildSegment(currentBook, sCh, sV, eCh, eV);
+      segments.push(...splitSegmentByChapters(rawSeg));
       continue;
     }
 
@@ -269,7 +320,8 @@ export function parsePassageReferenceString(raw: string): PassageSegment[] {
         const sV = 1;
         const eV = getChapterVerseCount(currentBook, eCh);
         currentChapter = eCh;
-        segments.push(buildSegment(currentBook, sCh, sV, eCh, eV));
+        const rawSeg = buildSegment(currentBook, sCh, sV, eCh, eV);
+        segments.push(...splitSegmentByChapters(rawSeg));
         continue;
       }
     }

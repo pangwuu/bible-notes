@@ -4,6 +4,7 @@
  */
 
 import { colors } from '../constants/theme';
+import { splitSegmentByChapters } from '../utils/passageParser';
 
 export type NoteVisibility = 'friends' | 'private' | 'public';
 
@@ -264,7 +265,8 @@ export function formatPassageDisplay(ref: {
     return ref.displayString;
   }
   if (ref.segments && ref.segments.length > 0) {
-    return ref.segments.map((s) => formatPassageDisplay(s)).join(', ');
+    const normalized = ref.segments.flatMap(splitSegmentByChapters);
+    return normalized.map((s) => formatPassageDisplay(s)).join(', ');
   }
   const book = ref.book || '';
   const startChapter = ref.startChapter || 1;
@@ -278,7 +280,14 @@ export function formatPassageDisplay(ref: {
     }
     return `${book} ${startChapter}:${startVerse}–${endVerse}`;
   }
-  return `${book} ${startChapter}:${startVerse}–${endChapter}:${endVerse}`;
+  const split = splitSegmentByChapters({
+    book,
+    startChapter,
+    startVerse,
+    endChapter,
+    endVerse,
+  });
+  return split.map((s) => formatPassageDisplay(s)).join(', ');
 }
 
 /**
@@ -297,13 +306,14 @@ export function noteDocumentToNote(data: any, id: string): Note {
 
   if (data.passage && Array.isArray(data.passage.segments) && data.passage.segments.length > 0) {
     const rawSegs = data.passage.segments;
-    const segments: PassageSegment[] = rawSegs.map((s: any) => ({
+    const parsedSegs: PassageSegment[] = rawSegs.map((s: any) => ({
       book: s.book || '',
       startChapter: Number(s.start_chapter ?? s.chapter_start ?? s.startChapter ?? 1),
       startVerse: Number(s.start_verse ?? s.verse_start ?? s.startVerse ?? 1),
       endChapter: Number(s.end_chapter ?? s.chapter_end ?? s.endChapter ?? 1),
       endVerse: Number(s.end_verse ?? s.verse_end ?? s.endVerse ?? 1),
     }));
+    const segments: PassageSegment[] = parsedSegs.flatMap(splitSegmentByChapters);
 
     const books: string[] = Array.isArray(data.passage.books)
       ? data.passage.books
@@ -330,12 +340,13 @@ export function noteDocumentToNote(data: any, id: string): Note {
       endChapter: Number(data.chapter_end || 8),
       endVerse: Number(data.verse_end || 11),
     };
-    const display = formatPassageDisplay(singleSegment);
+    const segments = splitSegmentByChapters(singleSegment);
+    const display = formatPassageDisplay({ segments });
     passage = {
       display,
       displayString: display,
       books: [book],
-      segments: [singleSegment],
+      segments,
     };
   }
 
