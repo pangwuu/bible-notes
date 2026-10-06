@@ -163,4 +163,57 @@ describe('NoteViewScreen inline verse tag color adaptation', () => {
       false
     );
   });
+
+  it('correctly handles clicking compound cross reference [Matt 1:1-3, Luke 3:10]', async () => {
+    const noteWithCompound = {
+      ...mockNote,
+      sections: [
+        {
+          id: 'light',
+          title: 'Key Idea',
+          color: '#D4AF37',
+          content: 'Compare [Matt 1:1-3, Luke 3:10] side by side.',
+        },
+      ],
+    };
+    (notesService.getNote as jest.Mock).mockResolvedValue(noteWithCompound);
+
+    let component: renderer.ReactTestRenderer | undefined;
+    await act(async () => {
+      component = renderer.create(<NoteViewScreen />);
+    });
+    await act(async () => {
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+      }
+    });
+
+    const root = component!.root;
+    const linkBadge = root.findAllByType(Text).find((t) => {
+      if (!t.props.onPress) return false;
+      const textChildren = t.findAllByType(Text);
+      return textChildren.some((c) => c.props.children === 'Matt 1:1-3, Luke 3:10');
+    });
+
+    expect(linkBadge).toBeDefined();
+    act(() => {
+      linkBadge!.props.onPress();
+    });
+
+    expect(mockOpenVersePreview).toHaveBeenCalledWith(
+      1,
+      3,
+      expect.objectContaining({
+        book: 'Matthew',
+        chapter: 1,
+        verses: [1, 2, 3],
+        customTitle: 'Matthew 1:1-3; Luke 3:10',
+        segments: [
+          { book: 'Matthew', chapter: 1, startVerse: 1, endVerse: 3, verses: [1, 2, 3] },
+          { book: 'Luke', chapter: 3, startVerse: 10, endVerse: 10, verses: [10] },
+        ],
+      }),
+      false
+    );
+  });
 });

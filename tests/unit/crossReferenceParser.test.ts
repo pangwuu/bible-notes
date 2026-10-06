@@ -99,6 +99,120 @@ describe('crossReferenceParser', () => {
       expect(res.segments[1].verses).toEqual([3]);
     });
 
+    it('accepts comma delimiter followed by book name: [Matt 1:1-3, Luke 3:10]', () => {
+      const res = parseReference('[Matt 1:1-3, Luke 3:10]');
+      expect(res.type).toBe('compound');
+      expect(res.segments).toHaveLength(2);
+      expect(res.segments[0]).toEqual({
+        book: 'Matthew',
+        chapter: 1,
+        verses: [1, 2, 3],
+        startVerse: 1,
+        endVerse: 3,
+      });
+      expect(res.segments[1]).toEqual({
+        book: 'Luke',
+        chapter: 3,
+        verses: [10],
+        startVerse: 10,
+        endVerse: 10,
+      });
+    });
+
+    it('accepts mixed delimiters (; and ,) in same compound tag: [Jude 1:1-3; Rev 3:10, Genesis 1:10-31]', () => {
+      const res = parseReference('[Jude 1:1-3; Rev 3:10, Genesis 1:10-31]');
+      expect(res.type).toBe('compound');
+      expect(res.segments).toHaveLength(3);
+      expect(res.segments[0].book).toBe('Jude');
+      expect(res.segments[0].chapter).toBe(1);
+      expect(res.segments[0].verses).toEqual([1, 2, 3]);
+      expect(res.segments[1].book).toBe('Revelation');
+      expect(res.segments[1].chapter).toBe(3);
+      expect(res.segments[1].verses).toEqual([10]);
+      expect(res.segments[2].book).toBe('Genesis');
+      expect(res.segments[2].chapter).toBe(1);
+      expect(res.segments[2].startVerse).toBe(10);
+      expect(res.segments[2].endVerse).toBe(31);
+    });
+
+    it('accepts verse range lists followed by semicolon and next book: [Rom 12:1-2, 9-11; 1 Cor 13:4-7]', () => {
+      const res = parseReference('[Rom 12:1-2, 9-11; 1 Cor 13:4-7]');
+      expect(res.type).toBe('compound');
+      expect(res.segments).toHaveLength(2);
+      expect(res.segments[0].book).toBe('Romans');
+      expect(res.segments[0].chapter).toBe(12);
+      expect(res.segments[0].verses).toEqual([1, 2, 9, 10, 11]);
+      expect(res.segments[1].book).toBe('1 Corinthians');
+      expect(res.segments[1].chapter).toBe(13);
+      expect(res.segments[1].verses).toEqual([4, 5, 6, 7]);
+    });
+
+    it('accepts comma delimiter before same-book chapter transition: [Matt 1:1-3, 2:4-6]', () => {
+      const res = parseReference('[Matt 1:1-3, 2:4-6]');
+      expect(res.type).toBe('compound');
+      expect(res.segments).toHaveLength(2);
+      expect(res.segments[0].book).toBe('Matthew');
+      expect(res.segments[0].chapter).toBe(1);
+      expect(res.segments[0].verses).toEqual([1, 2, 3]);
+      expect(res.segments[1].book).toBe('Matthew');
+      expect(res.segments[1].chapter).toBe(2);
+      expect(res.segments[1].verses).toEqual([4, 5, 6]);
+    });
+
+    it('accepts numbered books after comma: [1 John 1:9, 2 John 1:6]', () => {
+      const res = parseReference('[1 John 1:9, 2 John 1:6]');
+      expect(res.type).toBe('compound');
+      expect(res.segments).toHaveLength(2);
+      expect(res.segments[0].book).toBe('1 John');
+      expect(res.segments[1].book).toBe('2 John');
+    });
+
+    it('handles Category 7 disambiguation rules (7.2, 7.4, 7.5)', () => {
+      // 7.2: [Matt 1:1, 2:3, Luke 3:4]
+      const res72 = parseReference('[Matt 1:1, 2:3, Luke 3:4]');
+      expect(res72.type).toBe('compound');
+      expect(res72.segments).toHaveLength(3);
+      expect(res72.segments[0].book).toBe('Matthew');
+      expect(res72.segments[0].chapter).toBe(1);
+      expect(res72.segments[0].verses).toEqual([1]);
+      expect(res72.segments[1].book).toBe('Matthew');
+      expect(res72.segments[1].chapter).toBe(2);
+      expect(res72.segments[1].verses).toEqual([3]);
+      expect(res72.segments[2].book).toBe('Luke');
+      expect(res72.segments[2].chapter).toBe(3);
+      expect(res72.segments[2].verses).toEqual([4]);
+
+      // 7.4: [Matt 1:1, 2]
+      const res74 = parseReference('[Matt 1:1, 2]');
+      expect(res74.type).toBe('simple');
+      expect(res74.segments[0].verses).toEqual([1, 2]);
+
+      // 7.5: [Matt 1:1, 3, 2:5, Luke 4:1]
+      const res75 = parseReference('[Matt 1:1, 3, 2:5, Luke 4:1]');
+      expect(res75.type).toBe('compound');
+      expect(res75.segments).toHaveLength(3);
+      expect(res75.segments[0].verses).toEqual([1, 3]);
+      expect(res75.segments[1].chapter).toBe(2);
+      expect(res75.segments[1].verses).toEqual([5]);
+      expect(res75.segments[2].book).toBe('Luke');
+      expect(res75.segments[2].chapter).toBe(4);
+      expect(res75.segments[2].verses).toEqual([1]);
+    });
+
+    it('accepts whitespace and en-dashes inside compound tags', () => {
+      const res1 = parseReference('[Matt 1:1-3 , Luke 3:10]');
+      expect(res1.type).toBe('compound');
+      expect(res1.segments).toHaveLength(2);
+
+      const res2 = parseReference('[Matt 1:1–3, Luke 3:10]');
+      expect(res2.type).toBe('compound');
+      expect(res2.segments).toHaveLength(2);
+
+      const res3 = parseReference('[ Matt 1:1-3 , Luke 3:10 ]');
+      expect(res3.type).toBe('compound');
+      expect(res3.segments).toHaveLength(2);
+    });
+
     it('accepts flexible spacing around commas and inside brackets: [Phil 3:13,   14-16, 17-17]', () => {
       const res = parseReference('[Phil 3:13,   14-16, 17-17]');
       expect(res.type).toBe('simple');
@@ -180,6 +294,25 @@ describe('crossReferenceParser', () => {
     it('rejects compound references when one part is invalid (all-or-nothing)', () => {
       expect(parseReference('[Matt 1:1-3, 99]').type).toBe('invalid');
       expect(parseReference('[Matt 1:1; Luke 99:1]').type).toBe('invalid');
+      expect(parseReference('[Matt 1:1-3, Luke 99:1]').type).toBe('invalid');
+      expect(parseReference('[Matt 1:1-3, FakeBook 2:1]').type).toBe('invalid');
+      expect(parseReference('[Matt 1:1-3, Luke 1:5-2]').type).toBe('invalid');
+    });
+
+    it('rejects ambiguous bare int after comma followed by new book (Rule 7.1): [Matt 1:1, 2, Luke 3:4]', () => {
+      expect(parseReference('[Matt 1:1, 2, Luke 3:4]').type).toBe('invalid');
+    });
+
+    it('rejects descending verse after comma (Rule 7.3): [Matt 1:1-3, 2]', () => {
+      expect(parseReference('[Matt 1:1-3, 2]').type).toBe('invalid');
+    });
+
+    it('rejects double commas and trailing delimiters in compound references', () => {
+      expect(parseReference('[Matt 1:1-3, , Luke 2:1]').type).toBe('invalid');
+      expect(parseReference('[Matt 1:1-3;]').type).toBe('invalid');
+      expect(parseReference('[Matt 1:1-3,]').type).toBe('invalid');
+      expect(parseReference('[Matt 1:1-3, Luke 2:1,]').type).toBe('invalid');
+      expect(parseReference('[Matt 1:1-3, Luke 2:1;]').type).toBe('invalid');
     });
   });
 
@@ -354,6 +487,19 @@ describe('crossReferenceParser', () => {
       const output = formatMarkdownCrossReferences(input, mockTabPassage);
       expect(output).toContain('(verse:/Matthew/1/1-3?inTab=1)');
       expect(output).toContain('[Matt 1:1-3]');
+    });
+
+    it('Compound reference formats URI with encoded refs and inTab=0', () => {
+      const input = 'Read [Matt 1:1-3, Luke 3:10].';
+      const output = formatMarkdownCrossReferences(input, mockTabPassage);
+      expect(output).toContain('verse:/compound?refs=Matthew%3A1%3A1-3%3BLuke%3A3%3A10&inTab=0');
+      expect(output).toContain('[Matt 1:1-3, Luke 3:10]');
+    });
+
+    it('Round-trip idempotency: does not double-format already formatted markdown links', () => {
+      const input = 'Read [Matt 1:1-3](verse:/Matthew/1/1-3?inTab=1) and `[Matt 1:1]` code.';
+      const output = formatMarkdownCrossReferences(input, mockTabPassage);
+      expect(output).toBe(input);
     });
   });
 });
