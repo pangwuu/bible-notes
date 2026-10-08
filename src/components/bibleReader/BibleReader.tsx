@@ -22,6 +22,8 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
   } = props;
 
   const {
+    selectedVersionId,
+    setSelectedVersionId,
     selectedTranslation,
     setSelectedTranslation,
     passageResult,
@@ -56,7 +58,9 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
         <View style={styles.contentBody}>
           <TranslationSelector
             selectedTranslation={selectedTranslation}
+            selectedVersionId={selectedVersionId}
             onSelectTranslation={setSelectedTranslation}
+            onSelectVersion={setSelectedVersionId}
           />
 
           {onFontSizeChange && (

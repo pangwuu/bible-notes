@@ -819,8 +819,7 @@ export default function NoteEditScreen() {
             <BibleReader
               passage={passage}
               activeSegment={activeSegmentPassage}
-              preferredTranslation={profile?.settings?.preferred_translation || 'ESV'}
-              customApiKey={profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key}
+              preferredTranslation={profile?.preferred_version_id || profile?.settings?.preferred_version_id || profile?.settings?.preferred_translation || 'NIV'}
               initiallyCollapsed={false}
               fontSize={readerFontSize}
               onFontSizeChange={setReaderFontSize}

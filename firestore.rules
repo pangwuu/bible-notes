@@ -54,5 +54,11 @@ service cloud.firestore {
       allow read, update, delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
       allow create: if isAuthenticated();
     }
+
+    // Bibles Collection (Scripture Chapters)
+    match /bibles/{translationId}/chapters/{chapterId} {
+      allow read: if true;
+      allow write: if false; // Only Admin SDK / service account can seed
+    }
   }
 }

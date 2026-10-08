@@ -27,6 +27,7 @@ export interface BibleReaderProps {
   passage: PassageReference;
   activeSegment?: PassageReference | null;
   preferredTranslation?: BibleTranslation;
+  preferredVersionId?: number;
   customApiKey?: string;
   initiallyCollapsed?: boolean;
   style?: any;

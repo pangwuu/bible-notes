@@ -128,31 +128,27 @@ describe('Settings Screen & Notifications Screen (app/(tabs)/settings.tsx & app/
   });
 
   describe('SettingsScreen', () => {
-    test('updates custom ESV API token and calls updateUserProfile', async () => {
+    test('updates preferred Bible translation and calls updateUserProfile', async () => {
       (authService.updateUserProfile as jest.Mock).mockResolvedValue(undefined);
 
-      const { getByPlaceholderText, getByText } = await renderWithPaper(<SettingsScreen />);
+      const { getByText } = await renderWithPaper(<SettingsScreen />);
 
-      const esvInput = getByPlaceholderText('Personal ESV API Token');
+      const bsbBtn = getByText('BSB');
       await act(async () => {
-        fireEvent.changeText(esvInput, 'my-custom-crossway-token');
-      });
-
-      const saveKeyBtn = getByText('Save key');
-      await act(async () => {
-        fireEvent.press(saveKeyBtn);
+        fireEvent.press(bsbBtn);
       });
 
       expect(authService.updateUserProfile).toHaveBeenCalledWith(
         'settings_user_1',
         expect.objectContaining({
-          custom_esv_api_key: 'my-custom-crossway-token',
+          preferred_version_id: 3034,
+          preferred_translation: 'BSB',
+          settings: expect.objectContaining({
+            preferred_version_id: 3034,
+            preferred_translation: 'BSB',
+          }),
         })
       );
-
-      await waitFor(() => {
-        expect(getByText('API key updated')).toBeTruthy();
-      });
     });
 
     test('opens Clear Passage Cache dialog and invokes clearPassageCache', async () => {

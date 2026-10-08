@@ -24,6 +24,7 @@ export interface VersePreviewModalProps {
   verseText: string;
   loading?: boolean;
   translation?: string;
+  attribution?: string;
   onViewInContext?: () => void;
   canJumpToPassage?: boolean;
   customTitle?: string;
@@ -40,7 +41,8 @@ export default function VersePreviewModal({
   verses,
   verseText,
   loading = false,
-  translation = 'ESV',
+  translation = 'NIV',
+  attribution,
   onViewInContext,
   canJumpToPassage = true,
   customTitle,
@@ -110,6 +112,13 @@ export default function VersePreviewModal({
               <Text style={styles.emptyText}>No Scripture text available.</Text>
             )}
           </ScrollView>
+
+          {/* Copyright Attribution Line */}
+          {attribution ? (
+            <View style={styles.attributionRow}>
+              <Text style={styles.attributionText}>{attribution}</Text>
+            </View>
+          ) : null}
 
           {/* Bottom Action Footer */}
           {onViewInContext && canJumpToPassage && (
@@ -215,6 +224,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text.secondary,
     fontStyle: 'italic',
+  },
+  attributionRow: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.hairline,
+  },
+  attributionText: {
+    fontSize: 11,
+    color: colors.text.secondary,
+    lineHeight: 14,
   },
   footerRow: {
     paddingHorizontal: spacing.md,

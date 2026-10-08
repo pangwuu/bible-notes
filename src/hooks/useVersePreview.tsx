@@ -6,6 +6,8 @@ import { fetchPassageText } from '../services/bibleService';
 import { extractVerseRangeText, extractSelectedVersesText, formatVerseRangeLabel } from '../utils/verseLinkUtils';
 import VersePreviewModal from '../components/VersePreviewModal';
 import { isInTab } from '../utils/crossReferenceParser';
+import { BibleTranslation } from '../types/user';
+import { resolveVersionId, getVersionMetadata } from '../constants/bibleVersions';
 
 export interface VersePreviewContext {
   book?: string;
@@ -21,8 +23,6 @@ export interface VersePreviewContext {
   customTitle?: string;
 }
 
-import { BibleTranslation } from '../types/user';
-
 export interface PreviewVerseData {
   visible: boolean;
   startVerse: number;
@@ -34,21 +34,27 @@ export interface PreviewVerseData {
   loading: boolean;
   canJumpToPassage?: boolean;
   customTitle?: string;
+  attribution?: string;
 }
 
 export interface UseVersePreviewOptions {
   passage?: PassageReference | null;
   translation?: BibleTranslation;
+  versionId?: number;
   esvApiKey?: string;
   onViewInContext?: (data: PreviewVerseData) => void;
 }
 
 export function useVersePreview({
   passage,
-  translation = 'ESV',
+  translation = 'NIV',
+  versionId: propVersionId,
   esvApiKey,
   onViewInContext,
 }: UseVersePreviewOptions = {}) {
+  const effectiveVersionId = propVersionId ?? resolveVersionId(translation);
+  const versionMeta = getVersionMetadata(effectiveVersionId);
+
   const [previewVerseData, setPreviewVerseData] = useState<PreviewVerseData>({
     visible: false,
     startVerse: 1,
@@ -56,6 +62,7 @@ export function useVersePreview({
     verseText: '',
     loading: false,
     canJumpToPassage: true,
+    attribution: versionMeta.fullName,
   });
 
   const openVersePreview = useCallback(
@@ -93,7 +100,6 @@ export function useVersePreview({
             passage
           );
         } else {
-          // Legacy relative without explicit book/chapter
           computedCanJump = false;
         }
       }
@@ -109,12 +115,15 @@ export function useVersePreview({
         loading: true,
         canJumpToPassage: computedCanJump,
         customTitle: context?.customTitle,
+        attribution: versionMeta.fullName,
       });
 
       // Handle Compound Multi-Segment Fetching
       if (isCompound && context?.segments) {
         try {
           const segmentBlocks: string[] = [];
+          let lastAttribution = versionMeta.fullName;
+
           for (const seg of context.segments) {
             const meta = findCanonicalBook(seg.book);
             const bookName = meta ? meta.name : seg.book;
@@ -129,7 +138,9 @@ export function useVersePreview({
                   endVerse: seg.endVerse,
                 },
               ]);
-              const res = await fetchPassageText(segPassage, { translation, esvApiKey });
+              const res = await fetchPassageText(segPassage, { versionId: effectiveVersionId });
+              if (res.attribution) lastAttribution = res.attribution;
+
               const segText = seg.verses && seg.verses.length > 0
                 ? extractSelectedVersesText(res.verses || [], seg.verses)
                 : extractVerseRangeText(res.verses || [], seg.startVerse, seg.endVerse);
@@ -144,6 +155,7 @@ export function useVersePreview({
             ...prev,
             verseText: segmentBlocks.join('\n\n'),
             loading: false,
+            attribution: lastAttribution,
           }));
         } catch (err) {
           console.warn('Failed to load compound verse preview text:', err);
@@ -183,8 +195,7 @@ export function useVersePreview({
 
       try {
         const res = await fetchPassageText(targetPassage, {
-          translation,
-          esvApiKey,
+          versionId: effectiveVersionId,
         });
 
         const text =
@@ -196,13 +207,14 @@ export function useVersePreview({
           ...prev,
           verseText: text,
           loading: false,
+          attribution: res.attribution || versionMeta.fullName,
         }));
       } catch (err) {
         console.warn('Failed to load verse preview text:', err);
         setPreviewVerseData((prev) => ({ ...prev, loading: false }));
       }
     },
-    [passage, translation, esvApiKey]
+    [passage, effectiveVersionId, versionMeta]
   );
 
   const closeVersePreview = useCallback(() => {
@@ -228,13 +240,14 @@ export function useVersePreview({
         verses={previewVerseData.verses}
         verseText={previewVerseData.verseText}
         loading={previewVerseData.loading}
-        translation={translation}
+        translation={versionMeta.shortName}
+        attribution={previewVerseData.attribution}
         canJumpToPassage={previewVerseData.canJumpToPassage}
         customTitle={previewVerseData.customTitle}
         onViewInContext={onViewInContext ? handleViewInContext : undefined}
       />
     );
-  }, [previewVerseData, closeVersePreview, passage, translation, onViewInContext, handleViewInContext]);
+  }, [previewVerseData, closeVersePreview, passage, versionMeta, onViewInContext, handleViewInContext]);
 
   return {
     previewVerseData,

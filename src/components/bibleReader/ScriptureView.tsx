@@ -127,6 +127,7 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
       <VerseItem
         key={`${resolvedBook || ''}:${resolvedChapter || ''}:${v.verseNumber}`}
         verse={v}
+        renderHeading={false}
         isSelected={isSelected}
         isTargetHighlighted={isTargetHighlighted}
         linkedSection={linked}
@@ -142,6 +143,84 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
         }}
       />
     );
+  };
+
+  const groupVersesByPericope = (verseList: VerseSegment[]) => {
+    interface PericopeGroup {
+      heading?: string;
+      startVerse: number;
+      verses: VerseSegment[];
+    }
+    const groups: PericopeGroup[] = [];
+    let current: PericopeGroup | null = null;
+
+    for (const v of verseList) {
+      const cleanHeading = v.heading ? v.heading.replace(/<[^>]*>/g, '').trim() : undefined;
+      if (cleanHeading) {
+        if (current && current.verses.length > 0) {
+          groups.push(current);
+        }
+        current = {
+          heading: cleanHeading,
+          startVerse: v.verseNumber,
+          verses: [v],
+        };
+      } else {
+        if (!current) {
+          current = {
+            heading: undefined,
+            startVerse: v.verseNumber,
+            verses: [v],
+          };
+        } else {
+          current.verses.push(v);
+        }
+      }
+    }
+
+    if (current && current.verses.length > 0) {
+      groups.push(current);
+    }
+    return groups;
+  };
+
+  const renderVersesWithHeadings = (
+    verseList: VerseSegment[],
+    sec?: MultiPassageSection,
+    secIdx?: number
+  ) => {
+    const hasAnyHeading = verseList.some((v) => Boolean(v.heading && v.heading.trim()));
+    if (!hasAnyHeading) {
+      return (
+        <Text style={styles.verseParagraph}>
+          {verseList.map((v) => renderVerse(v, sec, secIdx))}
+        </Text>
+      );
+    }
+
+    const groups = groupVersesByPericope(verseList);
+    return groups.map((grp, gIdx) => (
+      <View key={`pericope-${secIdx ?? 0}-${grp.startVerse}-${gIdx}`}>
+        {grp.heading ? (
+          <Text
+            testID={`pericope-heading-${grp.startVerse}`}
+            style={[
+              styles.pericopeHeading,
+              {
+                fontSize: fontSize + 1,
+                lineHeight: Math.round((fontSize + 1) * 1.4),
+                marginTop: gIdx === 0 && (!sec || !sec.title) ? spacing.xs : spacing.md,
+              },
+            ]}
+          >
+            {grp.heading}
+          </Text>
+        ) : null}
+        <Text style={styles.verseParagraph}>
+          {grp.verses.map((v) => renderVerse(v, sec, secIdx))}
+        </Text>
+      </View>
+    ));
   };
 
   return (
@@ -161,9 +240,7 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
                   {sec.title}
                 </Text>
               ) : null}
-              <Text style={styles.verseParagraph}>
-                {sec.verses.map((v) => renderVerse(v, sec, secIdx))}
-              </Text>
+              {renderVersesWithHeadings(sec.verses, sec, secIdx)}
             </View>
           ))
         ) : verses && verses.length > 0 ? (
@@ -173,9 +250,7 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
               sectionYMap[0] = e.nativeEvent.layout.y;
             }}
           >
-            <Text style={styles.verseParagraph}>
-              {verses.map((v) => renderVerse(v))}
-            </Text>
+            {renderVersesWithHeadings(verses)}
           </View>
         ) : (
           <Text
@@ -203,8 +278,11 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
       {/* Attribution Line */}
       <View style={styles.attributionRow}>
         <Text style={styles.attributionText}>
-          {SUPPORTED_TRANSLATIONS.find((t) => t.id === selectedTranslation)?.fullName ||
-            selectedTranslation}
+          {passageResult?.attribution ||
+            SUPPORTED_TRANSLATIONS.find(
+              (t) => t.id === (passageResult?.versionId || selectedTranslation) || t.shortName === selectedTranslation
+            )?.fullName ||
+            String(selectedTranslation)}
         </Text>
       </View>
     </View>
@@ -235,6 +313,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(227, 165, 61, 0.25)',
     paddingBottom: 4,
+  },
+  pericopeHeading: {
+    fontFamily: typography.body.fontFamily,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
   },
   verseParagraph: {
     fontFamily: typography.body.fontFamily,

@@ -7,12 +7,30 @@ import { NoteTemplate } from './template';
 
 export type NoteVisibility = 'private' | 'friends';
 
-export type BibleTranslation = 'ESV' | 'WEB' | 'KJV' | 'ASV' | 'BBE' | 'NIV' | 'CSB' | 'NLT';
+export type BibleTranslation =
+  | 'ESV'
+  | 'BSB'
+  | 'WEB'
+  | 'ASV'
+  | 'FBV'
+  | 'LSV'
+  | 'GNV'
+  | 'CPDV'
+  | 'KJV'
+  | 'BBE'
+  | 'NIV'
+  | 'CSB'
+  | 'NLT'
+  | 'NKJV'
+  | 'NASB'
+  | 'NIRV'
+  | number;
 
 export interface UserSettings {
   default_visibility?: NoteVisibility;
   custom_esv_api_key?: string;
   preferred_translation?: BibleTranslation;
+  preferred_version_id?: number;
   default_font_size?: number;
   default_template_id?: string;
   enable_friends?: boolean;
@@ -29,6 +47,7 @@ export interface UserDocument {
   default_template_id?: string;
   enable_friends?: boolean;
   preferred_translation?: BibleTranslation;
+  preferred_version_id?: number;
   settings?: UserSettings;
   custom_esv_api_key?: string;
   custom_templates?: NoteTemplate[];

@@ -478,7 +478,7 @@ describe('Challenger 1 — Empirical Verification & Adversarial Stress Tests', (
 
       // Check section header strings
       expect(content).toContain('>Preferences<');
-      expect(content).toContain('>Crossway ESV API<');
+      expect(content).toContain('>Bible display<');
       // Should not contain all-caps PREFERENCES
       expect(content).not.toContain('>PREFERENCES<');
     });

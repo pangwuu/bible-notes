@@ -14,6 +14,12 @@ import { colors, spacing, radius, typography } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/AuthContext';
 import { updateUserProfile } from '../../src/services/authService';
 import { clearPassageCache, SUPPORTED_TRANSLATIONS } from '../../src/services/bibleService';
+import {
+  SUPPORTED_BIBLE_VERSIONS,
+  DEFAULT_BIBLE_VERSION_ID,
+  resolveVersionId,
+  getVersionMetadata,
+} from '../../src/constants/bibleVersions';
 import { BUILT_IN_TEMPLATES } from '../../src/constants/templates';
 import FontSizeControls from '../../src/components/FontSizeControls';
 import safeStorage from '../../src/utils/safeStorage';
@@ -24,14 +30,11 @@ export default function SettingsScreen() {
 
   // Preferences state
   const [defaultVisibility, setDefaultVisibility] = useState<NoteVisibility>('friends');
-  const [preferredTranslation, setPreferredTranslation] = useState<BibleTranslation>('ESV');
+  const [preferredVersionId, setPreferredVersionId] = useState<number>(DEFAULT_BIBLE_VERSION_ID);
   const [defaultTemplateId, setDefaultTemplateId] = useState<string>('swedish');
   const [enableFriends, setEnableFriends] = useState<boolean>(true);
   const [showVerseNumbers, setShowVerseNumbers] = useState<boolean>(true);
   const [defaultFontSize, setDefaultFontSize] = useState<number>(16);
-  const [esvKey, setEsvKey] = useState('');
-  const [isSavingKey, setIsSavingKey] = useState(false);
-  const [keySavedMessage, setKeySavedMessage] = useState<string | null>(null);
 
   // Clear cache state
   const [clearCacheDialogOpen, setClearCacheDialogOpen] = useState(false);
@@ -52,8 +55,13 @@ export default function SettingsScreen() {
       if (profile.default_visibility) {
         setDefaultVisibility(profile.default_visibility);
       }
-      if (profile.preferred_translation || profile.settings?.preferred_translation) {
-        setPreferredTranslation(profile.preferred_translation || profile.settings?.preferred_translation || 'ESV');
+      const rawTrans =
+        profile.preferred_version_id ||
+        profile.settings?.preferred_version_id ||
+        profile.preferred_translation ||
+        profile.settings?.preferred_translation;
+      if (rawTrans) {
+        setPreferredVersionId(resolveVersionId(rawTrans));
       }
       if (profile.settings?.default_template_id) {
         setDefaultTemplateId(profile.settings.default_template_id);
@@ -65,8 +73,6 @@ export default function SettingsScreen() {
         setDefaultFontSize(profile.settings.default_font_size);
         safeStorage.setItem('bible_font_size', String(profile.settings.default_font_size)).catch(() => {});
       }
-      const existingKey = profile.settings?.custom_esv_api_key || profile.custom_esv_api_key || '';
-      setEsvKey(existingKey);
     }
   }, [profile]);
 
@@ -129,15 +135,19 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleTranslationChange = async (trans: BibleTranslation) => {
-    setPreferredTranslation(trans);
+  const handleTranslationChange = async (transOrId: BibleTranslation | number) => {
+    const vId = resolveVersionId(transOrId);
+    setPreferredVersionId(vId);
+    const shortName = getVersionMetadata(vId).shortName as BibleTranslation;
     if (user?.uid) {
       try {
         await updateUserProfile(user.uid, {
-          preferred_translation: trans,
+          preferred_version_id: vId,
+          preferred_translation: shortName,
           settings: {
             ...profile?.settings,
-            preferred_translation: trans,
+            preferred_version_id: vId,
+            preferred_translation: shortName,
           },
         });
       } catch (err) {
@@ -209,29 +219,6 @@ export default function SettingsScreen() {
       } catch (err) {
         console.warn('Failed to update enable_friends in profile:', err);
       }
-    }
-  };
-
-  const handleSaveEsvKey = async () => {
-    if (!user?.uid) return;
-    setIsSavingKey(true);
-    setKeySavedMessage(null);
-
-    const trimmedKey = esvKey.trim();
-    try {
-      await updateUserProfile(user.uid, {
-        custom_esv_api_key: trimmedKey,
-        settings: {
-          ...profile?.settings,
-          custom_esv_api_key: trimmedKey,
-        },
-      });
-      setKeySavedMessage('API key updated');
-      setTimeout(() => setKeySavedMessage(null), 3000);
-    } catch (err) {
-      console.warn('Failed to update ESV key:', err);
-    } finally {
-      setIsSavingKey(false);
     }
   };
 
@@ -339,8 +326,8 @@ export default function SettingsScreen() {
           Primary translation used for reading and study reflections.
         </Text>
         <View style={styles.translationChipGrid}>
-          {SUPPORTED_TRANSLATIONS.map((t) => {
-            const isSelected = t.id === preferredTranslation;
+          {SUPPORTED_BIBLE_VERSIONS.map((t) => {
+            const isSelected = t.id === preferredVersionId;
             return (
               <Button
                 key={t.id}
@@ -408,45 +395,6 @@ export default function SettingsScreen() {
             {showVerseNumbers && <Text style={styles.previewVerseNum}>16 </Text>}
             For God so loved the world, that he gave his only Son, that whoever believes in him should not perish but have eternal life.
           </Text>
-        </View>
-      </View>
-
-      <Text style={styles.sectionHeader}>Crossway ESV API</Text>
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Crossway ESV custom API key</Text>
-        <Text style={styles.cardDescription}>
-          Optionally override the default ESV Bearer token with your personal key.
-        </Text>
-        <TextInput
-          value={esvKey}
-          onChangeText={setEsvKey}
-          placeholder="Personal ESV API Token"
-          placeholderTextColor={colors.textSecondary}
-          textColor={colors.textPrimary}
-          mode="outlined"
-          outlineColor={colors.borderHairline}
-          activeOutlineColor={colors.accentKeyIdea}
-          style={styles.input}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <View style={styles.saveKeyRow}>
-          {keySavedMessage ? (
-            <Text style={styles.keySavedText}>{keySavedMessage}</Text>
-          ) : (
-            <View />
-          )}
-          <Button
-            mode="contained-tonal"
-            buttonColor={colors.bgSurfaceRaised}
-            textColor={colors.accentKeyIdea}
-            style={styles.saveKeyButton}
-            onPress={handleSaveEsvKey}
-            loading={isSavingKey}
-            disabled={isSavingKey}
-          >
-            Save key
-          </Button>
         </View>
       </View>
 

@@ -13,6 +13,7 @@ interface VerseItemProps {
   fontSize: number;
   onToggle: (verseNumber: number) => void;
   onLayout?: (e: any) => void;
+  renderHeading?: boolean;
 }
 
 const VerseItemComponent: React.FC<VerseItemProps> = ({
@@ -24,6 +25,7 @@ const VerseItemComponent: React.FC<VerseItemProps> = ({
   fontSize,
   onToggle,
   onLayout,
+  renderHeading = true,
 }) => {
   return (
     <Text
@@ -35,7 +37,7 @@ const VerseItemComponent: React.FC<VerseItemProps> = ({
         isTargetHighlighted && styles.verseTargetHighlighted,
       ]}
     >
-      {verse.heading ? (
+      {renderHeading && verse.heading ? (
         <Text
           style={[
             styles.verseHeading,

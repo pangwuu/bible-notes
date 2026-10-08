@@ -1,24 +1,25 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Share } from 'react-native';
 import { BibleTranslation } from '../../types/user';
-import { PassageReference } from '../../types/note';
-import safeStorage from '../../utils/safeStorage';
 import {
   fetchPassageText,
   formatPassageQuery,
   PassageFetchResult,
 } from '../../services/bibleService';
 import {
-  formatVerseRangeLabel,
+  DEFAULT_BIBLE_VERSION_ID,
+  resolveVersionId,
+  getVersionMetadata,
+} from '../../constants/bibleVersions';
+import safeStorage from '../../utils/safeStorage';
+import { PassageReference } from '../../types/note';
+import {
   extractSelectedVersesText,
+  formatVerseRangeLabel,
   getLinkedSectionsForVerses,
   LinkedSectionInfo,
 } from '../../utils/verseLinkUtils';
-import {
-  BibleReaderProps,
-  DEFAULT_SECTION_OPTIONS,
-  SectionOption,
-} from './types';
+import { BibleReaderProps, DEFAULT_SECTION_OPTIONS, SectionOption } from './types';
 
 export interface ActivePassageContext {
   book?: string;
@@ -28,15 +29,20 @@ export interface ActivePassageContext {
 export function useBibleReader({
   passage,
   activeSegment,
-  preferredTranslation = 'ESV',
-  customApiKey,
+  preferredTranslation = 'NIV',
+  preferredVersionId,
   initiallyCollapsed = false,
   fontSize: propFontSize,
   linkedVerseMap = {},
   sectionOptions,
   targetHighlightedVerse,
 }: BibleReaderProps) {
-  const [selectedTranslation, setSelectedTranslation] = useState<BibleTranslation>(preferredTranslation);
+  const initialVersionId = resolveVersionId(preferredVersionId ?? preferredTranslation);
+  const [selectedVersionId, setSelectedVersionId] = useState<number>(initialVersionId);
+  const [selectedTranslation, setSelectedTranslation] = useState<BibleTranslation>(
+    (getVersionMetadata(initialVersionId).shortName as BibleTranslation) || 'NIV'
+  );
+
   const [passageResult, setPassageResult] = useState<PassageFetchResult | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [collapsed, setCollapsed] = useState<boolean>(initiallyCollapsed);
@@ -89,104 +95,106 @@ export function useBibleReader({
     };
   }, []);
 
-  // Sync selectedTranslation when preferredTranslation prop changes
+  // Sync selectedTranslation when preferredTranslation / preferredVersionId prop changes
   useEffect(() => {
-    setSelectedTranslation(preferredTranslation);
-  }, [preferredTranslation]);
+    const nextId = resolveVersionId(preferredVersionId ?? preferredTranslation);
+    setSelectedVersionId(nextId);
+    setSelectedTranslation(getVersionMetadata(nextId).shortName as BibleTranslation);
+  }, [preferredTranslation, preferredVersionId]);
 
   const loadPassage = useCallback(
-    async (trans: BibleTranslation, force = false) => {
+    async (versionId: number, force = false) => {
       setLoading(true);
       try {
+        const trans = getVersionMetadata(versionId).shortName as BibleTranslation;
         const result = await fetchPassageText(targetPassage, {
           translation: trans,
-          esvApiKey: customApiKey,
+          versionId,
           forceRefresh: force,
         });
         setPassageResult(result);
         if (result.error) {
-          console.warn(`[BibleReader] Passage fetch reported error for ${trans}:`, result.error);
+          console.warn(`[BibleReader] Passage fetch reported error for version ${versionId}:`, result.error);
         }
       } catch (err: any) {
         const errorMsg = err?.message || 'offline';
         console.error(`[BibleReader] fetchPassageText threw exception:`, errorMsg);
+        const meta = getVersionMetadata(versionId);
         setPassageResult({
           verses: [],
           text: '',
-          translation: trans,
-          source: 'web',
+          translation: meta.shortName as BibleTranslation,
+          versionId,
+          source: 'youversion',
           cached: false,
           error: errorMsg,
+          attribution: meta.fullName,
         });
       } finally {
         setLoading(false);
       }
     },
-    [targetPassage, customApiKey]
+    [targetPassage]
   );
 
   useEffect(() => {
     setPassageResult(null);
-    loadPassage(selectedTranslation);
-  }, [loadPassage, selectedTranslation]);
+    loadPassage(selectedVersionId);
+  }, [loadPassage, selectedVersionId]);
 
-  const handleSelectTranslation = useCallback((trans: BibleTranslation) => {
-    setSelectedTranslation((prev) => {
-      if (trans !== prev) {
+  const handleSelectVersion = useCallback((versionId: number) => {
+    setSelectedVersionId((prev) => {
+      if (versionId !== prev) {
         setSelectedVerses(new Set());
         setActiveContext(null);
-        return trans;
+        setSelectedTranslation(getVersionMetadata(versionId).shortName as BibleTranslation);
+        return versionId;
       }
       return prev;
     });
   }, []);
 
+  const handleSelectTranslation = useCallback((trans: BibleTranslation) => {
+    const vId = resolveVersionId(trans);
+    handleSelectVersion(vId);
+  }, [handleSelectVersion]);
+
   const passageDisplay = useMemo(() => {
     return targetPassage?.display || targetPassage?.displayString || formatPassageQuery(targetPassage);
   }, [targetPassage]);
 
-  const isOfflineEmpty = Boolean(
-    (passageResult?.error ||
-      (!passageResult?.text &&
-        (!passageResult?.verses || passageResult.verses.length === 0))) &&
-      !loading
-  );
+  const isOfflineEmpty = useMemo(() => {
+    return !loading && (!passageResult || passageResult.verses.length === 0);
+  }, [loading, passageResult]);
 
-  // Verse selection toggle with context scoping
-  const handleToggleVerse = useCallback((verseNum: number, context?: ActivePassageContext) => {
-    setActiveContext((prevContext) => {
-      const isSameContext =
-        !prevContext ||
-        !context ||
-        (prevContext.book === context.book && prevContext.chapter === context.chapter);
+  // Verse Selection Logic
+  const handleToggleVerse = useCallback(
+    (verseNum: number, context?: ActivePassageContext) => {
+      setSelectedVerses((prev) => {
+        const next = new Set(prev);
+        if (context) {
+          if (
+            activeContext &&
+            (activeContext.book !== context.book || activeContext.chapter !== context.chapter)
+          ) {
+            next.clear();
+          }
+          setActiveContext(context);
+        }
 
-      if (!isSameContext) {
-        // Switched passage or chapter: reset selection to single newly selected verse
-        setSelectedVerses(new Set([verseNum]));
-        return context || null;
-      }
-
-      // Same context: toggle verse
-      setSelectedVerses((prevVerses) => {
-        const next = new Set(prevVerses);
         if (next.has(verseNum)) {
           next.delete(verseNum);
+          if (next.size === 0) {
+            setActiveContext(null);
+          }
         } else {
           next.add(verseNum);
         }
         return next;
       });
-
-      return context || prevContext;
-    });
-  }, []);
-
-  // Reset activeContext if selectedVerses becomes empty
-  useEffect(() => {
-    if (selectedVerses.size === 0) {
-      setActiveContext(null);
-    }
-  }, [selectedVerses]);
+    },
+    [activeContext]
+  );
 
   const clearSelectedVerses = useCallback(() => {
     setSelectedVerses(new Set());
@@ -202,7 +210,7 @@ export function useBibleReader({
     return getLinkedSectionsForVerses(sortedSelectedVerses, linkedVerseMap, activeContext || undefined);
   }, [sortedSelectedVerses, linkedVerseMap, activeContext]);
 
-  // Share selected verses (discrete verses only)
+  // Share selected verses
   const handleShareSelected = useCallback(async () => {
     if (sortedSelectedVerses.length === 0) return;
     const text = extractSelectedVersesText(passageResult?.verses || [], sortedSelectedVerses);
@@ -228,10 +236,12 @@ export function useBibleReader({
   }, [sectionOptions]);
 
   const handleRetry = useCallback(() => {
-    loadPassage(selectedTranslation, true);
-  }, [loadPassage, selectedTranslation]);
+    loadPassage(selectedVersionId, true);
+  }, [loadPassage, selectedVersionId]);
 
   return {
+    selectedVersionId,
+    setSelectedVersionId: handleSelectVersion,
     selectedTranslation,
     setSelectedTranslation: handleSelectTranslation,
     passageResult,

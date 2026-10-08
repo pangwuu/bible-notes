@@ -9,6 +9,9 @@ yarn-error.*
 # Environment & Secrets
 .env
 .env*.local
+bible-notes-sweedish-firebase-adminsdk-fbsvc-3db1311d9d.json
+scripts/seed/data/
+*.zip
 
 # macOS
 .DS_Store

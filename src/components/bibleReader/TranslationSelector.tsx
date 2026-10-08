@@ -1,26 +1,42 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { ScrollView, Text, StyleSheet, Pressable } from 'react-native';
 import { BibleTranslation } from '../../types/user';
-import { SUPPORTED_TRANSLATIONS } from '../../services/bibleService';
+import { SUPPORTED_BIBLE_VERSIONS, resolveVersionId } from '../../constants/bibleVersions';
 import { colors, spacing, radius } from '../../constants/theme';
 
 interface TranslationSelectorProps {
-  selectedTranslation: BibleTranslation;
+  selectedTranslation?: BibleTranslation;
+  selectedVersionId?: number;
   onSelectTranslation: (translation: BibleTranslation) => void;
+  onSelectVersion?: (versionId: number) => void;
 }
 
 export const TranslationSelector: React.FC<TranslationSelectorProps> = ({
   selectedTranslation,
+  selectedVersionId,
   onSelectTranslation,
+  onSelectVersion,
 }) => {
+  const activeId = selectedVersionId ?? resolveVersionId(selectedTranslation);
+
   return (
-    <View style={styles.translationRow}>
-      {SUPPORTED_TRANSLATIONS.map((t) => {
-        const isActive = t.id === selectedTranslation;
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.translationRow}
+      style={styles.scrollWrapper}
+    >
+      {SUPPORTED_BIBLE_VERSIONS.map((t) => {
+        const isActive = t.id === activeId || t.shortName === selectedTranslation || t.code === selectedTranslation;
         return (
           <Pressable
             key={t.id}
-            onPress={() => onSelectTranslation(t.id)}
+            onPress={() => {
+              if (onSelectVersion) {
+                onSelectVersion(t.id);
+              }
+              onSelectTranslation(t.id as any);
+            }}
             style={[
               styles.transPill,
               isActive && styles.transPillActive,
@@ -39,19 +55,22 @@ export const TranslationSelector: React.FC<TranslationSelectorProps> = ({
           </Pressable>
         );
       })}
-    </View>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
+  scrollWrapper: {
+    marginVertical: spacing.xs,
+  },
   translationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: spacing.sm,
     gap: spacing.xs,
+    paddingVertical: 2,
   },
   transPill: {
-    flex: 1,
+    paddingHorizontal: 12,
     backgroundColor: colors.bg.surfaceRaised,
     borderRadius: radius.control,
     paddingVertical: 6,
