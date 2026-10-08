@@ -590,7 +590,7 @@ export default function NoteDetailScreen() {
           activeSegment={activeSegmentPassage}
           fontSize={readerFontSize}
           onFontSizeChange={setReaderFontSize}
-          preferredTranslation={profile?.preferred_version_id || profile?.settings?.preferred_version_id || profile?.settings?.preferred_translation || 'NIV'}
+          preferredTranslation={profile?.preferred_version_id || profile?.settings?.preferred_version_id || profile?.settings?.preferred_translation || 'ESV'}
           initiallyCollapsed={false}
           linkedVerseMap={linkedVerseMap}
           onVerseLayout={(key, y) => {

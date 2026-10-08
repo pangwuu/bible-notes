@@ -47,7 +47,6 @@ export const RandomReflectionCard: React.FC<RandomReflectionCardProps> = ({
     <Pressable
       style={[styles.card, { borderLeftColor: indicatorColor }, style]}
       onPress={onPress}
-      accessibilityRole="button"
       accessibilityLabel={`Rediscover reflection on ${accessibilityTitle}`}
     >
       <View style={styles.topRow}>

@@ -819,7 +819,7 @@ export default function NoteEditScreen() {
             <BibleReader
               passage={passage}
               activeSegment={activeSegmentPassage}
-              preferredTranslation={profile?.preferred_version_id || profile?.settings?.preferred_version_id || profile?.settings?.preferred_translation || 'NIV'}
+              preferredTranslation={profile?.preferred_version_id || profile?.settings?.preferred_version_id || profile?.settings?.preferred_translation || 'ESV'}
               initiallyCollapsed={false}
               fontSize={readerFontSize}
               onFontSizeChange={setReaderFontSize}
