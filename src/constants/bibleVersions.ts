@@ -17,7 +17,11 @@ export const SUPPORTED_BIBLE_VERSIONS: readonly BibleVersionMetadata[] = [
   // 1. English Standard Version (Served via Crossway API)
   { id: 59, code: 'ESV', shortName: 'ESV', fullName: 'English Standard Version', isPublicDomain: false },
 
-  // 2. Active YouVersion Platform Bibles (Licensed & Accessible via App Key)
+  // 2. Active & Licensed YouVersion Platform Bibles
+  { id: 111, code: 'NIV', shortName: 'NIV', fullName: 'New International Version', isPublicDomain: false },
+  { id: 2692, code: 'NASB', shortName: 'NASB', fullName: 'New American Standard Bible', isPublicDomain: false },
+  { id: 110, code: 'NIRV', shortName: 'NIrV', fullName: "New International Reader's Version", isPublicDomain: false },
+  { id: 1588, code: 'AMP', shortName: 'AMP', fullName: 'Amplified Bible', isPublicDomain: false },
   { id: 3034, code: 'BSB', shortName: 'BSB', fullName: 'Berean Standard Bible', isPublicDomain: true },
   { id: 206, code: 'WEB', shortName: 'WEB', fullName: 'World English Bible', isPublicDomain: true },
   { id: 12, code: 'ASV', shortName: 'ASV', fullName: 'American Standard Version', isPublicDomain: true },
@@ -25,11 +29,6 @@ export const SUPPORTED_BIBLE_VERSIONS: readonly BibleVersionMetadata[] = [
   { id: 2660, code: 'LSV', shortName: 'LSV', fullName: 'Literal Standard Version', isPublicDomain: true },
   { id: 2163, code: 'GNV', shortName: 'GNV', fullName: 'Geneva Bible', isPublicDomain: true },
   { id: 42, code: 'CPDV', shortName: 'CPDV', fullName: 'Catholic Public Domain Version', isPublicDomain: true },
-
-  // --- Awaiting Commercial Publisher License Approval in YouVersion Developer Portal ---
-  // { id: 111, code: 'NIV', shortName: 'NIV', fullName: 'New International Version', isPublicDomain: false },
-  // { id: 2692, code: 'NASB', shortName: 'NASB', fullName: 'New American Standard Bible', isPublicDomain: false },
-  // { id: 110, code: 'NIRV', shortName: 'NIrV', fullName: "New International Reader's Version", isPublicDomain: false },
 
   // --- Not Distributed in YouVersion Platform API Catalog ---
   // { id: 114, code: 'NKJV', shortName: 'NKJV', fullName: 'New King James Version', isPublicDomain: false },

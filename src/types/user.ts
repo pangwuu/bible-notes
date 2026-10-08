@@ -10,6 +10,10 @@ export type NoteVisibility = 'private' | 'friends';
 export type BibleTranslation =
   | 'ESV'
   | 'BSB'
+  | 'NIV'
+  | 'NASB'
+  | 'NIRV'
+  | 'AMP'
   | 'WEB'
   | 'ASV'
   | 'FBV'
@@ -18,12 +22,9 @@ export type BibleTranslation =
   | 'CPDV'
   | 'KJV'
   | 'BBE'
-  | 'NIV'
   | 'CSB'
   | 'NLT'
   | 'NKJV'
-  | 'NASB'
-  | 'NIRV'
   | number;
 
 export interface UserSettings {

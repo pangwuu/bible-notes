@@ -86,6 +86,10 @@ describe('BibleService & YouVersion API Unit Tests', () => {
     expect(resolveVersionId('BSB')).toBe(3034);
     expect(resolveVersionId('WEB')).toBe(206);
     expect(resolveVersionId('ASV')).toBe(12);
+    expect(resolveVersionId('NIV')).toBe(111);
+    expect(resolveVersionId('NASB')).toBe(2692);
+    expect(resolveVersionId('NIRV')).toBe(110);
+    expect(resolveVersionId('AMP')).toBe(1588);
     expect(resolveVersionId('unknown')).toBe(DEFAULT_BIBLE_VERSION_ID);
     expect(resolveVersionId(undefined)).toBe(DEFAULT_BIBLE_VERSION_ID);
   });
