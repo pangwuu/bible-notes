@@ -67,11 +67,35 @@ export interface FetchPassageOptions {
 }
 
 /**
- * Builds standard cache key: bible_cache_${versionId}_${sanitizedPassage}
+/**
+ * Builds standard canonical cache key: bible_cache_${versionId}_${sanitizedUsfm}
+ * Canonicalizes query strings or PassageReference objects into USFM so that
+ * different representations ("John 3:16", "JHN.3.16", or PassageReference)
+ * resolve to the exact same cache key.
  */
-export function buildBibleCacheKey(versionOrTrans: string | number, passageRef: string): string {
+export function buildBibleCacheKey(
+  versionOrTrans: string | number,
+  passageInput: PassageReference | string
+): string {
   const versionId = resolveVersionId(versionOrTrans);
-  const sanitized = passageRef.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_');
+
+  if (typeof passageInput === 'object' && passageInput !== null) {
+    const p = passageInput as PassageReference;
+    if (p.segments && p.segments.length > 0) {
+      const usfmParts = p.segments.map(formatSegmentToUsfm);
+      const sanitized = usfmParts.join('_').toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_');
+      return `bible_cache_${versionId}_${sanitized}`;
+    }
+    const query = formatPassageQuery(passageInput);
+    const usfm = queryToUsfm(query);
+    const sanitized = (usfm || query).toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_');
+    return `bible_cache_${versionId}_${sanitized}`;
+  }
+
+  const query = String(passageInput).trim();
+  const usfm = queryToUsfm(query);
+  const keySource = usfm || query;
+  const sanitized = keySource.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_');
   return `bible_cache_${versionId}_${sanitized}`;
 }
 
@@ -106,6 +130,21 @@ export function formatPassageQuery(
   }
   if (p.display) return p.display.replace(/[—–]/g, '-');
   if (p.displayString) return p.displayString.replace(/[—–]/g, '-');
+
+  // Multi-segment fallback if display string is absent
+  if (p.segments && p.segments.length > 1) {
+    return p.segments
+      .map((s: PassageSegment) => {
+        if (s.startChapter === s.endChapter) {
+          if (s.startVerse === s.endVerse) {
+            return `${s.book} ${s.startChapter}:${s.startVerse}`;
+          }
+          return `${s.book} ${s.startChapter}:${s.startVerse}-${s.endVerse}`;
+        }
+        return `${s.book} ${s.startChapter}:${s.startVerse}-${s.endChapter}:${s.endVerse}`;
+      })
+      .join('; ');
+  }
 
   const { book, startChapter, startVerse, endChapter, endVerse } = p;
   if (startChapter === endChapter) {
@@ -491,22 +530,27 @@ export async function fetchPassageText(
 
   // Multi-segment compound references (e.g. John 3:16, Romans 8:1–8)
   if (typeof normalizedInput !== 'string' && normalizedInput.segments && normalizedInput.segments.length > 1) {
-    const combinedTitle = normalizedInput.displayString || formatPassageQuery(normalizedInput);
-    const compoundCacheKey = buildBibleCacheKey(versionId, combinedTitle);
+    const compoundCacheKey = buildBibleCacheKey(versionId, normalizedInput);
 
     if (!options.forceRefresh) {
       try {
         const cached = await safeStorage.getItem(compoundCacheKey);
         if (cached) {
           const parsed = JSON.parse(cached) as PassageFetchResult;
-          if (parsed.sections && normalizedInput.segments) {
-            parsed.sections.forEach((s, idx) => {
-              if (!s.segment && normalizedInput.segments[idx]) {
-                s.segment = normalizedInput.segments[idx];
-              }
-            });
+          if (parsed && Array.isArray(parsed.verses) && parsed.verses.length > 0) {
+            if (parsed.sections && normalizedInput.segments) {
+              parsed.sections.forEach((s, idx) => {
+                if (!s.segment && normalizedInput.segments[idx]) {
+                  s.segment = normalizedInput.segments[idx];
+                }
+              });
+            }
+            return {
+              ...parsed,
+              source: 'cache',
+              cached: true,
+            };
           }
-          return parsed;
         }
       } catch {}
     }
@@ -559,9 +603,11 @@ export async function fetchPassageText(
         attribution,
       };
 
-      safeStorage
-        .setItem(compoundCacheKey, JSON.stringify(combinedResult))
-        .catch(() => {});
+      if (allVerses.length > 0) {
+        safeStorage
+          .setItem(compoundCacheKey, JSON.stringify(combinedResult))
+          .catch(() => {});
+      }
 
       return combinedResult;
     } catch (err: any) {
@@ -571,7 +617,7 @@ export async function fetchPassageText(
 
   // Single segment / query
   const query = typeof normalizedInput === 'string' ? normalizedInput : formatPassageQuery(normalizedInput);
-  const cacheKey = buildBibleCacheKey(versionId, query);
+  const cacheKey = buildBibleCacheKey(versionId, normalizedInput);
 
   // 1. Check local AsyncStorage cache
   if (!options.forceRefresh) {
@@ -581,16 +627,18 @@ export async function fetchPassageText(
         const parsed = JSON.parse(cachedData);
         const verses: VerseSegment[] = Array.isArray(parsed.verses) ? parsed.verses : [];
         const text: string = parsed.text || verses.map((v) => v.text).join(' ');
-        return {
-          verses,
-          text,
-          sections: parsed.sections,
-          translation: versionMeta.shortName as BibleTranslation,
-          versionId,
-          source: 'cache',
-          cached: true,
-          attribution: parsed.attribution || versionMeta.fullName,
-        };
+        if (verses.length > 0 || text) {
+          return {
+            verses,
+            text,
+            sections: parsed.sections,
+            translation: versionMeta.shortName as BibleTranslation,
+            versionId,
+            source: 'cache',
+            cached: true,
+            attribution: parsed.attribution || versionMeta.fullName,
+          };
+        }
       }
     } catch {}
   }

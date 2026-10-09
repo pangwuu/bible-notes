@@ -361,6 +361,11 @@ describe('AuthService Integration Tests (Mocked Firebase)', () => {
           display_name: 'John Doe',
           full_name: 'John Doe',
           default_visibility: 'friends',
+          enable_friends: true,
+          settings: expect.objectContaining({
+            default_visibility: 'friends',
+            enable_friends: true,
+          }),
         })
       );
       expect(result.profile.username).toBe('valid_user');

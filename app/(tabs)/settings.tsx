@@ -32,7 +32,9 @@ export default function SettingsScreen() {
   const [defaultVisibility, setDefaultVisibility] = useState<NoteVisibility>('friends');
   const [preferredVersionId, setPreferredVersionId] = useState<number>(DEFAULT_BIBLE_VERSION_ID);
   const [defaultTemplateId, setDefaultTemplateId] = useState<string>('swedish');
-  const [enableFriends, setEnableFriends] = useState<boolean>(true);
+  const [enableFriends, setEnableFriends] = useState<boolean>(
+    profile?.settings?.enable_friends ?? profile?.enable_friends ?? true
+  );
   const [showVerseNumbers, setShowVerseNumbers] = useState<boolean>(true);
   const [defaultFontSize, setDefaultFontSize] = useState<number>(16);
 
@@ -66,9 +68,13 @@ export default function SettingsScreen() {
       if (profile.settings?.default_template_id) {
         setDefaultTemplateId(profile.settings.default_template_id);
       }
-      if (typeof profile.settings?.enable_friends === 'boolean') {
-        setEnableFriends(profile.settings.enable_friends);
-      }
+      const friendSetting =
+        typeof profile.settings?.enable_friends === 'boolean'
+          ? profile.settings.enable_friends
+          : typeof profile.enable_friends === 'boolean'
+          ? profile.enable_friends
+          : true;
+      setEnableFriends(friendSetting);
       if (profile.settings?.default_font_size) {
         setDefaultFontSize(profile.settings.default_font_size);
         safeStorage.setItem('bible_font_size', String(profile.settings.default_font_size)).catch(() => {});
@@ -101,15 +107,8 @@ export default function SettingsScreen() {
       if (stored) setDefaultTemplateId(stored);
     });
 
-    safeStorage.getItem('enable_friends').then((stored) => {
-      if (stored !== null) {
-        try {
-          setEnableFriends(JSON.parse(stored));
-        } catch {
-          setEnableFriends(stored !== 'false');
-        }
-      }
-    });
+    // Purge legacy local storage key so AuthContext/Firestore remains single source of truth
+    safeStorage.removeItem('enable_friends').catch(() => {});
   }, []);
 
   const handleToggleVerseNumbers = async (value: boolean) => {
@@ -206,7 +205,6 @@ export default function SettingsScreen() {
 
   const handleToggleEnableFriends = async (enabled: boolean) => {
     setEnableFriends(enabled);
-    await safeStorage.setItem('enable_friends', JSON.stringify(enabled));
     if (user?.uid) {
       try {
         await updateUserProfile(user.uid, {
@@ -268,6 +266,7 @@ export default function SettingsScreen() {
             value={enableFriends}
             onValueChange={handleToggleEnableFriends}
             color={colors.accentKeyIdea}
+            accessibilityLabel="Social & Friends features"
           />
         </View>
       </View>

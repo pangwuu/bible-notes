@@ -94,10 +94,12 @@ describe('BibleService & YouVersion API Unit Tests', () => {
     expect(resolveVersionId(undefined)).toBe(DEFAULT_BIBLE_VERSION_ID);
   });
 
-  test('buildBibleCacheKey conforms to version ID format', () => {
-    expect(buildBibleCacheKey('BSB', 'John 3:16')).toBe('bible_cache_3034_john_3_16');
-    expect(buildBibleCacheKey(59, 'Romans 8:1-2')).toBe('bible_cache_59_romans_8_1_2');
-    expect(buildBibleCacheKey('WEB', 'Genesis 1:1')).toBe('bible_cache_206_genesis_1_1');
+  test('buildBibleCacheKey conforms to version ID format and canonicalizes to USFM', () => {
+    expect(buildBibleCacheKey('BSB', 'John 3:16')).toBe('bible_cache_3034_jhn_3_16');
+    expect(buildBibleCacheKey('BSB', 'JHN.3.16')).toBe('bible_cache_3034_jhn_3_16');
+    expect(buildBibleCacheKey(59, 'Romans 8:1-2')).toBe('bible_cache_59_rom_8_1_2');
+    expect(buildBibleCacheKey('WEB', 'Genesis 1:1')).toBe('bible_cache_206_gen_1_1');
+    expect(buildBibleCacheKey(111, passageJohn316)).toBe('bible_cache_111_jhn_3_16');
   });
 
   test('queryToUsfm converts queries into canonical USFM passage IDs', () => {
@@ -216,13 +218,13 @@ describe('BibleService & YouVersion API Unit Tests', () => {
       })
     );
 
-    // Verify written to AsyncStorage cache
-    const cached = await AsyncStorage.getItem('bible_cache_111_john_3_16');
+    // Verify written to AsyncStorage cache with canonical USFM key
+    const cached = await AsyncStorage.getItem('bible_cache_111_jhn_3_16');
     expect(cached).not.toBeNull();
   });
 
   test('fetchPassageText reads from AsyncStorage cache on subsequent calls without network', async () => {
-    const cacheKey = 'bible_cache_111_john_3_16';
+    const cacheKey = 'bible_cache_111_jhn_3_16';
     await AsyncStorage.setItem(
       cacheKey,
       JSON.stringify({
@@ -254,15 +256,42 @@ describe('BibleService & YouVersion API Unit Tests', () => {
   });
 
   test('clearPassageCache removes all bible_cache_* and yv_meta_* keys', async () => {
-    await AsyncStorage.setItem('bible_cache_111_john_3_16', 'text1');
+    await AsyncStorage.setItem('bible_cache_111_jhn_3_16', 'text1');
     await AsyncStorage.setItem('yv_meta_111', 'meta1');
     await AsyncStorage.setItem('user_notes_123', 'other_data');
 
     await clearPassageCache();
 
-    expect(await AsyncStorage.getItem('bible_cache_111_john_3_16')).toBeNull();
+    expect(await AsyncStorage.getItem('bible_cache_111_jhn_3_16')).toBeNull();
     expect(await AsyncStorage.getItem('yv_meta_111')).toBeNull();
     expect(await AsyncStorage.getItem('user_notes_123')).toBe('other_data');
+  });
+
+  test('buildBibleCacheKey produces identical keys for string, USFM, and PassageReference', () => {
+    const keyFromString = buildBibleCacheKey(111, 'John 3:16');
+    const keyFromUsfm = buildBibleCacheKey(111, 'JHN.3.16');
+    const keyFromObj = buildBibleCacheKey(111, passageJohn316);
+
+    expect(keyFromString).toBe('bible_cache_111_jhn_3_16');
+    expect(keyFromUsfm).toBe('bible_cache_111_jhn_3_16');
+    expect(keyFromObj).toBe('bible_cache_111_jhn_3_16');
+  });
+
+  test('multi-segment compound passages without display string generate safe canonical cache keys', () => {
+    const compoundWithoutDisplay = {
+      books: ['John', 'Romans'],
+      segments: [
+        { book: 'John', startChapter: 3, startVerse: 16, endChapter: 3, endVerse: 16 },
+        { book: 'Romans', startChapter: 8, startVerse: 1, endChapter: 8, endVerse: 2 },
+      ],
+    } as unknown as PassageReference;
+
+    const key = buildBibleCacheKey(111, compoundWithoutDisplay);
+    expect(key).toBe('bible_cache_111_jhn_3_16_rom_8_1_2');
+    expect(key).not.toContain('undefined');
+
+    const formatted = formatPassageQuery(compoundWithoutDisplay);
+    expect(formatted).toBe('John 3:16; Romans 8:1-2');
   });
 
   describe('YouVersion HTML Parsing & Section Headings', () => {

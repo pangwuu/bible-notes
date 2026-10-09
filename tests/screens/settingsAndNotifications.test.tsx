@@ -178,6 +178,33 @@ describe('Settings Screen & Notifications Screen (app/(tabs)/settings.tsx & app/
         expect(getByText('Passage cache cleared')).toBeTruthy();
       });
     });
+
+    test('purges legacy safeStorage enable_friends key on mount and toggles social features via updateUserProfile only', async () => {
+      (authService.updateUserProfile as jest.Mock).mockResolvedValue(undefined);
+      const safeStorage = require('../../src/utils/safeStorage').default;
+
+      const { getByLabelText } = await renderWithPaper(<SettingsScreen />);
+
+      await waitFor(() => {
+        expect(safeStorage.removeItem).toHaveBeenCalledWith('enable_friends');
+      });
+
+      const switchToggle = getByLabelText('Social & Friends features');
+      await act(async () => {
+        fireEvent(switchToggle, 'valueChange', false);
+      });
+
+      expect(authService.updateUserProfile).toHaveBeenCalledWith(
+        'settings_user_1',
+        expect.objectContaining({
+          enable_friends: false,
+          settings: expect.objectContaining({
+            enable_friends: false,
+          }),
+        })
+      );
+      expect(safeStorage.setItem).not.toHaveBeenCalledWith('enable_friends', expect.anything());
+    });
   });
 
   describe('NotificationsModal', () => {

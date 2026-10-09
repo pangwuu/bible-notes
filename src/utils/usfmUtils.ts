@@ -97,10 +97,11 @@ export function queryToUsfm(query: string): string {
     return `${bookCode}.${chapter}`;
   }
 
-  // If already in USFM format e.g. "JHN.3.16"
-  if (/^[1-3]?[A-Z]{2,3}\.[0-9]+(\.[0-9]+(-[0-9]+)?)?$/.test(clean.toUpperCase())) {
+  // If already in USFM format e.g. "JHN.3.16", "JHN.3.16-17", "GEN.1.1-GEN.2.3", "ROM.8.1-ROM.8.8"
+  if (/^[1-3]?[A-Z]{2,3}\.[0-9]+(\.[0-9]+)?(-([1-3]?[A-Z]{2,3}\.)?[0-9]+(\.[0-9]+)?)?$/.test(clean.toUpperCase())) {
     return clean.toUpperCase();
   }
 
-  return 'JHN.3.16';
+  // Safe fallback: strip invalid characters without arbitrarily defaulting to John 3:16
+  return clean.toUpperCase().replace(/[^A-Z0-9.-]/g, '');
 }

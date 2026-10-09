@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Share } from 'react-native';
 import { BibleTranslation } from '../../types/user';
 import {
@@ -137,10 +137,14 @@ export function useBibleReader({
     [targetPassage]
   );
 
+  const prevPassageRef = useRef(targetPassage);
   useEffect(() => {
-    setPassageResult(null);
+    if (prevPassageRef.current !== targetPassage) {
+      prevPassageRef.current = targetPassage;
+      setPassageResult(null);
+    }
     loadPassage(selectedVersionId);
-  }, [loadPassage, selectedVersionId]);
+  }, [loadPassage, selectedVersionId, targetPassage]);
 
   const handleSelectVersion = useCallback((versionId: number) => {
     setSelectedVersionId((prev) => {

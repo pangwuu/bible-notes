@@ -202,8 +202,10 @@ export async function registerUser(
       display_name: trimmedDisplayName,
       full_name: trimmedDisplayName,
       default_visibility: 'friends',
+      enable_friends: true,
       settings: {
         default_visibility: 'friends',
+        enable_friends: true,
         custom_esv_api_key: '',
       },
       custom_esv_api_key: '',

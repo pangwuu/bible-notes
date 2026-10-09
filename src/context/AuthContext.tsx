@@ -50,7 +50,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const defaultTemplateId =
                   data.settings?.default_template_id || data.default_template_id || 'swedish';
                 const enableFriends =
-                  data.settings?.enable_friends !== false && data.enable_friends !== false;
+                  typeof data.settings?.enable_friends === 'boolean'
+                    ? data.settings.enable_friends
+                    : typeof data.enable_friends === 'boolean'
+                    ? data.enable_friends
+                    : true;
 
                 const normalizedProfile: UserProfile = {
                   id: firebaseUser.uid,
@@ -61,6 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   full_name: data.full_name || data.display_name || firebaseUser.displayName || '',
                   default_visibility: defaultVis,
                   preferred_translation: preferredTrans,
+                  enable_friends: enableFriends,
                   settings: {
                     ...(data.settings || {}),
                     default_visibility: defaultVis,
@@ -87,7 +92,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   display_name: firebaseUser.displayName || '',
                   full_name: firebaseUser.displayName || '',
                   default_visibility: 'friends',
-                  settings: { default_visibility: 'friends' },
+                  enable_friends: true,
+                  settings: { default_visibility: 'friends', enable_friends: true },
                   created_at: null,
                   updated_at: null,
                 });
@@ -143,7 +149,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const defaultTemplateId =
           data.settings?.default_template_id || data.default_template_id || 'swedish';
         const enableFriends =
-          data.settings?.enable_friends !== false && data.enable_friends !== false;
+          typeof data.settings?.enable_friends === 'boolean'
+            ? data.settings.enable_friends
+            : typeof data.enable_friends === 'boolean'
+            ? data.enable_friends
+            : true;
 
         setProfile({
           id: auth.currentUser.uid,
@@ -154,6 +164,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           full_name: data.full_name || data.display_name || auth.currentUser.displayName || '',
           default_visibility: defaultVis,
           preferred_translation: preferredTrans,
+          enable_friends: enableFriends,
           settings: {
             ...(data.settings || {}),
             default_visibility: defaultVis,

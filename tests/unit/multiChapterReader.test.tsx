@@ -1,7 +1,7 @@
 import React from 'react';
 import renderer, { act } from 'react-test-renderer';
 import { ScriptureView } from '../../src/components/bibleReader/ScriptureView';
-import { fetchPassageText } from '../../src/services/bibleService';
+import { fetchPassageText, buildBibleCacheKey } from '../../src/services/bibleService';
 import { createPassageReference } from '../../src/utils/passageParser';
 import safeStorage from '../../src/utils/safeStorage';
 
@@ -139,8 +139,8 @@ describe('Multi-Chapter Passage Reader & Verse Selection', () => {
 
   test('fetchPassageText automatically splits single cross-chapter segment into multi-segment sections', async () => {
     // Prime cache with mock responses for each decomposed segment
-    const heb5Key = 'bible_cache_esv_hebrews_5_1_14';
-    const heb6Key = 'bible_cache_esv_hebrews_6_1_20';
+    const heb5Key = buildBibleCacheKey(59, 'HEB.5.1-14');
+    const heb6Key = buildBibleCacheKey(59, 'HEB.6.1-20');
     await safeStorage.setItem(
       heb5Key,
       JSON.stringify({
