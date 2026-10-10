@@ -107,6 +107,16 @@ function RootNavigationLayout() {
           }}
         />
 
+        {/* Friend note compare */}
+        <Stack.Screen
+          name="note/compare"
+          options={{
+            title: 'Compare notes',
+            headerShown: true,
+            headerBackTitle: 'Back',
+          }}
+        />
+
         {/* Friend Profile */}
         <Stack.Screen
           name="friend/[id]"
