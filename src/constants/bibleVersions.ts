@@ -124,7 +124,7 @@ export const SUPPORTED_BIBLE_VERSIONS: readonly BibleVersionMetadata[] = [
     fullName: 'Catholic Public Domain Version',
     isPublicDomain: true,
     summary:
-      'A modern English translation of the Latin Vulgate, completed in 2009, that includes the deuterocanonical books of the Catholic canon. Released into the public domain.',
+      'A modern English translation of the Latin Vulgate, completed in 2009 and released into the public domain. Its wording reflects Catholic tradition, offering a helpful point of comparison with Protestant translations.',
   },
 
   // --- Not Distributed in YouVersion Platform API Catalog ---
