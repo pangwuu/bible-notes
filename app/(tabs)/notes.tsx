@@ -222,7 +222,7 @@ export default function NotesBrowserScreen() {
             <EmptyState
               icon="book-outline"
               title="No notes found"
-              subtitle="Tap the button below to capture your first Swedish Method note."
+              subtitle="Tap the button below to capture your first study note."
               actionLabel="Create note"
               onAction={() => router.push('/note/edit')}
             />

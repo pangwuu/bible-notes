@@ -111,7 +111,7 @@ export default function LoginScreen() {
       >
         <View style={styles.headerArea}>
           <Text style={styles.title}>Bible Notes</Text>
-          <Text style={styles.subtitle}>Swedish Method Study Journal</Text>
+          <Text style={styles.subtitle}>Scripture study journal</Text>
         </View>
 
         {errorMessage && (
