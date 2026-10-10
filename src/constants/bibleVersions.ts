@@ -135,6 +135,26 @@ export const SUPPORTED_BIBLE_VERSIONS: readonly BibleVersionMetadata[] = [
 ];
 
 /**
+ * Public-domain translations seeded in Firestore (`bibles/{code}/chapters/...`)
+ * and safe for full offline download. Licensed YouVersion editions are excluded
+ * — Platform terms allow passage fetch + cache, not bulk offline packs.
+ */
+export const OFFLINE_FIRESTORE_TRANSLATIONS = [
+  { code: 'BSB', shortName: 'BSB', fullName: 'Berean Standard Bible' },
+  { code: 'KJV', shortName: 'KJV', fullName: 'King James Version' },
+] as const;
+
+export type OfflineFirestoreTranslation = (typeof OFFLINE_FIRESTORE_TRANSLATIONS)[number]['code'];
+
+export function isOfflineFirestoreTranslation(
+  value: string | number | null | undefined
+): value is OfflineFirestoreTranslation {
+  if (typeof value !== 'string') return false;
+  const upper = value.trim().toUpperCase();
+  return OFFLINE_FIRESTORE_TRANSLATIONS.some((t) => t.code === upper);
+}
+
+/**
  * Resolves an arbitrary input (version ID number or legacy string abbreviation)
  * to a canonical YouVersion numeric version ID.
  */
