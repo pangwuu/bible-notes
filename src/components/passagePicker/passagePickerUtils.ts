@@ -2,8 +2,11 @@ import {
   findCanonicalBook,
   TOTAL_CANONICAL_VERSES,
   BOOK_STARTING_ORDINALS,
+  CanonicalBook,
 } from '../../constants/bibleData';
 import { referenceToOrdinals } from '../../utils/bibleOrdinals';
+import { PassageSegment } from '../../types/note';
+import { buildSegment, splitSegmentByChapters } from '../../utils/passageParser';
 
 /**
  * Validates that end verse is not less than start verse when within the same chapter.
@@ -92,4 +95,78 @@ export function getChapterVerseCount(bookName: string, chapter: number): number 
   if (bookName === 'Jude') return 25;
 
   return 30;
+}
+
+export function sameSegment(a: PassageSegment, b: PassageSegment): boolean {
+  return (
+    a.book === b.book &&
+    a.startChapter === b.startChapter &&
+    a.endChapter === b.endChapter &&
+    a.startVerse === b.startVerse &&
+    a.endVerse === b.endVerse
+  );
+}
+
+/**
+ * Appends incoming passages, splitting cross-chapter spans and skipping exact duplicates.
+ */
+export function appendUniqueSegments(
+  existing: PassageSegment[],
+  incoming: PassageSegment[]
+): PassageSegment[] {
+  const next = [...existing];
+  for (const seg of incoming.flatMap(splitSegmentByChapters)) {
+    if (!next.some((item) => sameSegment(item, seg))) {
+      next.push(seg);
+    }
+  }
+  return next;
+}
+
+/**
+ * Applies an in-progress draft onto the committed list.
+ * An edit replaces that row. A new draft is appended if it is not already present.
+ */
+export function assemblePassageSegments(
+  segments: PassageSegment[],
+  draft: PassageSegment | null,
+  editingIndex: number | null
+): PassageSegment[] {
+  if (!draft) return [...segments];
+  if (editingIndex !== null && editingIndex >= 0 && editingIndex < segments.length) {
+    const next = [...segments];
+    next.splice(editingIndex, 1, ...splitSegmentByChapters(draft));
+    return next;
+  }
+  return appendUniqueSegments(segments, [draft]);
+}
+
+export function draftFromSelection(selection: {
+  selectedBook: string | null;
+  selectedChapter: number | null;
+  selectedChapterEnd: number | null;
+  selectedVerseStart: number | null;
+  selectedVerseEnd: number | null;
+}): PassageSegment | null {
+  if (
+    !selection.selectedBook ||
+    selection.selectedChapter === null ||
+    selection.selectedVerseStart === null
+  ) {
+    return null;
+  }
+  return buildSegment(
+    selection.selectedBook,
+    selection.selectedChapter,
+    selection.selectedVerseStart,
+    selection.selectedChapterEnd ?? selection.selectedChapter,
+    selection.selectedVerseEnd ?? selection.selectedVerseStart
+  );
+}
+
+export function bookMatchesQuery(book: CanonicalBook, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  if (book.name.toLowerCase().includes(q)) return true;
+  return book.abbreviations.some((abbr) => abbr.toLowerCase().includes(q));
 }

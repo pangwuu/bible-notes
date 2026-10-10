@@ -1,7 +1,12 @@
-import { findCanonicalBook, CANONICAL_BOOKS, CanonicalBook } from '../../constants/bibleData';
-import { parsePassageReferenceString, buildSegment, splitSegmentByChapters } from '../../utils/passageParser';
+import { findCanonicalBook, CANONICAL_BOOKS } from '../../constants/bibleData';
+import { parsePassageReferenceString, splitSegmentByChapters } from '../../utils/passageParser';
 import { PassagePickerState, PassagePickerAction } from './passagePickerTypes';
-import { getChapterVerseCount } from './passagePickerUtils';
+import {
+  getChapterVerseCount,
+  appendUniqueSegments,
+  assemblePassageSegments,
+  draftFromSelection,
+} from './passagePickerUtils';
 
 export const initialPickerState: PassagePickerState = {
   step: 'book',
@@ -10,11 +15,32 @@ export const initialPickerState: PassagePickerState = {
   selectedChapterEnd: null,
   selectedVerseStart: null,
   selectedVerseEnd: null,
+  verseAnchor: null,
+  editingIndex: null,
+  expandedBook: null,
   segments: [],
   testamentTab: 'NT',
   searchQuery: '',
   smartParseError: null,
 };
+
+function clearedSelection(state: PassagePickerState, segments = state.segments): PassagePickerState {
+  return {
+    ...state,
+    segments,
+    step: 'book',
+    selectedBook: null,
+    selectedChapter: null,
+    selectedChapterEnd: null,
+    selectedVerseStart: null,
+    selectedVerseEnd: null,
+    verseAnchor: null,
+    editingIndex: null,
+    expandedBook: null,
+    searchQuery: '',
+    smartParseError: null,
+  };
+}
 
 export function passagePickerReducer(
   state: PassagePickerState,
@@ -27,23 +53,28 @@ export function passagePickerReducer(
         return state;
       }
 
-      const initPassage = initialPassage as any;
+      const initPassage = initialPassage as {
+        segments?: PassagePickerState['segments'];
+        book?: string;
+        startChapter?: number;
+        chapter_start?: number;
+        endChapter?: number;
+        chapter_end?: number;
+        startVerse?: number;
+        verse_start?: number;
+        endVerse?: number;
+        verse_end?: number;
+      } | undefined;
+
       if (initPassage?.segments && Array.isArray(initPassage.segments) && initPassage.segments.length > 0) {
         const normalizedSegments = initPassage.segments.flatMap(splitSegmentByChapters);
         const first = normalizedSegments[0];
         const bookMeta = findCanonicalBook(first.book);
+        // Existing passages belong in the list, not as a half-finished draft.
         return {
-          ...state,
-          step: 'book',
+          ...initialPickerState,
           segments: normalizedSegments,
-          selectedBook: first.book,
-          selectedChapter: first.startChapter,
-          selectedChapterEnd: first.endChapter,
-          selectedVerseStart: first.startVerse,
-          selectedVerseEnd: first.endVerse,
           testamentTab: bookMeta?.testament ?? 'NT',
-          searchQuery: '',
-          smartParseError: null,
         };
       } else if (initPassage?.book) {
         const book = initPassage.book;
@@ -60,7 +91,7 @@ export function passagePickerReducer(
         const maxEndV = bookMeta.versesPerChapter[safeEndCh - 1];
         const safeStartV =
           initPassage?.startVerse ?? initPassage?.verse_start
-            ? Math.max(1, Math.min(initPassage?.startVerse ?? initPassage?.verse_start, maxStartV))
+            ? Math.max(1, Math.min(initPassage?.startVerse ?? initPassage?.verse_start ?? 1, maxStartV))
             : null;
         const rawEndV = initPassage?.endVerse ?? initPassage?.verse_end;
         const safeEndV = rawEndV
@@ -68,21 +99,18 @@ export function passagePickerReducer(
           : safeStartV;
 
         return {
-          ...state,
-          step: 'book',
-          segments: [],
+          ...initialPickerState,
+          step: safeStartV ? 'end_verse' : 'start_chapter',
           selectedBook: bookMeta.name,
           selectedChapter: safeStartCh,
           selectedChapterEnd: safeEndCh,
           selectedVerseStart: safeStartV,
           selectedVerseEnd: safeEndV,
+          expandedBook: bookMeta.name,
           testamentTab: bookMeta.testament,
-          searchQuery: '',
-          smartParseError: null,
         };
       }
 
-      // Clean slate
       return {
         ...initialPickerState,
       };
@@ -90,26 +118,79 @@ export function passagePickerReducer(
 
     case 'SELECT_BOOK': {
       const book = action.payload.book;
+      if (state.expandedBook === book.name) {
+        return {
+          ...state,
+          expandedBook: null,
+          step: 'book',
+        };
+      }
+
+      if (state.selectedBook === book.name && state.selectedChapter !== null) {
+        return {
+          ...state,
+          expandedBook: book.name,
+          step: book.chapters === 1 ? 'start_verse' : 'start_chapter',
+        };
+      }
+
       const isSingleChapter = book.chapters === 1;
+      let segments = state.segments;
+      const previousDraft = draftFromSelection(state);
+      if (
+        previousDraft &&
+        state.editingIndex === null &&
+        state.selectedBook !== book.name
+      ) {
+        segments = appendUniqueSegments(segments, [previousDraft]);
+      }
+
       return {
         ...state,
+        segments,
         selectedBook: book.name,
         selectedChapter: isSingleChapter ? 1 : null,
         selectedChapterEnd: isSingleChapter ? 1 : null,
         selectedVerseStart: null,
         selectedVerseEnd: null,
+        verseAnchor: null,
+        expandedBook: book.name,
+        searchQuery: '',
         step: isSingleChapter ? 'start_verse' : 'start_chapter',
       };
     }
 
     case 'SELECT_START_CHAPTER': {
       const ch = action.payload.chapter;
+      if (state.selectedChapter === ch && state.selectedVerseStart !== null) {
+        return {
+          ...state,
+          step: 'end_verse',
+          verseAnchor: null,
+        };
+      }
+
+      let segments = state.segments;
+      if (
+        state.editingIndex === null &&
+        state.selectedChapter !== null &&
+        state.selectedChapter !== ch &&
+        state.selectedVerseStart !== null
+      ) {
+        const previous = draftFromSelection(state);
+        if (previous) {
+          segments = appendUniqueSegments(segments, [previous]);
+        }
+      }
+
       return {
         ...state,
+        segments,
         selectedChapter: ch,
         selectedChapterEnd: ch,
         selectedVerseStart: null,
         selectedVerseEnd: null,
+        verseAnchor: null,
         step: 'start_verse',
       };
     }
@@ -120,6 +201,34 @@ export function passagePickerReducer(
         ...state,
         selectedVerseStart: v,
         selectedVerseEnd: v,
+        verseAnchor: v,
+        step: 'end_verse',
+      };
+    }
+
+    case 'SELECT_RANGE_VERSE': {
+      const verse = action.payload.verse;
+      if (state.selectedChapter === null) return state;
+
+      if (state.verseAnchor === null) {
+        return {
+          ...state,
+          selectedChapterEnd: state.selectedChapter,
+          selectedVerseStart: verse,
+          selectedVerseEnd: verse,
+          verseAnchor: verse,
+          step: 'end_verse',
+        };
+      }
+
+      const start = Math.min(state.verseAnchor, verse);
+      const end = Math.max(state.verseAnchor, verse);
+      return {
+        ...state,
+        selectedChapterEnd: state.selectedChapter,
+        selectedVerseStart: start,
+        selectedVerseEnd: end,
+        verseAnchor: null,
         step: 'end_verse',
       };
     }
@@ -138,6 +247,7 @@ export function passagePickerReducer(
         ...state,
         selectedChapterEnd: safeEndCh,
         selectedVerseEnd: safeEndV,
+        verseAnchor: null,
         step: 'end_verse',
       };
     }
@@ -149,6 +259,7 @@ export function passagePickerReducer(
           ...state,
           selectedVerseStart: v,
           selectedVerseEnd: v,
+          verseAnchor: v,
         };
       }
 
@@ -158,6 +269,7 @@ export function passagePickerReducer(
       return {
         ...state,
         selectedVerseEnd: safeV,
+        verseAnchor: null,
       };
     }
 
@@ -168,47 +280,101 @@ export function passagePickerReducer(
         selectedChapterEnd: state.selectedChapter,
         selectedVerseStart: 1,
         selectedVerseEnd: action.payload.totalVerses,
+        verseAnchor: null,
         step: 'end_verse',
       };
     }
 
     case 'ADD_SEGMENT': {
-      const split = splitSegmentByChapters(action.payload.segment);
-      return {
-        ...state,
-        segments: [...state.segments, ...split],
-        selectedBook: null,
-        selectedChapter: null,
-        selectedChapterEnd: null,
-        selectedVerseStart: null,
-        selectedVerseEnd: null,
-        searchQuery: '',
-        smartParseError: null,
-        step: 'book',
-      };
+      return clearedSelection(
+        state,
+        appendUniqueSegments(state.segments, [action.payload.segment])
+      );
     }
 
     case 'ADD_SEGMENTS': {
-      const split = action.payload.segments.flatMap(splitSegmentByChapters);
-      return {
-        ...state,
-        segments: [...state.segments, ...split],
-        selectedBook: null,
-        selectedChapter: null,
-        selectedChapterEnd: null,
-        selectedVerseStart: null,
-        selectedVerseEnd: null,
-        searchQuery: '',
-        smartParseError: null,
-        step: 'book',
-      };
+      return clearedSelection(
+        state,
+        appendUniqueSegments(state.segments, action.payload.segments)
+      );
     }
 
     case 'REMOVE_SEGMENT': {
+      const index = action.payload.index;
+      const segments = state.segments.filter((_, i) => i !== index);
+      const removedEdit = state.editingIndex === index;
+      let editingIndex = state.editingIndex;
+      if (editingIndex !== null) {
+        if (editingIndex === index) editingIndex = null;
+        else if (editingIndex > index) editingIndex -= 1;
+      }
+
+      if (removedEdit) {
+        return {
+          ...clearedSelection(state, segments),
+        };
+      }
+
       return {
         ...state,
-        segments: state.segments.filter((_, i) => i !== action.payload.index),
+        segments,
+        editingIndex,
       };
+    }
+
+    case 'MOVE_SEGMENT': {
+      const { index, direction } = action.payload;
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (index < 0 || index >= state.segments.length) return state;
+      if (target < 0 || target >= state.segments.length) return state;
+
+      const segments = [...state.segments];
+      const [item] = segments.splice(index, 1);
+      segments.splice(target, 0, item);
+
+      let editingIndex = state.editingIndex;
+      if (editingIndex === index) editingIndex = target;
+      else if (editingIndex === target) editingIndex = index;
+
+      return {
+        ...state,
+        segments,
+        editingIndex,
+      };
+    }
+
+    case 'START_EDIT': {
+      const segment = state.segments[action.payload.index];
+      if (!segment) return state;
+      const bookMeta = findCanonicalBook(segment.book);
+      return {
+        ...state,
+        editingIndex: action.payload.index,
+        selectedBook: segment.book,
+        selectedChapter: segment.startChapter,
+        selectedChapterEnd: segment.endChapter,
+        selectedVerseStart: segment.startVerse,
+        selectedVerseEnd: segment.endVerse,
+        verseAnchor: null,
+        expandedBook: segment.book,
+        searchQuery: '',
+        smartParseError: null,
+        step: 'end_verse',
+        testamentTab: bookMeta?.testament ?? state.testamentTab,
+      };
+    }
+
+    case 'SAVE_EDIT': {
+      const draft = draftFromSelection(state);
+      if (state.editingIndex === null || !draft) return state;
+      return clearedSelection(
+        state,
+        assemblePassageSegments(state.segments, draft, state.editingIndex)
+      );
+    }
+
+    case 'CANCEL_EDIT': {
+      return clearedSelection(state, state.segments);
     }
 
     case 'STEP_BACK': {
@@ -228,13 +394,13 @@ export function passagePickerReducer(
 
       if (state.step === 'start_verse') {
         if (chapters === 1) {
-          return { ...state, step: 'book' };
+          return { ...state, step: 'book', expandedBook: null };
         }
         return { ...state, step: 'start_chapter' };
       }
 
       if (state.step === 'start_chapter') {
-        return { ...state, step: 'book' };
+        return { ...state, step: 'book', expandedBook: null };
       }
 
       return state;
@@ -244,6 +410,9 @@ export function passagePickerReducer(
       return {
         ...state,
         step: action.payload.step,
+        ...(action.payload.expandedBook !== undefined
+          ? { expandedBook: action.payload.expandedBook }
+          : {}),
       };
     }
 
@@ -266,59 +435,24 @@ export function passagePickerReducer(
       const parsed = parsePassageReferenceString(raw);
 
       if (parsed.length > 0) {
-        const newSegments = [...state.segments];
+        let newSegments = [...state.segments];
 
-        // If the search query was previously empty, and there was an existing complete manual draft
-        // that is not yet in state.segments, auto-stage it so the user's manual selection is preserved.
         const hasManualDraft =
           state.searchQuery === '' &&
+          state.editingIndex === null &&
           state.selectedBook !== null &&
           state.selectedChapter !== null &&
           state.selectedVerseStart !== null;
 
         if (hasManualDraft) {
-          const manualDraft = buildSegment(
-            state.selectedBook!,
-            state.selectedChapter!,
-            state.selectedVerseStart!,
-            state.selectedChapterEnd ?? state.selectedChapter!,
-            state.selectedVerseEnd ?? state.selectedVerseStart!
-          );
-          const splitManual = splitSegmentByChapters(manualDraft);
-
-          for (const s of splitManual) {
-            const alreadyInSegments = newSegments.some(
-              (ex) =>
-                ex.book === s.book &&
-                ex.startChapter === s.startChapter &&
-                ex.endChapter === s.endChapter &&
-                ex.startVerse === s.startVerse &&
-                ex.endVerse === s.endVerse
-            );
-
-            if (!alreadyInSegments) {
-              newSegments.push(s);
-            }
+          const manualDraft = draftFromSelection(state);
+          if (manualDraft) {
+            newSegments = appendUniqueSegments(newSegments, [manualDraft]);
           }
         }
 
-        // If user typed a multi-segment compound string (e.g. "Rom 8:1; 1 Cor 13"),
-        // stage all but the last segment, and set the last one as the active draft.
         if (parsed.length > 1) {
-          for (let i = 0; i < parsed.length - 1; i++) {
-            const seg = parsed[i];
-            const alreadyIn = newSegments.some(
-              (s) =>
-                s.book === seg.book &&
-                s.startChapter === seg.startChapter &&
-                s.endChapter === seg.endChapter &&
-                s.startVerse === seg.startVerse &&
-                s.endVerse === seg.endVerse
-            );
-            if (!alreadyIn) {
-              newSegments.push(seg);
-            }
-          }
+          newSegments = appendUniqueSegments(newSegments, parsed.slice(0, -1));
         }
 
         const activeSegment = parsed[parsed.length - 1];
@@ -334,6 +468,8 @@ export function passagePickerReducer(
           selectedChapterEnd: activeSegment.endChapter,
           selectedVerseStart: activeSegment.startVerse,
           selectedVerseEnd: activeSegment.endVerse,
+          verseAnchor: null,
+          expandedBook: activeSegment.book,
           testamentTab: bookMeta ? bookMeta.testament : state.testamentTab,
         };
       }
