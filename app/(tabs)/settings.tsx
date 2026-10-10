@@ -14,6 +14,10 @@ import { useRouter } from 'expo-router';
 import { colors, spacing, radius, typography } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/AuthContext';
 import { updateUserProfile } from '../../src/services/authService';
+import {
+  clearPushTokenForUser,
+  syncPushTokenForUser,
+} from '../../src/services/pushNotificationService';
 import { clearPassageCache, SUPPORTED_TRANSLATIONS } from '../../src/services/bibleService';
 import {
   SUPPORTED_BIBLE_VERSIONS,
@@ -39,6 +43,9 @@ export default function SettingsScreen() {
   );
   const [showVerseNumbers, setShowVerseNumbers] = useState<boolean>(true);
   const [defaultFontSize, setDefaultFontSize] = useState<number>(16);
+  const [pushEnabled, setPushEnabled] = useState<boolean>(
+    profile?.settings?.push_notifications_enabled !== false
+  );
 
   // Clear cache state
   const [clearCacheDialogOpen, setClearCacheDialogOpen] = useState(false);
@@ -81,6 +88,7 @@ export default function SettingsScreen() {
         setDefaultFontSize(profile.settings.default_font_size);
         safeStorage.setItem('bible_font_size', String(profile.settings.default_font_size)).catch(() => {});
       }
+      setPushEnabled(profile.settings?.push_notifications_enabled !== false);
     }
   }, [profile]);
 
@@ -222,6 +230,21 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleTogglePushNotifications = async (enabled: boolean) => {
+    setPushEnabled(enabled);
+    if (!user?.uid) return;
+    try {
+      if (enabled) {
+        await syncPushTokenForUser(user.uid);
+      } else {
+        await clearPushTokenForUser(user.uid);
+      }
+    } catch (err) {
+      console.warn('Failed to update push notification preference:', err);
+      setPushEnabled(!enabled);
+    }
+  };
+
   const handleConfirmLogout = async () => {
     setIsLoggingOut(true);
     try {
@@ -269,6 +292,23 @@ export default function SettingsScreen() {
             onValueChange={handleToggleEnableFriends}
             color={colors.accentKeyIdea}
             accessibilityLabel="Social & Friends features"
+          />
+        </View>
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleTextContainer}>
+            <Text style={styles.cardTitle}>Push notifications</Text>
+            <Text style={styles.cardDescription}>
+              Get notified about passage overlaps and friend activity even when the app is closed.
+            </Text>
+          </View>
+          <Switch
+            value={pushEnabled}
+            onValueChange={handleTogglePushNotifications}
+            color={colors.accentKeyIdea}
+            accessibilityLabel="Push notifications"
           />
         </View>
       </View>
