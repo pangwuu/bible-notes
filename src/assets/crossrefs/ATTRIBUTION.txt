@@ -1,0 +1,5 @@
+Bible Cross References
+Source: OpenBible.info — https://www.openbible.info/labs/cross-references/
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+Primary underlying source: Treasury of Scripture Knowledge (public domain)
+Built by scripts/buildCrossReferences.js

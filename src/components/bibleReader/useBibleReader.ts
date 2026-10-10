@@ -7,10 +7,14 @@ import {
   PassageFetchResult,
 } from '../../services/bibleService';
 import {
-  DEFAULT_BIBLE_VERSION_ID,
   resolveVersionId,
   getVersionMetadata,
 } from '../../constants/bibleVersions';
+import {
+  CrossReferenceTarget,
+  getCrossReferencesForVerses,
+  hasCrossReferences,
+} from '../../services/crossReferenceService';
 import safeStorage from '../../utils/safeStorage';
 import { PassageReference } from '../../types/note';
 import {
@@ -50,6 +54,9 @@ export function useBibleReader({
   const [fontSize, setFontSize] = useState<number>(propFontSize || 16);
   const [selectedVerses, setSelectedVerses] = useState<Set<number>>(new Set());
   const [activeContext, setActiveContext] = useState<ActivePassageContext | null>(null);
+  const [crossRefSheetVisible, setCrossRefSheetVisible] = useState(false);
+  const [crossRefSourceLabel, setCrossRefSourceLabel] = useState('');
+  const [crossRefTargets, setCrossRefTargets] = useState<CrossReferenceTarget[]>([]);
 
   // Auto-uncollapse reader when a target verse is highlighted
   useEffect(() => {
@@ -243,6 +250,64 @@ export function useBibleReader({
     loadPassage(selectedVersionId, true);
   }, [loadPassage, selectedVersionId]);
 
+  const resolveContext = useCallback(
+    (context?: ActivePassageContext | null) => {
+      const fallbackSeg = targetPassage?.segments?.[0];
+      const book = context?.book || activeContext?.book || fallbackSeg?.book;
+      const chapter = context?.chapter || activeContext?.chapter || fallbackSeg?.startChapter;
+      return { book, chapter };
+    },
+    [targetPassage, activeContext]
+  );
+
+  const verseHasCrossReferences = useCallback(
+    (book: string | undefined, chapter: number | undefined, verse: number) => {
+      if (!book || !chapter) return false;
+      return hasCrossReferences({ book, chapter, verse });
+    },
+    []
+  );
+
+  const openCrossReferencesForVerses = useCallback(
+    (verses: number[], context?: ActivePassageContext | null) => {
+      const { book, chapter } = resolveContext(context);
+      if (!book || !chapter || verses.length === 0) return;
+      const refs = getCrossReferencesForVerses(book, chapter, verses);
+      if (refs.length === 0) return;
+      const label = formatVerseRangeLabel(
+        verses[0],
+        verses[verses.length - 1],
+        { book, chapter },
+        verses
+      );
+      setCrossRefSourceLabel(label);
+      setCrossRefTargets(refs);
+      setCrossRefSheetVisible(true);
+    },
+    [resolveContext]
+  );
+
+  const handleOpenCrossReferencesForVerse = useCallback(
+    (verseNum: number, context?: ActivePassageContext) => {
+      openCrossReferencesForVerses([verseNum], context);
+    },
+    [openCrossReferencesForVerses]
+  );
+
+  const handleOpenCrossReferencesForSelection = useCallback(() => {
+    openCrossReferencesForVerses(sortedSelectedVerses, activeContext);
+  }, [openCrossReferencesForVerses, sortedSelectedVerses, activeContext]);
+
+  const selectedCrossReferenceCount = useMemo(() => {
+    const { book, chapter } = resolveContext(activeContext);
+    if (!book || !chapter || sortedSelectedVerses.length === 0) return 0;
+    return getCrossReferencesForVerses(book, chapter, sortedSelectedVerses).length;
+  }, [resolveContext, activeContext, sortedSelectedVerses]);
+
+  const closeCrossReferences = useCallback(() => {
+    setCrossRefSheetVisible(false);
+  }, []);
+
   return {
     selectedVersionId,
     setSelectedVersionId: handleSelectVersion,
@@ -266,5 +331,13 @@ export function useBibleReader({
     clearSelectedVerses,
     handleShareSelected,
     handleRetry,
+    verseHasCrossReferences,
+    handleOpenCrossReferencesForVerse,
+    handleOpenCrossReferencesForSelection,
+    selectedCrossReferenceCount,
+    crossRefSheetVisible,
+    crossRefSourceLabel,
+    crossRefTargets,
+    closeCrossReferences,
   };
 }
