@@ -2,8 +2,12 @@ import {
   findCanonicalBook,
   TOTAL_CANONICAL_VERSES,
   BOOK_STARTING_ORDINALS,
+  CanonicalBook,
 } from '../../constants/bibleData';
+import { spacing } from '../../constants/theme';
 import { referenceToOrdinals } from '../../utils/bibleOrdinals';
+import { PassageSegment } from '../../types/note';
+import { buildSegment, splitSegmentByChapters } from '../../utils/passageParser';
 
 /**
  * Validates that end verse is not less than start verse when within the same chapter.
@@ -92,4 +96,95 @@ export function getChapterVerseCount(bookName: string, chapter: number): number 
   if (bookName === 'Jude') return 25;
 
   return 30;
+}
+
+export function sameSegment(a: PassageSegment, b: PassageSegment): boolean {
+  return (
+    a.book === b.book &&
+    a.startChapter === b.startChapter &&
+    a.endChapter === b.endChapter &&
+    a.startVerse === b.startVerse &&
+    a.endVerse === b.endVerse
+  );
+}
+
+/**
+ * Appends incoming passages, splitting cross-chapter spans and skipping exact duplicates.
+ */
+export function appendUniqueSegments(
+  existing: PassageSegment[],
+  incoming: PassageSegment[]
+): PassageSegment[] {
+  const next = [...existing];
+  for (const seg of incoming.flatMap(splitSegmentByChapters)) {
+    if (!next.some((item) => sameSegment(item, seg))) {
+      next.push(seg);
+    }
+  }
+  return next;
+}
+
+/**
+ * Applies an in-progress draft onto the committed list.
+ * An edit replaces that row. A new draft is appended if it is not already present.
+ */
+export function assemblePassageSegments(
+  segments: PassageSegment[],
+  draft: PassageSegment | null,
+  editingIndex: number | null
+): PassageSegment[] {
+  if (!draft) return [...segments];
+  if (editingIndex !== null && editingIndex >= 0 && editingIndex < segments.length) {
+    const next = [...segments];
+    next.splice(editingIndex, 1, ...splitSegmentByChapters(draft));
+    return next;
+  }
+  return appendUniqueSegments(segments, [draft]);
+}
+
+export function draftFromSelection(selection: {
+  selectedBook: string | null;
+  selectedChapter: number | null;
+  selectedChapterEnd: number | null;
+  selectedVerseStart: number | null;
+  selectedVerseEnd: number | null;
+}): PassageSegment | null {
+  if (
+    !selection.selectedBook ||
+    selection.selectedChapter === null ||
+    selection.selectedVerseStart === null
+  ) {
+    return null;
+  }
+  return buildSegment(
+    selection.selectedBook,
+    selection.selectedChapter,
+    selection.selectedVerseStart,
+    selection.selectedChapterEnd ?? selection.selectedChapter,
+    selection.selectedVerseEnd ?? selection.selectedVerseStart
+  );
+}
+
+/** Phone-sized chapter and verse squares. Wide layouts add columns instead of growing tiles. */
+export const SQUARE_TILE_MIN = 48;
+export const SQUARE_TILE_MAX = 64;
+
+/**
+ * Size of a chapter or verse square for the current window.
+ * Tiles stay between 48px and 64px. Extra width becomes more columns,
+ * using the same horizontal inset and gap as the chapter and verse grids.
+ */
+export function computeSquareTileSize(windowWidth: number): number {
+  const gap = spacing.sm;
+  const contentWidth = windowWidth - spacing.md * 2;
+  const columns = Math.max(1, Math.floor((contentWidth + gap) / (SQUARE_TILE_MAX + gap)));
+  const tile = Math.floor((contentWidth - gap * (columns - 1)) / columns);
+  return Math.min(SQUARE_TILE_MAX, Math.max(SQUARE_TILE_MIN, tile));
+}
+
+export function bookMatchesQuery(book: CanonicalBook, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  if (book.name.toLowerCase().includes(q)) return true;
+  return book.abbreviations.some((abbr) => abbr.toLowerCase().includes(q));
 }

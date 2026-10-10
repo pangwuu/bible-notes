@@ -37,6 +37,12 @@ export interface PassagePickerState {
   selectedChapterEnd: number | null;
   selectedVerseStart: number | null;
   selectedVerseEnd: number | null;
+  /** Verse waiting for a second tap to finish a same-chapter range. */
+  verseAnchor: number | null;
+  /** Index of the committed passage currently being edited, if any. */
+  editingIndex: number | null;
+  /** Book whose chapter grid is open in the accordion. */
+  expandedBook: string | null;
   segments: PassageSegment[];
   testamentTab: 'OT' | 'NT';
   searchQuery: string;
@@ -64,11 +70,16 @@ export type PassagePickerAction =
   | { type: 'SELECT_END_CHAPTER'; payload: { chapter: number } }
   | { type: 'SELECT_END_VERSE'; payload: { verse: number } }
   | { type: 'SELECT_ENTIRE_CHAPTER'; payload: { totalVerses: number } }
+  | { type: 'SELECT_RANGE_VERSE'; payload: { verse: number } }
   | { type: 'ADD_SEGMENT'; payload: { segment: PassageSegment } }
   | { type: 'ADD_SEGMENTS'; payload: { segments: PassageSegment[] } }
   | { type: 'REMOVE_SEGMENT'; payload: { index: number } }
+  | { type: 'MOVE_SEGMENT'; payload: { index: number; direction: 'up' | 'down' } }
+  | { type: 'START_EDIT'; payload: { index: number } }
+  | { type: 'SAVE_EDIT' }
+  | { type: 'CANCEL_EDIT' }
   | { type: 'STEP_BACK' }
-  | { type: 'SET_STEP'; payload: { step: PickerStep } }
+  | { type: 'SET_STEP'; payload: { step: PickerStep; expandedBook?: string | null } }
   | { type: 'RESET' }
   | { type: 'SET_TESTAMENT'; payload: { testament: 'OT' | 'NT' } }
   | { type: 'SET_SEARCH_QUERY'; payload: { query: string } };

@@ -7,10 +7,29 @@ import {
   formatPassageReference,
   computeCanonicalOrdinals,
   getChapterVerseCount,
+  computeSquareTileSize,
   passagePickerReducer,
   initialPickerState,
   findCanonicalBook,
 } from '../../src/components/PassagePicker';
+
+describe('computeSquareTileSize', () => {
+  test('keeps phone tiles in the 48–64px range and does not grow them on a wide window', () => {
+    const phone = computeSquareTileSize(390);
+    const smallPhone = computeSquareTileSize(320);
+    const desktop = computeSquareTileSize(1280);
+
+    expect(phone).toBeGreaterThanOrEqual(48);
+    expect(phone).toBeLessThanOrEqual(64);
+    expect(smallPhone).toBeGreaterThanOrEqual(48);
+    expect(smallPhone).toBeLessThanOrEqual(64);
+    expect(desktop).toBeLessThanOrEqual(64);
+    expect(desktop).toBe(64);
+
+    const stretchedFiveColumn = Math.floor((1280 - 16 * 2 - 8 * 4) / 5);
+    expect(desktop).toBeLessThan(stretchedFiveColumn);
+  });
+});
 
 describe('PassagePicker Selection Logic & State Machine', () => {
   describe('validateVerseRange', () => {
@@ -299,11 +318,14 @@ describe('PassagePicker Selection Logic & State Machine', () => {
           },
         },
       });
-      expect(state.selectedBook).toBe('Romans');
-      expect(state.selectedChapter).toBe(8);
-      expect(state.selectedVerseStart).toBe(1);
-      expect(state.selectedVerseEnd).toBe(11);
-      expect(state.segments.length).toBe(1);
+      expect(state.segments).toEqual([
+        { book: 'Romans', startChapter: 8, startVerse: 1, endChapter: 8, endVerse: 11 },
+      ]);
+      expect(state.selectedBook).toBeNull();
+      expect(state.selectedChapter).toBeNull();
+      expect(state.selectedVerseStart).toBeNull();
+      expect(state.editingIndex).toBeNull();
+      expect(state.step).toBe('book');
     });
 
     test('selecting multi-chapter book advances to start_chapter', () => {
@@ -536,6 +558,255 @@ describe('PassagePicker Selection Logic & State Machine', () => {
       expect(s2.selectedBook).toBe('1 Corinthians');
       expect(s2.selectedVerseStart).toBe(4);
       expect(s2.selectedVerseEnd).toBe(8);
+    });
+
+    test('SELECT_RANGE_VERSE two-tap builds a range in either direction, then starts over', () => {
+      const romans = findCanonicalBook('Romans')!;
+      let state = passagePickerReducer(initialPickerState, {
+        type: 'SELECT_BOOK',
+        payload: { book: romans },
+      });
+      state = passagePickerReducer(state, {
+        type: 'SELECT_START_CHAPTER',
+        payload: { chapter: 8 },
+      });
+
+      state = passagePickerReducer(state, {
+        type: 'SELECT_RANGE_VERSE',
+        payload: { verse: 14 },
+      });
+      expect(state.verseAnchor).toBe(14);
+      expect(state.selectedVerseStart).toBe(14);
+      expect(state.selectedVerseEnd).toBe(14);
+
+      state = passagePickerReducer(state, {
+        type: 'SELECT_RANGE_VERSE',
+        payload: { verse: 10 },
+      });
+      expect(state.verseAnchor).toBeNull();
+      expect(state.selectedVerseStart).toBe(10);
+      expect(state.selectedVerseEnd).toBe(14);
+
+      state = passagePickerReducer(state, {
+        type: 'SELECT_RANGE_VERSE',
+        payload: { verse: 28 },
+      });
+      expect(state.verseAnchor).toBe(28);
+      expect(state.selectedVerseStart).toBe(28);
+      expect(state.selectedVerseEnd).toBe(28);
+    });
+
+    test('SELECT_START_CHAPTER keeps a finished range when a different chapter is opened', () => {
+      const withDraft: typeof initialPickerState = {
+        ...initialPickerState,
+        selectedBook: 'Romans',
+        selectedChapter: 8,
+        selectedChapterEnd: 8,
+        selectedVerseStart: 1,
+        selectedVerseEnd: 11,
+        step: 'end_verse',
+      };
+
+      const state = passagePickerReducer(withDraft, {
+        type: 'SELECT_START_CHAPTER',
+        payload: { chapter: 9 },
+      });
+
+      expect(state.segments).toEqual([
+        { book: 'Romans', startChapter: 8, startVerse: 1, endChapter: 8, endVerse: 11 },
+      ]);
+      expect(state.selectedChapter).toBe(9);
+      expect(state.selectedVerseStart).toBeNull();
+      expect(state.step).toBe('start_verse');
+    });
+
+    test('tapping the open book collapses its chapter grid', () => {
+      const romans = findCanonicalBook('Romans')!;
+      let state = passagePickerReducer(initialPickerState, {
+        type: 'SELECT_BOOK',
+        payload: { book: romans },
+      });
+      expect(state.expandedBook).toBe('Romans');
+      expect(state.step).toBe('start_chapter');
+
+      state = passagePickerReducer(state, {
+        type: 'SELECT_BOOK',
+        payload: { book: romans },
+      });
+      expect(state.expandedBook).toBeNull();
+      expect(state.step).toBe('book');
+      expect(state.selectedBook).toBe('Romans');
+    });
+
+    test('SELECT_BOOK and chapter selection keep a typed search filter', () => {
+      const hebrews = findCanonicalBook('Hebrews')!;
+      let state = passagePickerReducer(initialPickerState, {
+        type: 'SET_SEARCH_QUERY',
+        payload: { query: 'hebrews' },
+      });
+      expect(state.searchQuery).toBe('hebrews');
+
+      state = passagePickerReducer(state, {
+        type: 'SELECT_BOOK',
+        payload: { book: hebrews },
+      });
+      expect(state.searchQuery).toBe('hebrews');
+      expect(state.selectedBook).toBe('Hebrews');
+      expect(state.expandedBook).toBe('Hebrews');
+      expect(state.step).toBe('start_chapter');
+
+      state = passagePickerReducer(state, {
+        type: 'SELECT_START_CHAPTER',
+        payload: { chapter: 1 },
+      });
+      expect(state.searchQuery).toBe('hebrews');
+      expect(state.selectedChapter).toBe(1);
+      expect(state.step).toBe('start_verse');
+
+      state = passagePickerReducer(state, {
+        type: 'SET_SEARCH_QUERY',
+        payload: { query: '' },
+      });
+      expect(state.searchQuery).toBe('');
+
+      state = passagePickerReducer(
+        {
+          ...state,
+          searchQuery: 'hebrews',
+          selectedBook: 'Hebrews',
+          selectedChapter: 1,
+          selectedChapterEnd: 1,
+          selectedVerseStart: 1,
+          selectedVerseEnd: 1,
+        },
+        {
+          type: 'ADD_SEGMENT',
+          payload: {
+            segment: {
+              book: 'Hebrews',
+              startChapter: 1,
+              startVerse: 1,
+              endChapter: 1,
+              endVerse: 1,
+            },
+          },
+        }
+      );
+      expect(state.searchQuery).toBe('');
+      expect(state.segments).toHaveLength(1);
+    });
+
+    test('SELECT_BOOK keeps a finished draft when a different book is opened', () => {
+      const john = findCanonicalBook('John')!;
+      const withDraft: typeof initialPickerState = {
+        ...initialPickerState,
+        selectedBook: 'Romans',
+        selectedChapter: 8,
+        selectedChapterEnd: 8,
+        selectedVerseStart: 1,
+        selectedVerseEnd: 11,
+        step: 'end_verse',
+      };
+
+      const state = passagePickerReducer(withDraft, {
+        type: 'SELECT_BOOK',
+        payload: { book: john },
+      });
+
+      expect(state.segments).toEqual([
+        { book: 'Romans', startChapter: 8, startVerse: 1, endChapter: 8, endVerse: 11 },
+      ]);
+      expect(state.selectedBook).toBe('John');
+      expect(state.selectedVerseStart).toBeNull();
+      expect(state.step).toBe('start_chapter');
+    });
+
+    test('MOVE_SEGMENT reorders passages and follows an in-progress edit', () => {
+      let state: typeof initialPickerState = {
+        ...initialPickerState,
+        segments: [
+          { book: 'Romans', startChapter: 8, startVerse: 1, endChapter: 8, endVerse: 11 },
+          { book: 'John', startChapter: 3, startVerse: 16, endChapter: 3, endVerse: 16 },
+        ],
+        editingIndex: 1,
+      };
+
+      state = passagePickerReducer(state, {
+        type: 'MOVE_SEGMENT',
+        payload: { index: 1, direction: 'up' },
+      });
+
+      expect(state.segments.map((segment) => segment.book)).toEqual(['John', 'Romans']);
+      expect(state.editingIndex).toBe(0);
+
+      state = passagePickerReducer(state, {
+        type: 'MOVE_SEGMENT',
+        payload: { index: 0, direction: 'up' },
+      });
+      expect(state.segments.map((segment) => segment.book)).toEqual(['John', 'Romans']);
+    });
+
+    test('START_EDIT loads a passage and SAVE_EDIT replaces it', () => {
+      let state: typeof initialPickerState = {
+        ...initialPickerState,
+        segments: [
+          { book: 'Romans', startChapter: 8, startVerse: 1, endChapter: 8, endVerse: 39 },
+        ],
+      };
+
+      state = passagePickerReducer(state, {
+        type: 'START_EDIT',
+        payload: { index: 0 },
+      });
+      expect(state.editingIndex).toBe(0);
+      expect(state.step).toBe('end_verse');
+      expect(state.selectedBook).toBe('Romans');
+      expect(state.selectedVerseStart).toBe(1);
+
+      state = passagePickerReducer(state, {
+        type: 'SELECT_RANGE_VERSE',
+        payload: { verse: 14 },
+      });
+      state = passagePickerReducer(state, {
+        type: 'SELECT_RANGE_VERSE',
+        payload: { verse: 18 },
+      });
+      state = passagePickerReducer(state, { type: 'SAVE_EDIT' });
+
+      expect(state.editingIndex).toBeNull();
+      expect(state.segments).toEqual([
+        { book: 'Romans', startChapter: 8, startVerse: 14, endChapter: 8, endVerse: 18 },
+      ]);
+      expect(state.selectedBook).toBeNull();
+      expect(state.step).toBe('book');
+    });
+
+    test('CANCEL_EDIT drops the draft and leaves committed passages in place', () => {
+      let state: typeof initialPickerState = {
+        ...initialPickerState,
+        segments: [
+          { book: 'John', startChapter: 3, startVerse: 16, endChapter: 3, endVerse: 16 },
+        ],
+      };
+      state = passagePickerReducer(state, {
+        type: 'START_EDIT',
+        payload: { index: 0 },
+      });
+      state = passagePickerReducer(state, {
+        type: 'SELECT_RANGE_VERSE',
+        payload: { verse: 16 },
+      });
+      state = passagePickerReducer(state, {
+        type: 'SELECT_RANGE_VERSE',
+        payload: { verse: 18 },
+      });
+      state = passagePickerReducer(state, { type: 'CANCEL_EDIT' });
+
+      expect(state.segments).toEqual([
+        { book: 'John', startChapter: 3, startVerse: 16, endChapter: 3, endVerse: 16 },
+      ]);
+      expect(state.editingIndex).toBeNull();
+      expect(state.selectedBook).toBeNull();
     });
   });
 });

@@ -1,7 +1,7 @@
 /**
  * Component Integration Test for PassagePicker
- * Validates step progression (Book -> Chapter -> Verse), multi-segment tray management,
- * and final PassageSelection callback.
+ * Validates the YouVersion-style book accordion, two-tap verse ranges,
+ * and adding, reordering, editing, and deleting multiple passages.
  */
 
 import React from 'react';
@@ -16,7 +16,7 @@ describe('PassagePicker Component Flow', () => {
     jest.clearAllMocks();
   });
 
-  test('renders book step view with OT and NT tabs when visible', async () => {
+  test('renders a searchable book list grouped by testament', async () => {
     const { getByText, getByPlaceholderText } = await render(
       <PassagePicker
         visible={true}
@@ -25,9 +25,11 @@ describe('PassagePicker Component Flow', () => {
       />
     );
 
-    expect(getByPlaceholderText(/Type book or passage/)).toBeTruthy();
-    expect(getByText(/Old Testament/)).toBeTruthy();
-    expect(getByText(/New Testament/)).toBeTruthy();
+    expect(getByPlaceholderText(/Search books or type a reference/)).toBeTruthy();
+    expect(getByText('Old Testament')).toBeTruthy();
+    expect(getByText('New Testament')).toBeTruthy();
+    expect(getByText('Genesis')).toBeTruthy();
+    expect(getByText('Romans')).toBeTruthy();
   });
 
   test('filters books when searching in search bar', async () => {
@@ -39,23 +41,18 @@ describe('PassagePicker Component Flow', () => {
       />
     );
 
-    // Switch to NT
-    await act(async () => {
-      fireEvent.press(getByText(/New Testament/));
-    });
-
-    // Search "Rom"
-    const searchInput = getByPlaceholderText(/Type book or passage/);
+    const searchInput = getByPlaceholderText(/Search books or type a reference/);
     await act(async () => {
       fireEvent.changeText(searchInput, 'Romans');
     });
 
     expect(getByText('Romans')).toBeTruthy();
     expect(queryByText('Matthew')).toBeNull();
+    expect(queryByText('Genesis')).toBeNull();
   });
 
-  test('selecting a book transitions picker step to chapter selection', async () => {
-    const { getByText } = await render(
+  test('selecting a book opens its chapters inline', async () => {
+    const { getByText, queryByText } = await render(
       <PassagePicker
         visible={true}
         onClose={mockOnClose}
@@ -63,24 +60,25 @@ describe('PassagePicker Component Flow', () => {
       />
     );
 
-    // Switch to NT
-    await act(async () => {
-      fireEvent.press(getByText(/New Testament/));
-    });
-
-    // Select Romans
     await act(async () => {
       fireEvent.press(getByText('Romans'));
     });
 
-    // Should now show Chapters for Romans (1 to 16)
     await waitFor(() => {
       expect(getByText('1')).toBeTruthy();
       expect(getByText('16')).toBeTruthy();
     });
+
+    await act(async () => {
+      fireEvent.press(getByText('Romans'));
+    });
+
+    await waitFor(() => {
+      expect(queryByText('16')).toBeNull();
+    });
   });
 
-  test('selecting a chapter transitions to verse selection and selecting a verse enables Confirm', async () => {
+  test('selecting a chapter opens verses, and Done commits the range', async () => {
     const { getByText } = await render(
       <PassagePicker
         visible={true}
@@ -89,16 +87,10 @@ describe('PassagePicker Component Flow', () => {
       />
     );
 
-    // NT -> Romans
-    await act(async () => {
-      fireEvent.press(getByText(/New Testament/));
-    });
-
     await act(async () => {
       fireEvent.press(getByText('Romans'));
     });
 
-    // Chapter 8
     await waitFor(() => {
       expect(getByText('8')).toBeTruthy();
     });
@@ -107,33 +99,31 @@ describe('PassagePicker Component Flow', () => {
       fireEvent.press(getByText('8'));
     });
 
-    // Should display verse action header with Entire chapter chip
     await waitFor(() => {
-      expect(getByText(/Entire chapter/)).toBeTruthy();
+      expect(getByText('Entire chapter')).toBeTruthy();
     });
 
-    // Select entire chapter
     await act(async () => {
-      fireEvent.press(getByText(/Entire chapter/));
+      fireEvent.press(getByText('Entire chapter'));
     });
 
-    // Tap Confirm button
-    const confirmButton = getByText('Confirm');
     await act(async () => {
-      fireEvent.press(confirmButton);
+      fireEvent.press(getByText('Done'));
     });
 
     expect(mockOnSelect).toHaveBeenCalledWith(
       expect.objectContaining({
         book: 'Romans',
         startChapter: 8,
+        startVerse: 1,
+        endVerse: 39,
         display: expect.stringContaining('Romans 8'),
       })
     );
     expect(mockOnClose).toHaveBeenCalled();
   });
 
-  test('invokes onClose when cancel or dismiss button is clicked', async () => {
+  test('two taps choose a verse range, including a backward second tap', async () => {
     const { getByText } = await render(
       <PassagePicker
         visible={true}
@@ -142,9 +132,269 @@ describe('PassagePicker Component Flow', () => {
       />
     );
 
-    const cancelButton = getByText('Cancel');
     await act(async () => {
-      fireEvent.press(cancelButton);
+      fireEvent.press(getByText('Romans'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('8'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('14'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('10'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('Done'));
+    });
+
+    expect(mockOnSelect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        book: 'Romans',
+        startChapter: 8,
+        startVerse: 10,
+        endVerse: 14,
+      })
+    );
+  });
+
+  test('adds, reorders, edits, and deletes multiple passages', async () => {
+    const { getByText, getByLabelText, queryByLabelText } = await render(
+      <PassagePicker
+        visible={true}
+        onClose={mockOnClose}
+        onSelect={mockOnSelect}
+      />
+    );
+
+    await act(async () => {
+      fireEvent.press(getByText('Romans'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('8'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('Entire chapter'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('Add passage'));
+    });
+
+    expect(getByText('Romans 8')).toBeTruthy();
+    expect(getByText('1 passage')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByText('John'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('3'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('Entire chapter'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('Add passage'));
+    });
+
+    expect(getByText('2 passages')).toBeTruthy();
+    expect(getByLabelText('Move John 3 up')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Move John 3 up'));
+    });
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Edit Romans 8'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('14'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('18'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('Save passage'));
+    });
+
+    expect(getByText('Romans 8:14–18')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Delete John 3'));
+    });
+
+    expect(queryByLabelText('Delete John 3')).toBeNull();
+    expect(getByText('1 passage')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByText('Done'));
+    });
+
+    expect(mockOnSelect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        book: 'Romans',
+        startChapter: 8,
+        startVerse: 14,
+        endVerse: 18,
+        segments: [
+          expect.objectContaining({
+            book: 'Romans',
+            startChapter: 8,
+            startVerse: 14,
+            endVerse: 18,
+          }),
+        ],
+      })
+    );
+  });
+
+  test('loads existing passages for reorder without duplicating them', async () => {
+    const { getByText, getByLabelText } = await render(
+      <PassagePicker
+        visible={true}
+        onClose={mockOnClose}
+        onSelect={mockOnSelect}
+        initialPassage={{
+          segments: [
+            { book: 'Romans', startChapter: 8, startVerse: 1, endChapter: 8, endVerse: 11 },
+            { book: 'John', startChapter: 3, startVerse: 16, endChapter: 3, endVerse: 16 },
+          ],
+        }}
+      />
+    );
+
+    expect(getByText('Romans 8:1–11')).toBeTruthy();
+    expect(getByText('John 3:16')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Move John 3:16 up'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('Done'));
+    });
+
+    const selection = mockOnSelect.mock.calls[0][0];
+    expect(selection.segments).toEqual([
+      { book: 'John', startChapter: 3, startVerse: 16, endChapter: 3, endVerse: 16 },
+      { book: 'Romans', startChapter: 8, startVerse: 1, endChapter: 8, endVerse: 11 },
+    ]);
+    expect(selection.display).toContain('John 3:16');
+    expect(selection.display).toContain('Romans 8:1');
+  });
+
+  test('searching hebrews then using the book and chapter grids keeps the filter', async () => {
+    const { getByPlaceholderText, getByText, queryByText, getByDisplayValue, getByLabelText } =
+      await render(
+        <PassagePicker
+          visible={true}
+          onClose={mockOnClose}
+          onSelect={mockOnSelect}
+        />
+      );
+
+    const searchInput = getByPlaceholderText(/Search books or type a reference/);
+    await act(async () => {
+      fireEvent.changeText(searchInput, 'hebrews');
+    });
+
+    expect(getByText('Hebrews')).toBeTruthy();
+    expect(queryByText('Genesis')).toBeNull();
+    expect(queryByText('Old Testament')).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(getByText('Hebrews'));
+    });
+
+    expect(getByDisplayValue('hebrews')).toBeTruthy();
+    expect(queryByText('Genesis')).toBeNull();
+    expect(queryByText('Romans')).toBeNull();
+    expect(getByLabelText('Hebrews chapter 1')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Hebrews chapter 1'));
+    });
+
+    expect(getByText('Entire chapter')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByText('Back'));
+    });
+
+    expect(getByDisplayValue('hebrews')).toBeTruthy();
+    expect(queryByText('Genesis')).toBeNull();
+    expect(getByText('Hebrews')).toBeTruthy();
+    expect(getByLabelText('Hebrews chapter 11')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Clear search'));
+    });
+
+    expect(getByText('Genesis')).toBeTruthy();
+    expect(getByText('Hebrews')).toBeTruthy();
+  });
+
+  test('a typed reference can be confirmed without opening the grids', async () => {
+    const { getByPlaceholderText, getByText, getAllByText, getByLabelText } = await render(
+      <PassagePicker
+        visible={true}
+        onClose={mockOnClose}
+        onSelect={mockOnSelect}
+      />
+    );
+
+    await act(async () => {
+      fireEvent.changeText(
+        getByPlaceholderText(/Search books or type a reference/),
+        'John 3:16'
+      );
+    });
+
+    expect(getAllByText('John 3:16').length).toBeGreaterThan(0);
+    expect(getByText('Current selection')).toBeTruthy();
+    expect(getByLabelText('Add John 3:16')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByText('Done'));
+    });
+
+    expect(mockOnSelect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        book: 'John',
+        startChapter: 3,
+        startVerse: 16,
+        endVerse: 16,
+      })
+    );
+  });
+
+  test('a single-chapter book opens verses directly', async () => {
+    const { getByText, queryByText } = await render(
+      <PassagePicker
+        visible={true}
+        onClose={mockOnClose}
+        onSelect={mockOnSelect}
+      />
+    );
+
+    await act(async () => {
+      fireEvent.press(getByText('Jude'));
+    });
+
+    expect(getByText('Entire chapter')).toBeTruthy();
+    expect(queryByText('Another chapter')).toBeNull();
+    expect(getByText('Back')).toBeTruthy();
+  });
+
+  test('invokes onClose when cancel is pressed', async () => {
+    const { getByText } = await render(
+      <PassagePicker
+        visible={true}
+        onClose={mockOnClose}
+        onSelect={mockOnSelect}
+      />
+    );
+
+    await act(async () => {
+      fireEvent.press(getByText('Cancel'));
     });
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);

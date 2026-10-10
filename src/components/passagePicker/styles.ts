@@ -1,5 +1,5 @@
 import { StyleSheet, Platform } from 'react-native';
-import { colors, radii, spacing } from '../../constants/theme';
+import { colors, radii, spacing, typography } from '../../constants/theme';
 
 export const styles = StyleSheet.create({
   modalOverlay: {
@@ -8,7 +8,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    height: '88%',
+    height: '92%',
     backgroundColor: colors.bgSurfaceRaised,
     borderTopLeftRadius: radii.sheet,
     borderTopRightRadius: radii.sheet,
@@ -20,7 +20,8 @@ export const styles = StyleSheet.create({
   },
   handleContainer: {
     alignItems: 'center',
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
   },
   handle: {
     width: 36,
@@ -31,66 +32,37 @@ export const styles = StyleSheet.create({
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     paddingBottom: spacing.sm,
+    gap: spacing.xs,
   },
   navBarButton: {
+    minWidth: 76,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.xs,
-    minWidth: 50,
+    justifyContent: 'center',
+  },
+  navBarButtonWide: {
+    minWidth: 96,
   },
   navBarButtonText: {
     fontSize: 15,
     color: colors.textSecondary,
     fontWeight: '500',
   },
+  navBarButtonTextRight: {
+    textAlign: 'right',
+  },
   navBarTitle: {
+    flex: 1,
+    textAlign: 'center',
     fontSize: 17,
     fontWeight: '600',
     color: colors.textPrimary,
   },
-  navBarResetText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: 'right',
-  },
-  breadcrumbBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    gap: spacing.xs,
-  },
-  breadcrumbChip: {
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: radii.controls,
-    backgroundColor: colors.bgSurface,
-    borderWidth: 1,
-    borderColor: colors.borderHairline,
-  },
-  breadcrumbChipActive: {
-    borderColor: colors.accentKeyIdea,
-    backgroundColor: colors.bgSurfaceRaised,
-  },
-  breadcrumbText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  breadcrumbTextActive: {
-    color: colors.accentKeyIdea,
-    fontWeight: '600',
-  },
-  breadcrumbSeparator: {
-    fontSize: 14,
-    color: colors.textDisabled,
-  },
   divider: {
     height: 1,
     backgroundColor: colors.borderHairline,
-    marginTop: spacing.xs,
   },
   bodyContainer: {
     flex: 1,
@@ -101,35 +73,7 @@ export const styles = StyleSheet.create({
   filterSection: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-  },
-  segmentContainer: {
-    flexDirection: 'row',
-    backgroundColor: colors.bgSurface,
-    borderRadius: radii.controls,
-    padding: 3,
-    borderWidth: 1,
-    borderColor: colors.borderHairline,
-    marginBottom: spacing.sm,
-  },
-  segmentButton: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 6,
-  },
-  segmentButtonActive: {
-    backgroundColor: colors.bgSurfaceRaised,
-    borderColor: colors.accentKeyIdea,
-  },
-  segmentText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: colors.textSecondary,
-  },
-  segmentTextActive: {
-    color: colors.textPrimary,
-    fontWeight: '600',
+    paddingBottom: spacing.sm,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -139,89 +83,122 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderHairline,
     paddingHorizontal: spacing.sm,
-    height: 40,
+    height: 44,
   },
   searchInput: {
     flex: 1,
     height: '100%',
     color: colors.textPrimary,
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 16,
+    lineHeight: 20,
     paddingVertical: 0,
     textAlignVertical: 'center',
     includeFontPadding: false,
   },
   searchClearButton: {
-    padding: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingLeft: spacing.sm,
   },
   searchClearText: {
     color: colors.textSecondary,
-    fontSize: 12,
+    fontSize: 14,
+    fontWeight: '500',
   },
-  gridContainer: {
-    padding: spacing.md,
-    paddingBottom: spacing.xxl,
-  },
-  bookGrid: {
+  suggestionBar: {
+    marginTop: spacing.sm,
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    alignItems: 'center',
     gap: spacing.sm,
-  },
-  bookTile: {
-    width: '31%',
     backgroundColor: colors.bgSurface,
     borderRadius: radii.controls,
     borderWidth: 1,
-    borderColor: colors.borderHairline,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 64,
-  },
-  bookTileSelected: {
     borderColor: colors.accentKeyIdea,
-    backgroundColor: colors.bgSurfaceRaised,
+    paddingLeft: spacing.sm,
+    paddingRight: spacing.xs,
+    paddingVertical: spacing.xs,
   },
-  bookTileTitle: {
-    fontSize: 13,
+  suggestionLabel: {
+    flex: 1,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 16,
+    lineHeight: 22,
+    color: colors.textPrimary,
+  },
+  suggestionAdd: {
+    paddingVertical: 8,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.controls,
+    backgroundColor: colors.accentKeyIdea,
+  },
+  suggestionAddText: {
+    color: colors.bgBase,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  bookListContent: {
+    paddingBottom: spacing.lg,
+  },
+  sectionLabel: {
+    ...typography.label,
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  bookRow: {
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderHairline,
+  },
+  bookRowExpanded: {
+    backgroundColor: colors.bgSurface,
+    borderBottomWidth: 0,
+  },
+  bookRowPressed: {
+    backgroundColor: colors.bgSurface,
+  },
+  bookRowTitle: {
+    flex: 1,
+    fontSize: 16,
     fontWeight: '500',
     color: colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: 2,
   },
-  bookTileTitleSelected: {
+  bookRowTitleExpanded: {
     color: colors.accentKeyIdea,
     fontWeight: '600',
   },
-  bookTileSubtitle: {
-    fontSize: 11,
-    color: colors.textSecondary,
+  disclosure: {
+    marginLeft: spacing.sm,
   },
-  stepHeaderNotice: {
+  chapterWell: {
+    backgroundColor: colors.bgSurface,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderHairline,
   },
-  stepHeaderNoticeText: {
-    fontSize: 13,
-    color: colors.textSecondary,
+  gridContainer: {
+    padding: spacing.md,
+    paddingBottom: spacing.xl,
   },
   chapterGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'flex-start',
   },
   chapterTile: {
-    backgroundColor: colors.bgSurface,
+    backgroundColor: colors.bgSurfaceRaised,
     borderRadius: radii.controls,
     borderWidth: 1,
     borderColor: colors.borderHairline,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 0,
   },
   chapterTileSelected: {
     borderColor: colors.accentKeyIdea,
@@ -243,20 +220,28 @@ export const styles = StyleSheet.create({
   verseActionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  verseHint: {
+    ...typography.label,
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
   },
   wholeChapterChip: {
     backgroundColor: colors.bgSurface,
     borderRadius: radii.controls,
     borderWidth: 1,
     borderColor: colors.borderHairline,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   wholeChapterChipText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.accentKeyIdea,
     fontWeight: '500',
   },
@@ -264,7 +249,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'flex-start',
   },
   verseTile: {
@@ -274,12 +259,10 @@ export const styles = StyleSheet.create({
     borderColor: colors.borderHairline,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 0,
   },
   verseTileInRange: {
     backgroundColor: 'rgba(227, 165, 61, 0.15)',
     borderColor: colors.accentKeyIdea,
-    borderWidth: 1,
   },
   verseTileEndpoint: {
     backgroundColor: colors.accentKeyIdea,
@@ -298,16 +281,19 @@ export const styles = StyleSheet.create({
   verseTileTextInRange: {
     color: colors.accentKeyIdea,
     fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 18,
-    includeFontPadding: false,
   },
   verseTileTextEndpoint: {
     color: colors.bgBase,
     fontWeight: '700',
-    textAlign: 'center',
-    lineHeight: 18,
-    includeFontPadding: false,
+  },
+  emptyFilter: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
+  },
+  emptyFilterText: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: colors.textSecondary,
   },
   footerContainer: {
     backgroundColor: colors.bgSurface,
@@ -316,98 +302,120 @@ export const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: Platform.OS === 'ios' ? spacing.lg : spacing.md,
+    gap: spacing.sm,
   },
-  summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  summaryTextColumn: {
-    flex: 1,
-    marginRight: spacing.md,
-  },
-  summaryLabel: {
-    fontSize: 11,
+  hintText: {
+    ...typography.label,
     color: colors.textSecondary,
-    marginBottom: 2,
   },
-  summaryReference: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textPrimary,
+  passagesHeading: {
+    ...typography.label,
+    color: colors.textSecondary,
   },
-  stagedSegmentsContainer: {
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderColor: colors.borderHairline,
-    marginBottom: spacing.xs,
+  passageList: {
+    maxHeight: 176,
   },
-  stagedSegmentsList: {
-    gap: spacing.xs,
-    alignItems: 'center',
+  passageListContent: {
+    gap: spacing.sm,
+    paddingBottom: spacing.xs,
   },
-  stagedSegmentChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  passageRow: {
     backgroundColor: colors.bgSurfaceRaised,
-    borderRadius: radii.controls,
+    borderRadius: radii.content,
     borderWidth: 1,
     borderColor: colors.borderHairline,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    gap: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
   },
-  stagedSegmentText: {
-    fontSize: 12,
-    color: colors.textPrimary,
-    fontWeight: '500',
-  },
-  removeSegmentButton: {
-    padding: 2,
-  },
-  removeSegmentIcon: {
-    fontSize: 11,
-    color: colors.textDisabled,
-    fontWeight: '700',
-  },
-  chapterTileInRange: {
-    backgroundColor: 'rgba(227, 165, 61, 0.15)',
+  passageRowEditing: {
     borderColor: colors.accentKeyIdea,
   },
-  chapterTileTextInRange: {
+  passageReference: {
+    fontFamily: typography.body.fontFamily,
+    fontSize: 16,
+    lineHeight: 22,
+    color: colors.textPrimary,
+  },
+  editingCaption: {
+    ...typography.caption,
     color: colors.accentKeyIdea,
+  },
+  passageActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  textAction: {
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.controls,
+    backgroundColor: colors.bgSurface,
+    borderWidth: 1,
+    borderColor: colors.borderHairline,
+  },
+  textActionDisabled: {
+    opacity: 0.4,
+  },
+  textActionLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textPrimary,
+  },
+  textActionDanger: {
+    color: colors.accentDanger,
+  },
+  draftBlock: {
+    gap: 2,
+  },
+  summaryLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  draftReference: {
+    fontFamily: typography.body.fontFamily,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '600',
+    color: colors.textPrimary,
   },
   actionButtonGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   addSegmentButton: {
+    flex: 1,
     backgroundColor: colors.bgSurfaceRaised,
     borderWidth: 1,
     borderColor: colors.borderHairline,
     borderRadius: radii.controls,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   addSegmentButtonText: {
     color: colors.accentKeyIdea,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
   },
   confirmButton: {
+    flex: 1,
     backgroundColor: colors.accentKeyIdea,
     borderRadius: radii.controls,
-    paddingVertical: 10,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    paddingHorizontal: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   confirmButtonText: {
     color: colors.bgBase,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.4,
   },
 });
