@@ -15,6 +15,7 @@ import { Note } from '../../src/types/note';
 
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
+const mockPush = jest.fn();
 const mockCanGoBack = jest.fn(() => true);
 
 let lastNavOptions: any = {};
@@ -27,7 +28,7 @@ jest.mock('expo-router', () => ({
     back: mockBack,
     replace: mockReplace,
     canGoBack: mockCanGoBack,
-    push: jest.fn(),
+    push: mockPush,
   }),
   useNavigation: () => ({
     setOptions: mockNavigationSetOptions,
@@ -157,6 +158,20 @@ describe('NoteEditScreen (app/note/edit.tsx)', () => {
       expect(getAllByText('Romans 8:28-30').length).toBeGreaterThan(0);
       expect(getByDisplayValue('God works for good')).toBeTruthy();
     });
+  });
+
+  test('opens the Bible versions guide from the translation selector', async () => {
+    mockLocalSearchParams = { id: 'existing_note_123' };
+    (notesService.getNote as jest.Mock).mockResolvedValueOnce(mockExistingNote);
+
+    const { findByLabelText } = await render(<NoteEditScreen />);
+
+    const guideButton = await findByLabelText('About Bible versions');
+    await act(async () => {
+      fireEvent.press(guideButton);
+    });
+
+    expect(mockPush).toHaveBeenCalledWith('/bible-versions');
   });
 
   test('shows alert prompt when leaving with unsaved dirty changes', async () => {

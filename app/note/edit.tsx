@@ -823,6 +823,7 @@ export default function NoteEditScreen() {
               initiallyCollapsed={false}
               fontSize={readerFontSize}
               onFontSizeChange={setReaderFontSize}
+              onOpenVersionGuide={() => router.push('/bible-versions')}
               linkedVerseMap={linkedVerseMap}
               sectionOptions={sectionOptions}
               onAttachToSection={handleAttachToSection}

@@ -10,6 +10,7 @@ import {
   Dialog,
   Switch,
 } from 'react-native-paper';
+import { useRouter } from 'expo-router';
 import { colors, spacing, radius, typography } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/AuthContext';
 import { updateUserProfile } from '../../src/services/authService';
@@ -27,6 +28,7 @@ import type { NoteVisibility, BibleTranslation } from '../../src/types/user';
 
 export default function SettingsScreen() {
   const { user, profile, signOut } = useAuth();
+  const router = useRouter();
 
   // Preferences state
   const [defaultVisibility, setDefaultVisibility] = useState<NoteVisibility>('friends');
@@ -345,6 +347,15 @@ export default function SettingsScreen() {
             );
           })}
         </View>
+        <Button
+          mode="text"
+          icon="information-outline"
+          textColor={colors.accentKeyIdea}
+          style={styles.aboutVersionsButton}
+          onPress={() => router.push('/bible-versions')}
+        >
+          About these versions
+        </Button>
       </View>
 
       <Text style={styles.sectionHeader}>Bible display</Text>
@@ -676,6 +687,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginVertical: 4,
     marginHorizontal: 8,
+  },
+  aboutVersionsButton: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.sm,
   },
   clearCacheBtn: {
     borderColor: colors.borderHairline,

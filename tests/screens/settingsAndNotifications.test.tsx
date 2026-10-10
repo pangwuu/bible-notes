@@ -151,6 +151,16 @@ describe('Settings Screen & Notifications Screen (app/(tabs)/settings.tsx & app/
       );
     });
 
+    test('navigates to the Bible versions guide from the translation card', async () => {
+      const { getByText } = await renderWithPaper(<SettingsScreen />);
+
+      await act(async () => {
+        fireEvent.press(getByText('About these versions'));
+      });
+
+      expect(mockPush).toHaveBeenCalledWith('/bible-versions');
+    });
+
     test('opens Clear Passage Cache dialog and invokes clearPassageCache', async () => {
       (bibleService.clearPassageCache as jest.Mock).mockResolvedValue(undefined);
 

@@ -117,6 +117,15 @@ function RootNavigationLayout() {
           }}
         />
 
+        <Stack.Screen
+          name="bible-versions"
+          options={{
+            title: 'Bible Versions',
+            headerShown: true,
+            headerBackTitle: 'Back',
+          }}
+        />
+
         {/* Notification Center Modal */}
         <Stack.Screen
           name="notifications"

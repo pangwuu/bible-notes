@@ -151,6 +151,13 @@ describe('BibleService & YouVersion API Unit Tests', () => {
     expect(codes).toContain('CPDV');
   });
 
+  test('every supported translation has a full name and summary', () => {
+    for (const version of SUPPORTED_BIBLE_VERSIONS) {
+      expect(version.fullName.trim().length).toBeGreaterThan(0);
+      expect(version.summary.trim().length).toBeGreaterThan(0);
+    }
+  });
+
   test('fetchPassageText fetches ESV passage from Crossway API and caches it', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
