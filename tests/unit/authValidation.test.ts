@@ -39,11 +39,16 @@ const mockDoc = jest.fn((...args: any[]) => ({ id: args[2], path: `users/${args[
 const mockGetDoc = jest.fn();
 const mockSetDoc = jest.fn();
 const mockUpdateDoc = jest.fn();
+const mockDeleteDoc = jest.fn();
 const mockCollection = jest.fn();
 const mockQuery = jest.fn();
 const mockWhere = jest.fn();
 const mockLimit = jest.fn();
 const mockGetDocs = jest.fn();
+const mockWriteBatch = jest.fn(() => ({
+  delete: jest.fn(),
+  commit: jest.fn().mockResolvedValue(undefined),
+}));
 const mockServerTimestamp = jest.fn(() => 'MOCK_TIMESTAMP');
 
 jest.mock('firebase/firestore', () => ({
@@ -51,11 +56,13 @@ jest.mock('firebase/firestore', () => ({
   getDoc: (...args: any[]) => mockGetDoc(...args),
   setDoc: (...args: any[]) => mockSetDoc(...args),
   updateDoc: (...args: any[]) => mockUpdateDoc(...args),
+  deleteDoc: (...args: any[]) => mockDeleteDoc(...args),
   collection: (...args: any[]) => mockCollection(...args),
   query: (...args: any[]) => mockQuery(...args),
   where: (...args: any[]) => mockWhere(...args),
   limit: (...args: any[]) => mockLimit(...args),
   getDocs: (...args: any[]) => mockGetDocs(...args),
+  writeBatch: () => mockWriteBatch(),
   serverTimestamp: () => mockServerTimestamp(),
 }));
 
@@ -72,7 +79,10 @@ import {
   sendPasswordReset,
   formatAuthError,
   updateUserProfile,
+  updateUsername,
+  deleteAccount,
 } from '../../src/services/authService';
+import { auth as mockAuth } from '../../src/services/firebase';
 
 describe('Authentication Validation Utility Tests', () => {
   describe('validateEmail', () => {
@@ -464,6 +474,68 @@ describe('AuthService Integration Tests (Mocked Firebase)', () => {
           }),
         })
       );
+    });
+  });
+
+  describe('updateUsername', () => {
+    test('rejects invalid username format', async () => {
+      await expect(updateUsername('uid_123', 'AB')).rejects.toThrow(/Username/);
+      expect(mockUpdateDoc).not.toHaveBeenCalled();
+    });
+
+    test('no-ops when username is unchanged', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ username: 'sameuser', display_name: 'Same', email: 'a@b.com' }),
+      });
+
+      await updateUsername('uid_123', 'sameuser');
+      expect(mockUpdateDoc).not.toHaveBeenCalled();
+    });
+
+    test('updates username when available', async () => {
+      mockGetDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ username: 'olduser', display_name: 'Old', email: 'a@b.com' }),
+      });
+      mockGetDocs.mockResolvedValueOnce({ empty: true });
+      mockUpdateDoc.mockResolvedValueOnce(undefined);
+
+      await updateUsername('uid_123', 'newuser');
+
+      expect(mockUpdateDoc).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          username: 'newuser',
+          search_tokens: expect.any(Array),
+        })
+      );
+    });
+  });
+
+  describe('deleteAccount', () => {
+    test('requires signed-in user matching uid', async () => {
+      (mockAuth as any).currentUser = null;
+      await expect(deleteAccount('uid_123')).rejects.toThrow(/signed in/);
+    });
+
+    test('deletes user data and auth account', async () => {
+      (mockAuth as any).currentUser = { uid: 'uid_123' };
+      mockGetDocs
+        .mockResolvedValueOnce({ empty: true, size: 0, docs: [] }) // notes
+        .mockResolvedValueOnce({ empty: true, size: 0, docs: [] }) // notifications
+        .mockResolvedValueOnce({ empty: true, size: 0, docs: [] }); // friendships
+      mockDeleteDoc.mockResolvedValueOnce(undefined);
+      mockDeleteUser.mockResolvedValueOnce(undefined);
+
+      await deleteAccount('uid_123');
+
+      expect(mockDeleteDoc).toHaveBeenCalled();
+      expect(mockDeleteUser).toHaveBeenCalledWith({ uid: 'uid_123' });
+    });
+
+    test('formatAuthError maps requires-recent-login', () => {
+      expect(formatAuthError({ code: 'auth/requires-recent-login' })).toMatch(/sign back in/i);
     });
   });
 });
