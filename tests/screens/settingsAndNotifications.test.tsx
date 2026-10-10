@@ -69,6 +69,13 @@ jest.mock('../../src/services/authService', () => ({
   updateUserProfile: jest.fn(),
 }));
 
+jest.mock('../../src/services/pushNotificationService', () => ({
+  syncPushTokenForUser: jest.fn().mockResolvedValue('ExponentPushToken[test]'),
+  clearPushTokenForUser: jest.fn().mockResolvedValue(undefined),
+  buildPushContent: jest.fn(),
+  resolveNotificationDeepLink: jest.fn(),
+}));
+
 jest.mock('../../src/services/bibleService', () => ({
   clearPassageCache: jest.fn(),
   SUPPORTED_TRANSLATIONS: ['ESV', 'KJV', 'NIV', 'NASB', 'NLT'],
@@ -128,6 +135,18 @@ describe('Settings Screen & Notifications Screen (app/(tabs)/settings.tsx & app/
   });
 
   describe('SettingsScreen', () => {
+    test('toggles push notifications off via clearPushTokenForUser', async () => {
+      const pushService = require('../../src/services/pushNotificationService');
+      const { getByLabelText } = await renderWithPaper(<SettingsScreen />);
+
+      const switchToggle = getByLabelText('Push notifications');
+      await act(async () => {
+        fireEvent(switchToggle, 'valueChange', false);
+      });
+
+      expect(pushService.clearPushTokenForUser).toHaveBeenCalledWith('settings_user_1');
+    });
+
     test('updates preferred Bible translation and calls updateUserProfile', async () => {
       (authService.updateUserProfile as jest.Mock).mockResolvedValue(undefined);
 

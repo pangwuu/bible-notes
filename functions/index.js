@@ -136,3 +136,104 @@ exports.onNoteCreated = onDocumentCreated("notes/{noteId}", async (event) => {
     logger.error("Error processing onNoteCreated overlap notifications:", error);
   }
 });
+
+/**
+ * Builds Expo push title/body from a Firestore notification document.
+ */
+function buildExpoPushContent(notifData) {
+  const name = notifData.related_user_name || "A friend";
+  switch (notifData.type) {
+    case "friend_note_exists":
+      return {
+        title: "Shared passage",
+        body: notifData.passage_summary
+          ? `${name} also noted ${notifData.passage_summary}`
+          : `${name} noted an overlapping passage`,
+      };
+    case "friend_request":
+      return {
+        title: "Friend request",
+        body: `${name} sent you a friend request`,
+      };
+    case "friend_accept":
+      return {
+        title: "Friend request accepted",
+        body: `${name} accepted your friend request`,
+      };
+    default:
+      return {
+        title: "Bible Notes",
+        body: "You have a new notification",
+      };
+  }
+}
+
+/**
+ * When a notification document is created, send an Expo push to the recipient
+ * if they have an expo_push_token and have not disabled push notifications.
+ */
+exports.onNotificationCreated = onDocumentCreated(
+  "notifications/{notificationId}",
+  async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) return;
+
+    const notifData = snapshot.data();
+    const recipientUid = notifData.user_id;
+    if (!recipientUid) return;
+
+    try {
+      const userSnap = await db.collection("users").doc(recipientUid).get();
+      if (!userSnap.exists) return;
+
+      const userData = userSnap.data() || {};
+      const settings = userData.settings || {};
+      if (settings.push_notifications_enabled === false) {
+        return;
+      }
+
+      const token = userData.expo_push_token || settings.expo_push_token;
+      if (!token || typeof token !== "string" || !token.startsWith("ExponentPushToken")) {
+        return;
+      }
+
+      const { title, body } = buildExpoPushContent(notifData);
+      const response = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Accept-Encoding": "gzip, deflate",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to: token,
+          sound: "default",
+          title,
+          body,
+          data: {
+            notificationId: event.params.notificationId,
+            type: notifData.type || "",
+            related_note_id: notifData.related_note_id || "",
+            related_user_id: notifData.related_user_id || "",
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        logger.warn("Expo push API non-OK response", {
+          status: response.status,
+          body: text.slice(0, 200),
+        });
+        return;
+      }
+
+      logger.info(`Sent Expo push for notification ${event.params.notificationId}`);
+    } catch (error) {
+      logger.error("Error sending Expo push for notification:", error);
+    }
+  }
+);
+
+// Exported for unit tests
+exports._buildExpoPushContent = buildExpoPushContent;

@@ -15,6 +15,7 @@ import {
 } from '@expo-google-fonts/source-serif-pro';
 import { colors, paperTheme, navigationTheme } from '../src/constants/theme';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
+import PushNotificationBootstrap from '../src/components/PushNotificationBootstrap';
 import { getAuthRedirect } from '../src/utils/authRouting';
 
 // Keep splash screen visible while fonts and initial resources load
@@ -165,6 +166,7 @@ export default function RootLayout() {
       <ThemeProvider value={navigationTheme}>
         <PaperProvider theme={paperTheme}>
           <AuthProvider>
+            <PushNotificationBootstrap />
             <RootNavigationLayout />
           </AuthProvider>
         </PaperProvider>
