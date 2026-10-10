@@ -39,6 +39,7 @@ export interface BibleReaderProps {
   sectionOptions?: SectionOption[];
   onFontSizeChange?: (size: number) => void;
   onVerseLayout?: (verseKey: string, y: number) => void;
+  onOpenVersionGuide?: () => void;
 }
 
 export const DEFAULT_SECTION_OPTIONS: SectionOption[] = [

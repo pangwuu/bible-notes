@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius } from '../../constants/theme';
 import { BibleReaderProps, SYSTEM_FONTS, buildScriptureHtml, SectionOption } from './types';
 import { useBibleReader } from './useBibleReader';
@@ -19,6 +20,7 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
     onAttachToSection,
     onJumpToSection,
     onFontSizeChange,
+    onOpenVersionGuide,
   } = props;
 
   const {
@@ -56,12 +58,27 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
 
       {!collapsed && (
         <View style={styles.contentBody}>
-          <TranslationSelector
-            selectedTranslation={selectedTranslation}
-            selectedVersionId={selectedVersionId}
-            onSelectTranslation={setSelectedTranslation}
-            onSelectVersion={setSelectedVersionId}
-          />
+          <View style={styles.translationRow}>
+            <View style={styles.translationSelectorWrapper}>
+              <TranslationSelector
+                selectedTranslation={selectedTranslation}
+                selectedVersionId={selectedVersionId}
+                onSelectTranslation={setSelectedTranslation}
+                onSelectVersion={setSelectedVersionId}
+              />
+            </View>
+            {onOpenVersionGuide && (
+              <Pressable
+                onPress={onOpenVersionGuide}
+                style={styles.versionGuideButton}
+                accessibilityRole="button"
+                accessibilityLabel="About Bible versions"
+                hitSlop={8}
+              >
+                <Ionicons name="information-circle-outline" size={20} color={colors.text.secondary} />
+              </Pressable>
+            )}
+          </View>
 
           {onFontSizeChange && (
             <View style={styles.readerControlsRow}>
@@ -121,6 +138,17 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.border.hairline,
+  },
+  translationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  translationSelectorWrapper: {
+    flex: 1,
+  },
+  versionGuideButton: {
+    padding: spacing.xs,
   },
   readerControlsRow: {
     flexDirection: 'row',
