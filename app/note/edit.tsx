@@ -62,7 +62,13 @@ export default function NoteEditScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, book, chapter, verseStart, verseEnd } = useLocalSearchParams<{
+    id?: string;
+    book?: string;
+    chapter?: string;
+    verseStart?: string;
+    verseEnd?: string;
+  }>();
   const { user, profile } = useAuth();
 
   const [loading, setLoading] = useState<boolean>(!!id);
@@ -346,6 +352,31 @@ export default function NoteEditScreen() {
       }).catch(() => {});
     }
   }, [user?.uid]);
+
+  // Prefill passage when opening editor from Bible browse ("Note this")
+  useEffect(() => {
+    if (id || !book || !chapter) return;
+    const ch = parseInt(String(chapter), 10);
+    if (!Number.isFinite(ch) || ch < 1) return;
+    const startV = Math.max(1, parseInt(String(verseStart || '1'), 10) || 1);
+    const endV = Math.max(startV, parseInt(String(verseEnd || String(startV)), 10) || startV);
+    try {
+      setPassage(
+        createPassageReference([
+          {
+            book: String(book),
+            startChapter: ch,
+            startVerse: startV,
+            endChapter: ch,
+            endVerse: endV,
+          },
+        ])
+      );
+      setIsDirty(true);
+    } catch (err) {
+      console.warn('Failed to prefill passage from browse params:', err);
+    }
+  }, [id, book, chapter, verseStart, verseEnd]);
 
   // Load existing note if editing
   useEffect(() => {

@@ -80,6 +80,21 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
+        name="bible"
+        options={{
+          title: 'Bible',
+          tabBarLabel: 'Bible',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'book' : 'book-outline'}
+              size={size || 22}
+              color={color}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
         name="friends"
         options={{
           href: enableFriends ? '/(tabs)/friends' : null,
