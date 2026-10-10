@@ -17,6 +17,8 @@ interface VerseActionBarProps {
   onShareSelected: () => void;
   onJumpToSection?: (sectionId: string) => void;
   onAttachToSection?: (verses: number[], sectionId: string, context?: { book?: string; chapter?: number }) => void;
+  onOpenCrossReferences?: () => void;
+  crossReferenceCount?: number;
 }
 
 export const VerseActionBar: React.FC<VerseActionBarProps> = ({
@@ -29,6 +31,8 @@ export const VerseActionBar: React.FC<VerseActionBarProps> = ({
   onShareSelected,
   onJumpToSection,
   onAttachToSection,
+  onOpenCrossReferences,
+  crossReferenceCount = 0,
 }) => {
   if (sortedSelectedVerses.length === 0) return null;
 
@@ -66,6 +70,19 @@ export const VerseActionBar: React.FC<VerseActionBarProps> = ({
           <Ionicons name="share-outline" size={14} color={colors.text.primary} />
           <Text style={styles.actionBtnPillText}>Share</Text>
         </Pressable>
+
+        {onOpenCrossReferences && crossReferenceCount > 0 && (
+          <Pressable
+            onPress={onOpenCrossReferences}
+            style={[styles.actionBtnPill, styles.actionBtnRelated]}
+            accessibilityLabel={`Show ${crossReferenceCount} related passages`}
+          >
+            <Ionicons name="git-network-outline" size={14} color={colors.accent.question} />
+            <Text style={[styles.actionBtnPillText, { color: colors.accent.question }]}>
+              Related{crossReferenceCount > 0 ? ` (${crossReferenceCount})` : ''}
+            </Text>
+          </Pressable>
+        )}
 
         {/* Jump to Note actions - supports multiple linked sections */}
         {linkedSectionsToJump.length > 0 && onJumpToSection && (
@@ -192,6 +209,9 @@ const styles = StyleSheet.create({
   },
   actionBtnJump: {
     borderColor: colors.accent.keyIdea,
+  },
+  actionBtnRelated: {
+    borderColor: colors.accent.question,
   },
   jumpGroupRow: {
     flexDirection: 'row',

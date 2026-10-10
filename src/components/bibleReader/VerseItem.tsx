@@ -14,6 +14,8 @@ interface VerseItemProps {
   onToggle: (verseNumber: number) => void;
   onLayout?: (e: any) => void;
   renderHeading?: boolean;
+  hasCrossReferences?: boolean;
+  onOpenCrossReferences?: (verseNumber: number) => void;
 }
 
 const VerseItemComponent: React.FC<VerseItemProps> = ({
@@ -26,6 +28,8 @@ const VerseItemComponent: React.FC<VerseItemProps> = ({
   onToggle,
   onLayout,
   renderHeading = true,
+  hasCrossReferences = false,
+  onOpenCrossReferences,
 }) => {
   return (
     <Text
@@ -60,6 +64,16 @@ const VerseItemComponent: React.FC<VerseItemProps> = ({
           {linkedSection ? '*' : ''}{' '}
         </Text>
       )}
+      {hasCrossReferences && onOpenCrossReferences ? (
+        <Text
+          onPress={() => onOpenCrossReferences(verse.verseNumber)}
+          style={styles.crossRefMarker}
+          accessibilityRole="link"
+          accessibilityLabel={`Cross references for verse ${verse.verseNumber}`}
+        >
+          ‡{' '}
+        </Text>
+      ) : null}
       <Text
         style={[
           styles.verseContentText,
@@ -96,6 +110,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: colors.accent.keyIdea,
+  },
+  crossRefMarker: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.accent.question,
   },
   verseContentText: {
     fontFamily: typography.body.fontFamily,
