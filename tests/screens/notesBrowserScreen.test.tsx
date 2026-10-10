@@ -94,7 +94,7 @@ describe('NotesBrowserScreen (app/(tabs)/notes.tsx)', () => {
 
     await waitFor(() => {
       expect(getByText(/No notes found/i)).toBeTruthy();
-      expect(getByText(/Tap the button below to capture your first Swedish Method note/i)).toBeTruthy();
+      expect(getByText(/Tap the button below to capture your first study note/i)).toBeTruthy();
     });
   });
 
