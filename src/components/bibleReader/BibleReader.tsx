@@ -66,86 +66,89 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
         book: target.book,
         chapter: target.startChapter,
       });
+      closeCrossReferences();
     },
-    [onAttachToSection]
+    [onAttachToSection, closeCrossReferences]
   );
 
   return (
-    <View style={[styles.container, style]}>
-      <BibleReaderHeader
-        passageDisplay={passageDisplay}
-        collapsed={collapsed}
-        onToggleCollapse={() => setCollapsed(!collapsed)}
-      />
+    <>
+      <View style={[styles.container, style]}>
+        <BibleReaderHeader
+          passageDisplay={passageDisplay}
+          collapsed={collapsed}
+          onToggleCollapse={() => setCollapsed(!collapsed)}
+        />
 
-      {!collapsed && (
-        <View style={styles.contentBody}>
-          <View style={styles.translationRow}>
-            <View style={styles.translationSelectorWrapper}>
-              <TranslationSelector
-                selectedTranslation={selectedTranslation}
-                selectedVersionId={selectedVersionId}
-                onSelectTranslation={setSelectedTranslation}
-                onSelectVersion={setSelectedVersionId}
-              />
+        {!collapsed && (
+          <View style={styles.contentBody}>
+            <View style={styles.translationRow}>
+              <View style={styles.translationSelectorWrapper}>
+                <TranslationSelector
+                  selectedTranslation={selectedTranslation}
+                  selectedVersionId={selectedVersionId}
+                  onSelectTranslation={setSelectedTranslation}
+                  onSelectVersion={setSelectedVersionId}
+                />
+              </View>
+              {onOpenVersionGuide && (
+                <Pressable
+                  onPress={onOpenVersionGuide}
+                  style={styles.versionGuideButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="About Bible versions"
+                  hitSlop={8}
+                >
+                  <Ionicons name="information-circle-outline" size={20} color={colors.text.secondary} />
+                </Pressable>
+              )}
             </View>
-            {onOpenVersionGuide && (
-              <Pressable
-                onPress={onOpenVersionGuide}
-                style={styles.versionGuideButton}
-                accessibilityRole="button"
-                accessibilityLabel="About Bible versions"
-                hitSlop={8}
-              >
-                <Ionicons name="information-circle-outline" size={20} color={colors.text.secondary} />
-              </Pressable>
+
+            {onFontSizeChange && (
+              <View style={styles.readerControlsRow}>
+                <FontSizeControls
+                  initialSize={fontSize}
+                  onSizeChange={onFontSizeChange}
+                />
+              </View>
             )}
+
+            <ScriptureView
+              loading={loading}
+              isOfflineEmpty={isOfflineEmpty}
+              passageResult={passageResult}
+              selectedTranslation={selectedTranslation}
+              targetPassage={targetPassage}
+              fontSize={fontSize}
+              showVerseNumbers={showVerseNumbers}
+              selectedVerses={selectedVerses}
+              activeContext={activeContext}
+              targetHighlightedVerse={targetHighlightedVerse}
+              linkedVerseMap={linkedVerseMap}
+              onToggleVerse={handleToggleVerse}
+              onRetry={handleRetry}
+              verseHasCrossReferences={verseHasCrossReferences}
+              onOpenCrossReferences={handleOpenCrossReferencesForVerse}
+              onVerseLayout={props.onVerseLayout}
+              actionSlot={
+                <VerseActionBar
+                  sortedSelectedVerses={sortedSelectedVerses}
+                  linkedSectionsToJump={linkedSectionsToJump}
+                  availableSections={availableSections}
+                  targetPassage={targetPassage}
+                  activeContext={activeContext}
+                  onClearSelection={clearSelectedVerses}
+                  onShareSelected={handleShareSelected}
+                  onJumpToSection={onJumpToSection}
+                  onAttachToSection={onAttachToSection}
+                  onOpenCrossReferences={handleOpenCrossReferencesForSelection}
+                  crossReferenceCount={selectedCrossReferenceCount}
+                />
+              }
+            />
           </View>
-
-          {onFontSizeChange && (
-            <View style={styles.readerControlsRow}>
-              <FontSizeControls
-                initialSize={fontSize}
-                onSizeChange={onFontSizeChange}
-              />
-            </View>
-          )}
-
-          <ScriptureView
-            loading={loading}
-            isOfflineEmpty={isOfflineEmpty}
-            passageResult={passageResult}
-            selectedTranslation={selectedTranslation}
-            targetPassage={targetPassage}
-            fontSize={fontSize}
-            showVerseNumbers={showVerseNumbers}
-            selectedVerses={selectedVerses}
-            activeContext={activeContext}
-            targetHighlightedVerse={targetHighlightedVerse}
-            linkedVerseMap={linkedVerseMap}
-            onToggleVerse={handleToggleVerse}
-            onRetry={handleRetry}
-            verseHasCrossReferences={verseHasCrossReferences}
-            onOpenCrossReferences={handleOpenCrossReferencesForVerse}
-            onVerseLayout={props.onVerseLayout}
-            actionSlot={
-              <VerseActionBar
-                sortedSelectedVerses={sortedSelectedVerses}
-                linkedSectionsToJump={linkedSectionsToJump}
-                availableSections={availableSections}
-                targetPassage={targetPassage}
-                activeContext={activeContext}
-                onClearSelection={clearSelectedVerses}
-                onShareSelected={handleShareSelected}
-                onJumpToSection={onJumpToSection}
-                onAttachToSection={onAttachToSection}
-                onOpenCrossReferences={handleOpenCrossReferencesForSelection}
-                crossReferenceCount={selectedCrossReferenceCount}
-              />
-            }
-          />
-        </View>
-      )}
+        )}
+      </View>
 
       <CrossReferencesSheet
         visible={crossRefSheetVisible}
@@ -157,7 +160,7 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
         availableSections={onAttachToSection ? availableSections : []}
         onAttachReference={onAttachToSection ? handleAttachCrossReference : undefined}
       />
-    </View>
+    </>
   );
 };
 
