@@ -4,6 +4,7 @@ import {
   BOOK_STARTING_ORDINALS,
   CanonicalBook,
 } from '../../constants/bibleData';
+import { spacing } from '../../constants/theme';
 import { referenceToOrdinals } from '../../utils/bibleOrdinals';
 import { PassageSegment } from '../../types/note';
 import { buildSegment, splitSegmentByChapters } from '../../utils/passageParser';
@@ -162,6 +163,23 @@ export function draftFromSelection(selection: {
     selection.selectedChapterEnd ?? selection.selectedChapter,
     selection.selectedVerseEnd ?? selection.selectedVerseStart
   );
+}
+
+/** Phone-sized chapter and verse squares. Wide layouts add columns instead of growing tiles. */
+export const SQUARE_TILE_MIN = 48;
+export const SQUARE_TILE_MAX = 64;
+
+/**
+ * Size of a chapter or verse square for the current window.
+ * Tiles stay between 48px and 64px. Extra width becomes more columns,
+ * using the same horizontal inset and gap as the chapter and verse grids.
+ */
+export function computeSquareTileSize(windowWidth: number): number {
+  const gap = spacing.sm;
+  const contentWidth = windowWidth - spacing.md * 2;
+  const columns = Math.max(1, Math.floor((contentWidth + gap) / (SQUARE_TILE_MAX + gap)));
+  const tile = Math.floor((contentWidth - gap * (columns - 1)) / columns);
+  return Math.min(SQUARE_TILE_MAX, Math.max(SQUARE_TILE_MIN, tile));
 }
 
 export function bookMatchesQuery(book: CanonicalBook, query: string): boolean {

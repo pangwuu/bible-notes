@@ -7,7 +7,6 @@ import {
   TouchableWithoutFeedback,
   useWindowDimensions,
 } from 'react-native';
-import { spacing } from '../../constants/theme';
 import { CANONICAL_BOOKS, findCanonicalBook, CanonicalBook } from '../../constants/bibleData';
 import {
   formatSegmentDisplay,
@@ -28,6 +27,7 @@ import {
   bookMatchesQuery,
   draftFromSelection,
   assemblePassageSegments,
+  computeSquareTileSize,
 } from './passagePickerUtils';
 import { styles } from './styles';
 import { BookAccordionView } from './BookAccordionView';
@@ -59,10 +59,10 @@ export default function PassagePicker({
   }, [onClose, onDismiss]);
 
   const { width: windowWidth } = useWindowDimensions();
-  const squareTileSize = useMemo(() => {
-    const availableWidth = windowWidth - spacing.md * 2 - spacing.sm * 4;
-    return Math.max(48, Math.floor(availableWidth / 5));
-  }, [windowWidth]);
+  const squareTileSize = useMemo(
+    () => computeSquareTileSize(windowWidth),
+    [windowWidth]
+  );
 
   useEffect(() => {
     if (visible) {

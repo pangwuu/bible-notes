@@ -7,10 +7,29 @@ import {
   formatPassageReference,
   computeCanonicalOrdinals,
   getChapterVerseCount,
+  computeSquareTileSize,
   passagePickerReducer,
   initialPickerState,
   findCanonicalBook,
 } from '../../src/components/PassagePicker';
+
+describe('computeSquareTileSize', () => {
+  test('keeps phone tiles in the 48–64px range and does not grow them on a wide window', () => {
+    const phone = computeSquareTileSize(390);
+    const smallPhone = computeSquareTileSize(320);
+    const desktop = computeSquareTileSize(1280);
+
+    expect(phone).toBeGreaterThanOrEqual(48);
+    expect(phone).toBeLessThanOrEqual(64);
+    expect(smallPhone).toBeGreaterThanOrEqual(48);
+    expect(smallPhone).toBeLessThanOrEqual(64);
+    expect(desktop).toBeLessThanOrEqual(64);
+    expect(desktop).toBe(64);
+
+    const stretchedFiveColumn = Math.floor((1280 - 16 * 2 - 8 * 4) / 5);
+    expect(desktop).toBeLessThan(stretchedFiveColumn);
+  });
+});
 
 describe('PassagePicker Selection Logic & State Machine', () => {
   describe('validateVerseRange', () => {
@@ -617,6 +636,64 @@ describe('PassagePicker Selection Logic & State Machine', () => {
       expect(state.expandedBook).toBeNull();
       expect(state.step).toBe('book');
       expect(state.selectedBook).toBe('Romans');
+    });
+
+    test('SELECT_BOOK and chapter selection keep a typed search filter', () => {
+      const hebrews = findCanonicalBook('Hebrews')!;
+      let state = passagePickerReducer(initialPickerState, {
+        type: 'SET_SEARCH_QUERY',
+        payload: { query: 'hebrews' },
+      });
+      expect(state.searchQuery).toBe('hebrews');
+
+      state = passagePickerReducer(state, {
+        type: 'SELECT_BOOK',
+        payload: { book: hebrews },
+      });
+      expect(state.searchQuery).toBe('hebrews');
+      expect(state.selectedBook).toBe('Hebrews');
+      expect(state.expandedBook).toBe('Hebrews');
+      expect(state.step).toBe('start_chapter');
+
+      state = passagePickerReducer(state, {
+        type: 'SELECT_START_CHAPTER',
+        payload: { chapter: 1 },
+      });
+      expect(state.searchQuery).toBe('hebrews');
+      expect(state.selectedChapter).toBe(1);
+      expect(state.step).toBe('start_verse');
+
+      state = passagePickerReducer(state, {
+        type: 'SET_SEARCH_QUERY',
+        payload: { query: '' },
+      });
+      expect(state.searchQuery).toBe('');
+
+      state = passagePickerReducer(
+        {
+          ...state,
+          searchQuery: 'hebrews',
+          selectedBook: 'Hebrews',
+          selectedChapter: 1,
+          selectedChapterEnd: 1,
+          selectedVerseStart: 1,
+          selectedVerseEnd: 1,
+        },
+        {
+          type: 'ADD_SEGMENT',
+          payload: {
+            segment: {
+              book: 'Hebrews',
+              startChapter: 1,
+              startVerse: 1,
+              endChapter: 1,
+              endVerse: 1,
+            },
+          },
+        }
+      );
+      expect(state.searchQuery).toBe('');
+      expect(state.segments).toHaveLength(1);
     });
 
     test('SELECT_BOOK keeps a finished draft when a different book is opened', () => {

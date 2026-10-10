@@ -281,6 +281,57 @@ describe('PassagePicker Component Flow', () => {
     expect(selection.display).toContain('Romans 8:1');
   });
 
+  test('searching hebrews then using the book and chapter grids keeps the filter', async () => {
+    const { getByPlaceholderText, getByText, queryByText, getByDisplayValue, getByLabelText } =
+      await render(
+        <PassagePicker
+          visible={true}
+          onClose={mockOnClose}
+          onSelect={mockOnSelect}
+        />
+      );
+
+    const searchInput = getByPlaceholderText(/Search books or type a reference/);
+    await act(async () => {
+      fireEvent.changeText(searchInput, 'hebrews');
+    });
+
+    expect(getByText('Hebrews')).toBeTruthy();
+    expect(queryByText('Genesis')).toBeNull();
+    expect(queryByText('Old Testament')).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(getByText('Hebrews'));
+    });
+
+    expect(getByDisplayValue('hebrews')).toBeTruthy();
+    expect(queryByText('Genesis')).toBeNull();
+    expect(queryByText('Romans')).toBeNull();
+    expect(getByLabelText('Hebrews chapter 1')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Hebrews chapter 1'));
+    });
+
+    expect(getByText('Entire chapter')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByText('Back'));
+    });
+
+    expect(getByDisplayValue('hebrews')).toBeTruthy();
+    expect(queryByText('Genesis')).toBeNull();
+    expect(getByText('Hebrews')).toBeTruthy();
+    expect(getByLabelText('Hebrews chapter 11')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Clear search'));
+    });
+
+    expect(getByText('Genesis')).toBeTruthy();
+    expect(getByText('Hebrews')).toBeTruthy();
+  });
+
   test('a typed reference can be confirmed without opening the grids', async () => {
     const { getByPlaceholderText, getByText, getAllByText, getByLabelText } = await render(
       <PassagePicker

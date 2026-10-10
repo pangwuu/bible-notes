@@ -155,7 +155,9 @@ export function passagePickerReducer(
         selectedVerseEnd: null,
         verseAnchor: null,
         expandedBook: book.name,
-        searchQuery: '',
+        // Keep the typed query so the book list stays filtered while the
+        // user picks a chapter from the results. Clear only via Clear,
+        // a successful add/save (clearedSelection), or a picker reset.
         step: isSingleChapter ? 'start_verse' : 'start_chapter',
       };
     }
