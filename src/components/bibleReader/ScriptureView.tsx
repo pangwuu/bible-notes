@@ -31,8 +31,6 @@ interface ScriptureViewProps {
   onRetry: () => void;
   actionSlot?: React.ReactNode;
   onVerseLayout?: (verseKey: string, y: number) => void;
-  verseHasCrossReferences?: (book: string | undefined, chapter: number | undefined, verse: number) => boolean;
-  onOpenCrossReferences?: (verseNum: number, context?: ActivePassageContext) => void;
 }
 
 export const ScriptureView: React.FC<ScriptureViewProps> = ({
@@ -51,8 +49,6 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
   onRetry,
   actionSlot,
   onVerseLayout,
-  verseHasCrossReferences,
-  onOpenCrossReferences,
 }) => {
   let sectionYMap: Record<number, number> = {};
   try {
@@ -127,10 +123,6 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
     const linked = linkedItem ? ('primary' in linkedItem ? linkedItem.primary : linkedItem) : null;
     const sectionBaseY = typeof secIdx === 'number' ? (sectionYMap[secIdx] || 0) : 0;
 
-    const hasCrossRefs = Boolean(
-      verseHasCrossReferences?.(resolvedBook, resolvedChapter, v.verseNumber)
-    );
-
     return (
       <VerseItem
         key={`${resolvedBook || ''}:${resolvedChapter || ''}:${v.verseNumber}`}
@@ -141,12 +133,6 @@ export const ScriptureView: React.FC<ScriptureViewProps> = ({
         linkedSection={linked}
         showVerseNumbers={showVerseNumbers}
         fontSize={fontSize}
-        hasCrossReferences={hasCrossRefs}
-        onOpenCrossReferences={
-          hasCrossRefs && onOpenCrossReferences
-            ? (num) => onOpenCrossReferences(num, currentContext)
-            : undefined
-        }
         onToggle={(num) => onToggleVerse(num, currentContext)}
         onLayout={(e) => {
           const totalY = sectionBaseY + (e.nativeEvent?.layout?.y || 0);

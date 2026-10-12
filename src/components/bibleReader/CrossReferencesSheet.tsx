@@ -13,11 +13,13 @@ import { TemplateIcon } from '../TemplateIcon';
 import { colors, spacing, radii, typography } from '../../constants/theme';
 import {
   CROSSREF_ATTRIBUTION,
+  CrossRefScope,
   CrossReferenceTarget,
-  buildNearbyVerseRange,
+  buildCrossRefSegment,
   formatCrossRefPassageQuery,
 } from '../../services/crossReferenceService';
-import { fetchPassageText } from '../../services/bibleService';
+import { fetchPassageText, VerseSegment } from '../../services/bibleService';
+import { PassageSegment } from '../../types/note';
 import { SectionOption } from './types';
 
 export interface CrossReferencesSheetProps {
@@ -32,7 +34,15 @@ export interface CrossReferencesSheetProps {
     target: CrossReferenceTarget,
     sectionId: string
   ) => void;
+  onAddPassage?: (segment: PassageSegment) => void;
+  isPassageIncluded?: (segment: PassageSegment) => boolean;
 }
+
+const SCOPE_OPTIONS: { id: CrossRefScope; label: string }[] = [
+  { id: 'exact', label: 'Verse' },
+  { id: 'nearby', label: 'Nearby' },
+  { id: 'chapter', label: 'Chapter' },
+];
 
 function versesForTarget(target: CrossReferenceTarget): number[] {
   if (target.startChapter !== target.endChapter) {
@@ -45,6 +55,16 @@ function versesForTarget(target: CrossReferenceTarget): number[] {
   return list;
 }
 
+function isCoreVerse(target: CrossReferenceTarget, chapter: number, verse: number): boolean {
+  const afterStart =
+    chapter > target.startChapter ||
+    (chapter === target.startChapter && verse >= target.startVerse);
+  const beforeEnd =
+    chapter < target.endChapter ||
+    (chapter === target.endChapter && verse <= target.endVerse);
+  return afterStart && beforeEnd;
+}
+
 export const CrossReferencesSheet: React.FC<CrossReferencesSheetProps> = ({
   visible,
   onClose,
@@ -54,11 +74,14 @@ export const CrossReferencesSheet: React.FC<CrossReferencesSheetProps> = ({
   translationLabel,
   availableSections = [],
   onAttachReference,
+  onAddPassage,
+  isPassageIncluded,
 }) => {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
-  const [showNearby, setShowNearby] = useState(false);
+  const [scope, setScope] = useState<CrossRefScope>('exact');
   const [loadingText, setLoadingText] = useState(false);
-  const [verseText, setVerseText] = useState('');
+  const [verses, setVerses] = useState<VerseSegment[]>([]);
+  const [fallbackText, setFallbackText] = useState('');
   const [attribution, setAttribution] = useState<string | undefined>();
 
   const expanded = useMemo(
@@ -69,25 +92,18 @@ export const CrossReferencesSheet: React.FC<CrossReferencesSheetProps> = ({
   useEffect(() => {
     if (!visible) {
       setExpandedKey(null);
-      setShowNearby(false);
-      setVerseText('');
+      setScope('exact');
+      setVerses([]);
+      setFallbackText('');
       setAttribution(undefined);
     }
   }, [visible]);
 
   const loadText = useCallback(
-    async (target: CrossReferenceTarget, nearby: boolean) => {
+    async (target: CrossReferenceTarget, viewScope: CrossRefScope) => {
       setLoadingText(true);
       try {
-        const range = nearby
-          ? buildNearbyVerseRange(target, 2)
-          : {
-              book: target.book,
-              startChapter: target.startChapter,
-              startVerse: target.startVerse,
-              endChapter: target.endChapter,
-              endVerse: target.endVerse,
-            };
+        const range = buildCrossRefSegment(target, viewScope);
         const query = formatCrossRefPassageQuery(
           range.book,
           range.startChapter,
@@ -96,14 +112,12 @@ export const CrossReferencesSheet: React.FC<CrossReferencesSheetProps> = ({
           range.endVerse
         );
         const result = await fetchPassageText(query, { versionId });
-        setVerseText(
-          (result.verses || [])
-            .map((v) => `${v.verseNumber} ${v.text}`)
-            .join('\n\n') || result.text || ''
-        );
+        setVerses(result.verses || []);
+        setFallbackText(result.text || '');
         setAttribution(result.attribution);
       } catch (err: any) {
-        setVerseText('');
+        setVerses([]);
+        setFallbackText('');
         console.warn('[CrossRefs] Failed to load passage:', err?.message || err);
       } finally {
         setLoadingText(false);
@@ -114,23 +128,63 @@ export const CrossReferencesSheet: React.FC<CrossReferencesSheetProps> = ({
 
   useEffect(() => {
     if (expanded) {
-      loadText(expanded, showNearby);
+      loadText(expanded, scope);
     }
-  }, [expanded, showNearby, loadText]);
+  }, [expanded, scope, loadText]);
 
   const handleSelect = (ref: CrossReferenceTarget) => {
     const key = refKey(ref);
+    setVerses([]);
+    setFallbackText('');
     if (expandedKey === key) {
       setExpandedKey(null);
-      setShowNearby(false);
-      setVerseText('');
+      setScope('exact');
       return;
     }
     setExpandedKey(key);
-    setShowNearby(false);
+    setScope('exact');
   };
 
   const canAttach = Boolean(onAttachReference && availableSections.length > 0);
+
+  const renderPassageText = (target: CrossReferenceTarget) => {
+    if (loadingText) {
+      return (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator size="small" color={colors.accent.keyIdea} />
+          <Text style={styles.emptyText}>Loading Scripture…</Text>
+        </View>
+      );
+    }
+    if (verses.length === 0) {
+      return fallbackText ? (
+        <Text style={styles.verseText}>{fallbackText}</Text>
+      ) : (
+        <Text style={styles.emptyText}>No Scripture text available.</Text>
+      );
+    }
+    // Multi-chapter targets are rare; verse numbers alone can't tell chapters apart,
+    // so only dim context when the view stays inside a single chapter.
+    const singleChapter = target.startChapter === target.endChapter;
+    return (
+      <Text style={styles.verseText}>
+        {verses.map((v) => {
+          const core =
+            scope === 'exact' ||
+            !singleChapter ||
+            isCoreVerse(target, target.startChapter, v.verseNumber);
+          return (
+            <Text key={v.verseNumber} style={core ? null : styles.contextVerse}>
+              <Text style={[styles.verseNum, core ? null : styles.contextVerseNum]}>
+                {v.verseNumber}{' '}
+              </Text>
+              {v.text}{' '}
+            </Text>
+          );
+        })}
+      </Text>
+    );
+  };
 
   return (
     <Modal
@@ -209,41 +263,66 @@ export const CrossReferencesSheet: React.FC<CrossReferencesSheetProps> = ({
 
                     {isOpen && (
                       <View style={styles.expandedBody}>
-                        {loadingText ? (
-                          <View style={styles.loadingRow}>
-                            <ActivityIndicator size="small" color={colors.accent.keyIdea} />
-                            <Text style={styles.emptyText}>Loading Scripture…</Text>
-                          </View>
-                        ) : verseText ? (
-                          <Text style={styles.verseText}>{verseText}</Text>
-                        ) : (
-                          <Text style={styles.emptyText}>No Scripture text available.</Text>
-                        )}
-
-                        <View style={styles.actionRow}>
-                          <Pressable
-                            onPress={() => setShowNearby((prev) => !prev)}
-                            style={[styles.actionPill, showNearby && styles.actionPillActive]}
-                            accessibilityRole="button"
-                            accessibilityLabel={
-                              showNearby ? 'Show only the referenced verses' : 'Read nearby verses'
-                            }
-                          >
-                            <Ionicons
-                              name={showNearby ? 'contract-outline' : 'expand-outline'}
-                              size={14}
-                              color={showNearby ? colors.accent.keyIdea : colors.text.primary}
-                            />
-                            <Text
-                              style={[
-                                styles.actionPillText,
-                                showNearby && { color: colors.accent.keyIdea },
-                              ]}
-                            >
-                              {showNearby ? 'Exact verses' : 'Read nearby'}
-                            </Text>
-                          </Pressable>
+                        <View style={styles.scopeRow} accessibilityRole="tablist">
+                          {SCOPE_OPTIONS.map((opt) => {
+                            const active = scope === opt.id;
+                            return (
+                              <Pressable
+                                key={opt.id}
+                                onPress={() => setScope(opt.id)}
+                                style={[styles.scopeBtn, active && styles.scopeBtnActive]}
+                                accessibilityRole="tab"
+                                accessibilityState={{ selected: active }}
+                                accessibilityLabel={`Show ${opt.label.toLowerCase()}`}
+                              >
+                                <Text style={[styles.scopeBtnText, active && styles.scopeBtnTextActive]}>
+                                  {opt.label}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
                         </View>
+
+                        {renderPassageText(ref)}
+
+                        {onAddPassage && (
+                          <View style={styles.attachWrap}>
+                            <Text style={styles.attachPrompt}>Add to passages</Text>
+                            <View style={styles.sectionPickerRow}>
+                              {SCOPE_OPTIONS.map((opt) => {
+                                const segment = buildCrossRefSegment(ref, opt.id);
+                                const included = Boolean(isPassageIncluded?.(segment));
+                                return (
+                                  <Pressable
+                                    key={opt.id}
+                                    disabled={included}
+                                    onPress={() => onAddPassage(segment)}
+                                    style={[styles.sectionPickBtn, included && styles.addedBtn]}
+                                    accessibilityLabel={
+                                      included
+                                        ? `${opt.label} already in passages`
+                                        : `Add ${opt.label.toLowerCase()} to passages`
+                                    }
+                                  >
+                                    <Ionicons
+                                      name={included ? 'checkmark' : 'add'}
+                                      size={13}
+                                      color={included ? colors.accent.application : colors.text.primary}
+                                    />
+                                    <Text
+                                      style={[
+                                        styles.sectionPickBtnText,
+                                        included && { color: colors.accent.application },
+                                      ]}
+                                    >
+                                      {opt.label}
+                                    </Text>
+                                  </Pressable>
+                                );
+                              })}
+                            </View>
+                          </View>
+                        )}
 
                         {canAttach && (
                           <View style={styles.attachWrap}>
@@ -279,14 +358,12 @@ export const CrossReferencesSheet: React.FC<CrossReferencesSheetProps> = ({
             </ScrollView>
           )}
 
-          {(attribution || CROSSREF_ATTRIBUTION) && (
-            <View style={styles.attributionRow}>
-              {attribution ? (
-                <Text style={styles.attributionText}>{attribution}</Text>
-              ) : null}
-              <Text style={styles.attributionText}>{CROSSREF_ATTRIBUTION}</Text>
-            </View>
-          )}
+          <View style={styles.attributionRow}>
+            {attribution ? (
+              <Text style={styles.attributionText}>{attribution}</Text>
+            ) : null}
+            <Text style={styles.attributionText}>{CROSSREF_ATTRIBUTION}</Text>
+          </View>
         </View>
       </View>
     </Modal>
@@ -311,7 +388,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radii.sheet,
     borderTopWidth: 1,
     borderColor: colors.border.hairline,
-    maxHeight: '82%',
+    maxHeight: '85%',
     minHeight: 200,
     paddingBottom: spacing.lg,
   },
@@ -409,10 +486,35 @@ const styles = StyleSheet.create({
   },
   expandedBody: {
     paddingHorizontal: spacing.sm + 2,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.sm + 2,
     borderTopWidth: 1,
     borderTopColor: colors.border.hairline,
     gap: spacing.sm,
+  },
+  scopeRow: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: colors.border.hairline,
+    borderRadius: radii.controls,
+    overflow: 'hidden',
+  },
+  scopeBtn: {
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 5,
+    backgroundColor: colors.bg.base,
+  },
+  scopeBtnActive: {
+    backgroundColor: colors.bg.surface,
+  },
+  scopeBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  scopeBtnTextActive: {
+    color: colors.accent.keyIdea,
   },
   loadingRow: {
     flexDirection: 'row',
@@ -425,31 +527,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 23,
     color: colors.text.primary,
-    paddingTop: spacing.sm,
   },
-  actionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs + 2,
+  verseNum: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.accent.keyIdea,
   },
-  actionPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.bg.base,
-    borderRadius: radii.controls,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: colors.border.hairline,
+  contextVerse: {
+    color: colors.text.secondary,
   },
-  actionPillActive: {
-    borderColor: colors.accent.keyIdea,
-  },
-  actionPillText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.text.primary,
+  contextVerseNum: {
+    color: colors.text.disabled,
   },
   attachWrap: {
     gap: 6,
@@ -475,6 +563,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderWidth: 1,
     borderColor: colors.border.hairline,
+  },
+  addedBtn: {
+    borderColor: colors.accent.application,
   },
   sectionPickBtnText: {
     fontSize: 11,

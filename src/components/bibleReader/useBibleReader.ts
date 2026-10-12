@@ -13,7 +13,6 @@ import {
 import {
   CrossReferenceTarget,
   getCrossReferencesForVerses,
-  hasCrossReferences,
 } from '../../services/crossReferenceService';
 import safeStorage from '../../utils/safeStorage';
 import { PassageReference } from '../../types/note';
@@ -260,14 +259,6 @@ export function useBibleReader({
     [targetPassage, activeContext]
   );
 
-  const verseHasCrossReferences = useCallback(
-    (book: string | undefined, chapter: number | undefined, verse: number) => {
-      if (!book || !chapter) return false;
-      return hasCrossReferences({ book, chapter, verse });
-    },
-    []
-  );
-
   const openCrossReferencesForVerses = useCallback(
     (verses: number[], context?: ActivePassageContext | null) => {
       const { book, chapter } = resolveContext(context);
@@ -285,13 +276,6 @@ export function useBibleReader({
       setCrossRefSheetVisible(true);
     },
     [resolveContext]
-  );
-
-  const handleOpenCrossReferencesForVerse = useCallback(
-    (verseNum: number, context?: ActivePassageContext) => {
-      openCrossReferencesForVerses([verseNum], context);
-    },
-    [openCrossReferencesForVerses]
   );
 
   const handleOpenCrossReferencesForSelection = useCallback(() => {
@@ -331,8 +315,6 @@ export function useBibleReader({
     clearSelectedVerses,
     handleShareSelected,
     handleRetry,
-    verseHasCrossReferences,
-    handleOpenCrossReferencesForVerse,
     handleOpenCrossReferencesForSelection,
     selectedCrossReferenceCount,
     crossRefSheetVisible,

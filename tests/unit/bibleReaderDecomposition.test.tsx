@@ -126,9 +126,7 @@ describe('BibleReader Decomposed Sub-Components', () => {
       expect(text).toContain('5*');
     });
 
-    it('renders a subtle cross-reference marker and opens refs without selecting', () => {
-      const onToggle = jest.fn();
-      const onOpenCrossReferences = jest.fn();
+    it('does not render a per-verse cross-reference marker', () => {
       const ComponentToTest = (VerseItem as any).type || VerseItem;
       const element = (
         <ComponentToTest
@@ -137,23 +135,13 @@ describe('BibleReader Decomposed Sub-Components', () => {
           isTargetHighlighted={false}
           showVerseNumbers={true}
           fontSize={16}
-          hasCrossReferences={true}
-          onOpenCrossReferences={onOpenCrossReferences}
-          onToggle={onToggle}
+          onToggle={jest.fn()}
         />
       );
 
-      const tree = ComponentToTest(element.props);
-      const text = extractNormalizedText(tree);
-      expect(text).toContain('‡');
-
-      const marker = tree.props.children.find(
-        (child: any) => child?.props?.accessibilityLabel === 'Cross references for verse 16'
-      );
-      expect(marker).toBeTruthy();
-      marker.props.onPress();
-      expect(onOpenCrossReferences).toHaveBeenCalledWith(16);
-      expect(onToggle).not.toHaveBeenCalled();
+      const text = extractNormalizedText(ComponentToTest(element.props));
+      expect(text).not.toContain('‡');
+      expect(text).toContain('16 For God so loved the world');
     });
   });
 

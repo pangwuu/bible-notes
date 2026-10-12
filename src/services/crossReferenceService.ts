@@ -4,6 +4,7 @@
  */
 
 import { CANONICAL_BOOKS, findCanonicalBook } from '../constants/bibleData';
+import { PassageSegment } from '../types/note';
 import {
   CROSSREF_ATTRIBUTION,
   CrossRefTuple,
@@ -161,6 +162,58 @@ export function buildNearbyVerseRange(
     endChapter: target.endChapter,
     endVerse: Math.min(maxVerse, target.endVerse + pad),
   };
+}
+
+export type CrossRefScope = 'exact' | 'nearby' | 'chapter';
+
+export const NEARBY_VERSE_PAD = 2;
+
+/**
+ * Resolves a cross-reference target to a passage segment for the given scope.
+ * `chapter` spans every verse of each chapter the target touches.
+ */
+export function buildCrossRefSegment(
+  target: CrossReferenceTarget,
+  scope: CrossRefScope
+): PassageSegment {
+  if (scope === 'nearby') {
+    return buildNearbyVerseRange(target, NEARBY_VERSE_PAD);
+  }
+  if (scope === 'chapter') {
+    const book = CANONICAL_BOOKS[target.bookIndex];
+    const lastVerse =
+      book?.versesPerChapter?.[target.endChapter - 1] ?? target.endVerse;
+    return {
+      book: target.book,
+      startChapter: target.startChapter,
+      startVerse: 1,
+      endChapter: target.endChapter,
+      endVerse: lastVerse,
+    };
+  }
+  return {
+    book: target.book,
+    startChapter: target.startChapter,
+    startVerse: target.startVerse,
+    endChapter: target.endChapter,
+    endVerse: target.endVerse,
+  };
+}
+
+/**
+ * True when `inner` lies entirely within `outer` (same book).
+ */
+export function segmentContains(outer: PassageSegment, inner: PassageSegment): boolean {
+  const outerBook = findCanonicalBook(outer.book)?.name || outer.book;
+  const innerBook = findCanonicalBook(inner.book)?.name || inner.book;
+  if (outerBook !== innerBook) return false;
+  const startsAfter =
+    inner.startChapter > outer.startChapter ||
+    (inner.startChapter === outer.startChapter && inner.startVerse >= outer.startVerse);
+  const endsBefore =
+    inner.endChapter < outer.endChapter ||
+    (inner.endChapter === outer.endChapter && inner.endVerse <= outer.endVerse);
+  return startsAfter && endsBefore;
 }
 
 /**

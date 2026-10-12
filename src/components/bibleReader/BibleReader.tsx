@@ -10,7 +10,8 @@ import { VerseActionBar } from './VerseActionBar';
 import { ScriptureView } from './ScriptureView';
 import { CrossReferencesSheet, versesForTarget } from './CrossReferencesSheet';
 import FontSizeControls from '../FontSizeControls';
-import { CrossReferenceTarget } from '../../services/crossReferenceService';
+import { CrossReferenceTarget, segmentContains } from '../../services/crossReferenceService';
+import { PassageSegment } from '../../types/note';
 
 export { SYSTEM_FONTS, buildScriptureHtml, SectionOption, BibleReaderProps };
 
@@ -48,8 +49,6 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
     clearSelectedVerses,
     handleShareSelected,
     handleRetry,
-    verseHasCrossReferences,
-    handleOpenCrossReferencesForVerse,
     handleOpenCrossReferencesForSelection,
     selectedCrossReferenceCount,
     crossRefSheetVisible,
@@ -69,6 +68,12 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
       closeCrossReferences();
     },
     [onAttachToSection, closeCrossReferences]
+  );
+
+  const isPassageIncluded = useCallback(
+    (segment: PassageSegment) =>
+      (props.passage?.segments || []).some((existing) => segmentContains(existing, segment)),
+    [props.passage]
   );
 
   return (
@@ -127,8 +132,6 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
               linkedVerseMap={linkedVerseMap}
               onToggleVerse={handleToggleVerse}
               onRetry={handleRetry}
-              verseHasCrossReferences={verseHasCrossReferences}
-              onOpenCrossReferences={handleOpenCrossReferencesForVerse}
               onVerseLayout={props.onVerseLayout}
               actionSlot={
                 <VerseActionBar
@@ -159,6 +162,8 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
         translationLabel={String(selectedTranslation)}
         availableSections={onAttachToSection ? availableSections : []}
         onAttachReference={onAttachToSection ? handleAttachCrossReference : undefined}
+        onAddPassage={props.onAddPassageSegment}
+        isPassageIncluded={isPassageIncluded}
       />
     </>
   );

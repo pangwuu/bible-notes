@@ -31,7 +31,8 @@ import TemplateManagerModal from '../../src/components/TemplateManagerModal';
 import TemplateCreatorModal from '../../src/components/TemplateCreatorModal';
 import PassagePicker, { PassageSelection } from '../../src/components/PassagePicker';
 import BibleReader from '../../src/components/BibleReader';
-import { PassageReference, NoteVisibility, NoteSectionValue, TargetVerseHighlight, formatPassageDisplay } from '../../src/types/note';
+import { PassageReference, PassageSegment, NoteVisibility, NoteSectionValue, TargetVerseHighlight, formatPassageDisplay } from '../../src/types/note';
+import { segmentContains } from '../../src/services/crossReferenceService';
 import { NoteTemplate } from '../../src/types/template';
 import {
   BUILT_IN_TEMPLATES,
@@ -287,6 +288,16 @@ export default function NoteEditScreen() {
     });
     setIsDirty(true);
   }, [passage]);
+
+  const handleAddPassageSegment = useCallback((segment: PassageSegment) => {
+    setPassage((prev) => {
+      const existing = prev?.segments || [];
+      if (existing.some((seg) => segmentContains(seg, segment))) return prev;
+      const kept = existing.filter((seg) => !segmentContains(segment, seg));
+      return createPassageReference([...kept, segment]);
+    });
+    setIsDirty(true);
+  }, []);
 
   const handleRemoveVerseReference = useCallback((sectionIndex: number, referenceIndex: number) => {
     setSections((prev) => {
@@ -827,6 +838,7 @@ export default function NoteEditScreen() {
               linkedVerseMap={linkedVerseMap}
               sectionOptions={sectionOptions}
               onAttachToSection={handleAttachToSection}
+              onAddPassageSegment={handleAddPassageSegment}
               onVerseLayout={(key, y) => {
                 verseLayoutMap.current[key] = y;
               }}

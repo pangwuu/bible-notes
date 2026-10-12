@@ -1,4 +1,7 @@
 import {
+  buildCrossRefSegment,
+  segmentContains,
+  CrossReferenceTarget,
   buildNearbyVerseRange,
   formatCrossRefPassageQuery,
   getCrossReferences,
@@ -58,6 +61,52 @@ describe('crossReferenceService', () => {
     expect(nearby.startVerse).toBe(14);
     expect(nearby.endVerse).toBe(18);
     expect(target).toBeTruthy();
+  });
+
+  describe('buildCrossRefSegment', () => {
+    const romans58: CrossReferenceTarget = {
+      book: 'Romans',
+      bookIndex: 44,
+      startChapter: 5,
+      startVerse: 8,
+      endChapter: 5,
+      endVerse: 8,
+      votes: 1,
+      display: 'Romans 5:8',
+    };
+
+    it('returns the exact verse range', () => {
+      expect(buildCrossRefSegment(romans58, 'exact')).toEqual({
+        book: 'Romans', startChapter: 5, startVerse: 8, endChapter: 5, endVerse: 8,
+      });
+    });
+
+    it('pads nearby verses by two', () => {
+      expect(buildCrossRefSegment(romans58, 'nearby')).toEqual({
+        book: 'Romans', startChapter: 5, startVerse: 6, endChapter: 5, endVerse: 10,
+      });
+    });
+
+    it('covers the whole chapter using canonical verse counts', () => {
+      expect(buildCrossRefSegment(romans58, 'chapter')).toEqual({
+        book: 'Romans', startChapter: 5, startVerse: 1, endChapter: 5, endVerse: 21,
+      });
+    });
+
+    it('clamps nearby padding at chapter boundaries', () => {
+      const first = { ...romans58, startVerse: 1, endVerse: 1, display: 'Romans 5:1' };
+      expect(buildCrossRefSegment(first, 'nearby').startVerse).toBe(1);
+      const last = { ...romans58, startVerse: 21, endVerse: 21, display: 'Romans 5:21' };
+      expect(buildCrossRefSegment(last, 'nearby').endVerse).toBe(21);
+    });
+  });
+
+  it('segmentContains detects ranges within the same book', () => {
+    const chapter = { book: 'Romans', startChapter: 5, startVerse: 1, endChapter: 5, endVerse: 21 };
+    const verse = { book: 'Rom', startChapter: 5, startVerse: 8, endChapter: 5, endVerse: 8 };
+    expect(segmentContains(chapter, verse)).toBe(true);
+    expect(segmentContains(verse, chapter)).toBe(false);
+    expect(segmentContains(chapter, { ...verse, book: 'John' })).toBe(false);
   });
 
   it('formats passage queries for fetchPassageText', () => {

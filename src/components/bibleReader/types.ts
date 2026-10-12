@@ -1,4 +1,4 @@
-import { PassageReference, TargetVerseHighlight } from '../../types/note';
+import { PassageReference, PassageSegment, TargetVerseHighlight } from '../../types/note';
 import { BibleTranslation } from '../../types/user';
 import {
   PassageFetchResult,
@@ -40,6 +40,7 @@ export interface BibleReaderProps {
   onFontSizeChange?: (size: number) => void;
   onVerseLayout?: (verseKey: string, y: number) => void;
   onOpenVersionGuide?: () => void;
+  onAddPassageSegment?: (segment: PassageSegment) => void;
 }
 
 export const DEFAULT_SECTION_OPTIONS: SectionOption[] = [
