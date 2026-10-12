@@ -31,7 +31,7 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "themeColor": "#242019",
+      "themeColor": "#1A1816",
       "backgroundColor": "#1A1816",
       "display": "standalone",
       "orientation": "portrait"

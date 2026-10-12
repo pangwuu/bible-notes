@@ -16,6 +16,7 @@ import {
 import { colors, paperTheme, navigationTheme } from '../src/constants/theme';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { getAuthRedirect } from '../src/utils/authRouting';
+import { applyWebThemeChrome, resolveWebThemeChromeColor } from '../src/utils/webThemeChrome';
 
 // Keep splash screen visible while fonts and initial resources load
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -27,6 +28,8 @@ function RootNavigationLayout() {
   const segments = useSegments();
   const router = useRouter();
   const navigationState = useRootNavigationState();
+  const hasCompletedProfile = Boolean(profile && profile.username);
+  const isLoggedIntoApp = Boolean(user && hasCompletedProfile);
 
   useEffect(() => {
     // Wait until navigation container is fully mounted and auth check is done
@@ -34,12 +37,20 @@ function RootNavigationLayout() {
       return;
     }
 
-    const hasCompletedProfile = Boolean(profile && profile.username);
     const redirectRoute = getAuthRedirect(Boolean(user), segments, loading, hasCompletedProfile);
     if (redirectRoute) {
       router.replace(redirectRoute as any);
     }
-  }, [user, profile, loading, segments, navigationState?.key]);
+  }, [user, profile, loading, segments, navigationState?.key, hasCompletedProfile]);
+
+  useEffect(() => {
+    // Login/auth keeps page base; logged-in app matches header/tab bar surface.
+    if (loading) {
+      applyWebThemeChrome(resolveWebThemeChromeColor(false));
+      return;
+    }
+    applyWebThemeChrome(resolveWebThemeChromeColor(isLoggedIntoApp));
+  }, [loading, isLoggedIntoApp]);
 
   if (loading) {
     return (
