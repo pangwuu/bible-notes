@@ -180,3 +180,31 @@ export function buildNotesExportEntries(
 
   return { folderName, entries, indexContent };
 }
+
+/**
+ * Concatenates every note into one Markdown document (filesystem-free share fallback).
+ */
+export function buildCombinedNotesMarkdown(
+  notes: Array<NoteExportInput & { id?: string }>,
+  options?: { exportedAt?: Date }
+): string {
+  const exportedAt = options?.exportedAt ?? new Date();
+  const parts = [
+    '# Bible Notes export',
+    '',
+    `Exported: ${exportedAt.toISOString()}`,
+    `Notes: ${notes.length}`,
+    '',
+  ];
+
+  notes.forEach((note, index) => {
+    parts.push('---');
+    parts.push('');
+    parts.push(`<!-- note ${index + 1} of ${notes.length}${note.id ? ` id=${note.id}` : ''} -->`);
+    parts.push('');
+    parts.push(formatNoteAsMarkdown(note).trimEnd());
+    parts.push('');
+  });
+
+  return `${parts.join('\n').trim()}\n`;
+}

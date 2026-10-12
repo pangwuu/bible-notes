@@ -183,7 +183,12 @@ export default function SettingsScreen() {
     try {
       const result = await exportAllNotesAsZip(user.uid);
       setExportDialogOpen(false);
-      setExportMessage(`Exported ${result.noteCount} note${result.noteCount === 1 ? '' : 's'} as Markdown zip`);
+      const noun = result.noteCount === 1 ? 'note' : 'notes';
+      setExportMessage(
+        result.format === 'zip'
+          ? `Exported ${result.noteCount} ${noun} as Markdown zip`
+          : `Shared ${result.noteCount} ${noun} as Markdown (zip unavailable on this device)`
+      );
       setTimeout(() => setExportMessage(null), 4000);
     } catch (err: any) {
       setExportError(err?.message || 'Failed to export notes');

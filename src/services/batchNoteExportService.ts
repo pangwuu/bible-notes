@@ -1,19 +1,24 @@
 /**
  * Batch-export all of a user's notes as a Markdown zip archive and open the share sheet.
+ * Falls back to sharing a single combined Markdown document when no writable FS is available.
  */
 
-import { Platform } from 'react-native';
+import { Platform, Share } from 'react-native';
 import JSZip from 'jszip';
-import { File, Paths, type Directory } from 'expo-file-system';
+import { EncodingType, File, Paths, type Directory } from 'expo-file-system';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { getUserNotes } from './notesService';
-import { buildNotesExportEntries } from '../utils/noteExport';
+import {
+  buildCombinedNotesMarkdown,
+  buildNotesExportEntries,
+} from '../utils/noteExport';
 
 export interface BatchExportResult {
   noteCount: number;
-  uri: string;
+  uri?: string;
   filename: string;
+  format: 'zip' | 'markdown';
 }
 
 /**
@@ -75,48 +80,46 @@ export async function createNotesExportZipBase64(
   return { base64, folderName, filename, noteCount };
 }
 
-/**
- * Picks a writable app directory. Prefer cache, then documents.
- */
-export function resolveExportDirectory(): Directory {
-  const cacheUri = Paths.cache?.uri;
-  if (typeof cacheUri === 'string' && cacheUri.length > 0) {
-    return Paths.cache;
+function tryGetDirectory(getter: () => Directory): Directory | null {
+  try {
+    const dir = getter();
+    if (!dir) return null;
+    // Some runtimes expose an empty uri until first write; still attempt the write.
+    return dir;
+  } catch {
+    return null;
   }
-  const docUri = Paths.document?.uri;
-  if (typeof docUri === 'string' && docUri.length > 0) {
-    return Paths.document;
-  }
-  throw new Error('No writable app directory is available on this device.');
 }
 
-/**
- * Writes zip bytes using the modern File API, with a legacy FileSystem fallback.
- */
-export async function writeExportZipFile(
+function writeWithModernApi(
+  dir: Directory,
   filename: string,
   bytes: Uint8Array,
   base64: string
-): Promise<string> {
-  // Modern SDK 57+ File / Paths API (works in Expo Go / native builds)
+): string {
+  const file = new File(dir, filename);
+  file.create({ overwrite: true, intermediates: true });
+
   try {
-    const dir = resolveExportDirectory();
-    const file = new File(dir, filename);
-    file.create({ overwrite: true });
     file.write(bytes);
-    if (file.uri) {
-      return file.uri;
-    }
-  } catch (err) {
-    console.warn('[BatchExport] Modern File API write failed, trying legacy:', err);
+  } catch {
+    // Some native builds accept base64 strings more reliably than Uint8Array.
+    file.write(base64, { encoding: EncodingType.Base64 });
   }
 
-  // Legacy fallback for environments where Paths.* is unavailable
-  const legacyDir = FileSystemLegacy.cacheDirectory || FileSystemLegacy.documentDirectory;
-  if (!legacyDir) {
-    throw new Error('File system storage is unavailable on this device.');
+  if (!file.uri) {
+    throw new Error('Wrote export file but received an empty URI');
   }
-  const uri = `${legacyDir}${filename}`;
+  return file.uri;
+}
+
+async function writeWithLegacyApi(
+  directory: string | null | undefined,
+  filename: string,
+  base64: string
+): Promise<string | null> {
+  if (!directory) return null;
+  const uri = `${directory}${filename}`;
   await FileSystemLegacy.writeAsStringAsync(uri, base64, {
     encoding: FileSystemLegacy.EncodingType.Base64,
   });
@@ -124,7 +127,73 @@ export async function writeExportZipFile(
 }
 
 /**
- * Fetches all notes for the user, writes a zip, and shares it.
+ * Writes zip bytes using several filesystem strategies.
+ * Returns null when no strategy succeeds (caller should use Markdown share fallback).
+ */
+export async function writeExportZipFile(
+  filename: string,
+  bytes: Uint8Array,
+  base64: string
+): Promise<string | null> {
+  const modernDirs = [
+    tryGetDirectory(() => Paths.cache),
+    tryGetDirectory(() => Paths.document),
+  ].filter(Boolean) as Directory[];
+
+  for (const dir of modernDirs) {
+    try {
+      return writeWithModernApi(dir, filename, bytes, base64);
+    } catch (err) {
+      console.warn('[BatchExport] Modern File API write failed:', err);
+    }
+  }
+
+  const legacyDirs = [
+    FileSystemLegacy.cacheDirectory,
+    FileSystemLegacy.documentDirectory,
+  ];
+  for (const dir of legacyDirs) {
+    try {
+      const uri = await writeWithLegacyApi(dir, filename, base64);
+      if (uri) return uri;
+    } catch (err) {
+      console.warn('[BatchExport] Legacy FileSystem write failed:', err);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Shares a single combined Markdown document via the RN Share API (no filesystem).
+ */
+export async function shareCombinedMarkdownExport(
+  notes: Parameters<typeof buildNotesExportEntries>[0],
+  exportedAt: Date = new Date()
+): Promise<BatchExportResult> {
+  const markdown = buildCombinedNotesMarkdown(notes, { exportedAt });
+  const dateStamp = exportedAt.toISOString().slice(0, 10);
+  const filename = `bible-notes-export-${dateStamp}.md`;
+
+  const result = await Share.share({
+    title: 'Bible Notes export',
+    message: markdown,
+  });
+
+  if (result.action === Share.dismissedAction) {
+    // User dismissed — still treat as soft success so UI doesn't show a hard error.
+  }
+
+  return {
+    noteCount: notes.length,
+    filename,
+    format: 'markdown',
+  };
+}
+
+/**
+ * Fetches all notes for the user and exports them.
+ * Prefers a zip file share; falls back to combined Markdown via Share when FS is unavailable.
  */
 export async function exportAllNotesAsZip(userId: string): Promise<BatchExportResult> {
   if (!userId) {
@@ -136,23 +205,29 @@ export async function exportAllNotesAsZip(userId: string): Promise<BatchExportRe
     throw new Error('You have no notes to export yet.');
   }
 
-  const { bytes, base64, filename, noteCount } = await createNotesExportZip(notes);
-  const uri = await writeExportZipFile(filename, bytes, base64);
+  try {
+    const { bytes, base64, filename, noteCount } = await createNotesExportZip(notes);
+    const uri = await writeExportZipFile(filename, bytes, base64);
 
-  if (Platform.OS === 'web') {
-    return { noteCount, uri, filename };
+    if (uri) {
+      if (Platform.OS !== 'web') {
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(uri, {
+            mimeType: 'application/zip',
+            dialogTitle: 'Export Bible Notes',
+            UTI: 'public.zip-archive',
+          });
+        } else {
+          // File written but Sharing unavailable — still return success with uri.
+        }
+      }
+
+      return { noteCount, uri, filename, format: 'zip' };
+    }
+  } catch (err) {
+    console.warn('[BatchExport] Zip export failed, falling back to Markdown share:', err);
   }
 
-  const canShare = await Sharing.isAvailableAsync();
-  if (!canShare) {
-    throw new Error('Sharing is not available on this device.');
-  }
-
-  await Sharing.shareAsync(uri, {
-    mimeType: 'application/zip',
-    dialogTitle: 'Export Bible Notes',
-    UTI: 'public.zip-archive',
-  });
-
-  return { noteCount, uri, filename };
+  return shareCombinedMarkdownExport(notes);
 }

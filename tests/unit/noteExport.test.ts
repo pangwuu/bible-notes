@@ -1,4 +1,5 @@
 import {
+  buildCombinedNotesMarkdown,
   buildNoteExportFilename,
   buildNotesExportEntries,
   formatNoteAsMarkdown,
@@ -131,5 +132,28 @@ describe('noteExport', () => {
     expect(indexContent).toContain('Notes: 2');
     expect(indexContent).toContain('[Love of God]');
     expect(buildNoteExportFilename({ title: 'Test', id: 'x' }, 0)).toMatch(/^001-test-/);
+  });
+
+  test('buildCombinedNotesMarkdown concatenates notes with separators', () => {
+    const md = buildCombinedNotesMarkdown(
+      [
+        {
+          id: 'a',
+          title: 'One',
+          sections: [{ id: 'light', title: 'Key Idea', content: 'A' }],
+        },
+        {
+          id: 'b',
+          title: 'Two',
+          sections: [{ id: 'light', title: 'Key Idea', content: 'B' }],
+        },
+      ],
+      { exportedAt: new Date('2026-10-12T00:00:00.000Z') }
+    );
+
+    expect(md).toContain('Notes: 2');
+    expect(md).toContain('# One');
+    expect(md).toContain('# Two');
+    expect(md).toContain('---');
   });
 });

@@ -171,6 +171,7 @@ describe('Settings Screen & Notifications Screen (app/(tabs)/settings.tsx & app/
         noteCount: 3,
         uri: 'file:///cache/bible-notes-export.zip',
         filename: 'bible-notes-export.zip',
+        format: 'zip',
       });
 
       const { getByLabelText, getByText } = await renderWithPaper(<SettingsScreen />);
