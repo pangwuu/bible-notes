@@ -74,6 +74,10 @@ jest.mock('../../src/services/bibleService', () => ({
   SUPPORTED_TRANSLATIONS: ['ESV', 'KJV', 'NIV', 'NASB', 'NLT'],
 }));
 
+jest.mock('../../src/services/batchNoteExportService', () => ({
+  exportAllNotesAsZip: jest.fn(),
+}));
+
 jest.mock('../../src/services/notificationService', () => ({
   subscribeToNotifications: jest.fn(),
   getNotifications: jest.fn(),
@@ -159,6 +163,35 @@ describe('Settings Screen & Notifications Screen (app/(tabs)/settings.tsx & app/
       });
 
       expect(mockPush).toHaveBeenCalledWith('/bible-versions');
+    });
+
+    test('exports all notes as zip from Settings', async () => {
+      const batchExport = require('../../src/services/batchNoteExportService');
+      (batchExport.exportAllNotesAsZip as jest.Mock).mockResolvedValue({
+        noteCount: 3,
+        uri: 'file:///cache/bible-notes-export.zip',
+        filename: 'bible-notes-export.zip',
+      });
+
+      const { getByLabelText, getByText } = await renderWithPaper(<SettingsScreen />);
+
+      await act(async () => {
+        fireEvent.press(getByLabelText('Export all notes as zip'));
+      });
+
+      await waitFor(() => {
+        expect(getByText(/Create a zip of every note as Markdown/i)).toBeTruthy();
+      });
+
+      await act(async () => {
+        fireEvent.press(getByLabelText('Confirm export all notes'));
+      });
+
+      expect(batchExport.exportAllNotesAsZip).toHaveBeenCalledWith('settings_user_1');
+
+      await waitFor(() => {
+        expect(getByText('Exported 3 notes as Markdown zip')).toBeTruthy();
+      });
     });
 
     test('opens Clear Passage Cache dialog and invokes clearPassageCache', async () => {

@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { colors, spacing, radius, typography } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/AuthContext';
 import { updateUserProfile } from '../../src/services/authService';
+import { exportAllNotesAsZip } from '../../src/services/batchNoteExportService';
 import { clearPassageCache, SUPPORTED_TRANSLATIONS } from '../../src/services/bibleService';
 import {
   SUPPORTED_BIBLE_VERSIONS,
@@ -43,6 +44,12 @@ export default function SettingsScreen() {
   // Clear cache state
   const [clearCacheDialogOpen, setClearCacheDialogOpen] = useState(false);
   const [cacheClearedMessage, setCacheClearedMessage] = useState<string | null>(null);
+
+  // Batch note export
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [isExportingNotes, setIsExportingNotes] = useState(false);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // Logout confirmation dialog state
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
@@ -165,6 +172,23 @@ export default function SettingsScreen() {
       setTimeout(() => setCacheClearedMessage(null), 3000);
     } catch (err) {
       console.warn('Failed to clear passage cache:', err);
+    }
+  };
+
+  const handleExportAllNotes = async () => {
+    if (!user?.uid) return;
+    setIsExportingNotes(true);
+    setExportError(null);
+    setExportMessage(null);
+    try {
+      const result = await exportAllNotesAsZip(user.uid);
+      setExportDialogOpen(false);
+      setExportMessage(`Exported ${result.noteCount} note${result.noteCount === 1 ? '' : 's'} as Markdown zip`);
+      setTimeout(() => setExportMessage(null), 4000);
+    } catch (err: any) {
+      setExportError(err?.message || 'Failed to export notes');
+    } finally {
+      setIsExportingNotes(false);
     }
   };
 
@@ -409,6 +433,32 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.card}>
+        <Text style={styles.cardTitle}>Export all notes</Text>
+        <Text style={styles.cardDescription}>
+          Download every study note as Markdown in a zip archive you can save or share.
+        </Text>
+        <View style={styles.saveKeyRow}>
+          {exportMessage ? (
+            <Text style={styles.keySavedText}>{exportMessage}</Text>
+          ) : (
+            <View />
+          )}
+          <Button
+            mode="outlined"
+            textColor={colors.accentKeyIdea}
+            style={styles.exportNotesBtn}
+            onPress={() => {
+              setExportError(null);
+              setExportDialogOpen(true);
+            }}
+            accessibilityLabel="Export all notes as zip"
+          >
+            Export zip
+          </Button>
+        </View>
+      </View>
+
+      <View style={styles.card}>
         <Text style={styles.cardTitle}>Passage offline cache</Text>
         <Text style={styles.cardDescription}>
           Remove downloaded Scripture passages from local device storage to free up space.
@@ -499,6 +549,44 @@ export default function SettingsScreen() {
               onPress={handleClearCache}
             >
               Clear cache
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Export all notes confirmation */}
+        <Dialog
+          visible={exportDialogOpen}
+          onDismiss={() => {
+            if (!isExportingNotes) setExportDialogOpen(false);
+          }}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Export all notes</Dialog.Title>
+          <Dialog.Content>
+            <Text style={styles.dialogDescription}>
+              Create a zip of every note as Markdown (with an index). You can save or share the
+              archive from the system share sheet.
+            </Text>
+            {exportError ? (
+              <Text style={styles.exportErrorText}>{exportError}</Text>
+            ) : null}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              textColor={colors.textSecondary}
+              onPress={() => setExportDialogOpen(false)}
+              disabled={isExportingNotes}
+            >
+              Cancel
+            </Button>
+            <Button
+              textColor={colors.accentKeyIdea}
+              onPress={handleExportAllNotes}
+              loading={isExportingNotes}
+              disabled={isExportingNotes}
+              accessibilityLabel="Confirm export all notes"
+            >
+              Export
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -695,5 +783,14 @@ const styles = StyleSheet.create({
   clearCacheBtn: {
     borderColor: colors.borderHairline,
     borderRadius: radius.control,
+  },
+  exportNotesBtn: {
+    borderColor: colors.accentKeyIdea,
+    borderRadius: radius.control,
+  },
+  exportErrorText: {
+    color: colors.accentDanger,
+    fontSize: 13,
+    marginTop: spacing.sm,
   },
 });

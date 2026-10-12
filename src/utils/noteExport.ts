@@ -105,3 +105,78 @@ export function getNoteShareTitle(note: NoteExportInput): string {
   if (passage) return passage;
   return 'Bible Note';
 }
+
+/** Sanitize a string for use as a filename segment. */
+export function slugifyFilenamePart(value: string, maxLen = 48): string {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, maxLen)
+    .replace(/-+$/g, '');
+  return slug || 'note';
+}
+
+export interface NoteExportFileEntry {
+  /** Path inside the zip, e.g. notes/001-john-3-16.md */
+  path: string;
+  content: string;
+  noteId: string;
+}
+
+/**
+ * Builds a stable, human-readable markdown filename for a note.
+ */
+export function buildNoteExportFilename(
+  note: NoteExportInput & { id?: string },
+  index: number
+): string {
+  const ordinal = String(index + 1).padStart(3, '0');
+  const label = getNoteShareTitle(note);
+  const slug = slugifyFilenamePart(label);
+  const idSuffix = note.id ? `-${slugifyFilenamePart(note.id, 8)}` : '';
+  return `${ordinal}-${slug}${idSuffix}.md`;
+}
+
+/**
+ * Builds zip file entries for a batch of notes (markdown + index).
+ */
+export function buildNotesExportEntries(
+  notes: Array<NoteExportInput & { id?: string }>,
+  options?: { exportedAt?: Date; folderName?: string }
+): { folderName: string; entries: NoteExportFileEntry[]; indexContent: string } {
+  const exportedAt = options?.exportedAt ?? new Date();
+  const dateStamp = exportedAt.toISOString().slice(0, 10);
+  const folderName = options?.folderName || `bible-notes-export-${dateStamp}`;
+
+  const entries: NoteExportFileEntry[] = notes.map((note, index) => {
+    const filename = buildNoteExportFilename(note, index);
+    return {
+      path: `notes/${filename}`,
+      content: formatNoteAsMarkdown(note),
+      noteId: note.id || String(index),
+    };
+  });
+
+  const indexLines = [
+    '# Bible Notes export',
+    '',
+    `Exported: ${exportedAt.toISOString()}`,
+    `Notes: ${notes.length}`,
+    '',
+    '## Contents',
+    '',
+  ];
+
+  entries.forEach((entry, i) => {
+    const title = getNoteShareTitle(notes[i]);
+    indexLines.push(`${i + 1}. [${title}](${entry.path})`);
+  });
+
+  indexLines.push('');
+  const indexContent = `${indexLines.join('\n')}`;
+
+  return { folderName, entries, indexContent };
+}
