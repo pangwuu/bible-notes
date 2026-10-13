@@ -11,6 +11,7 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import { Alert } from '../../src/utils/alert';
 import { Text } from 'react-native-paper';
@@ -35,6 +36,7 @@ import { useReaderFontSize } from '../../src/hooks/useReaderFontSize';
 import { useVersePreview } from '../../src/hooks/useVersePreview';
 import { TOCSegmentBar } from '../../src/components/note/TOCSegmentBar';
 import { formatMarkdownCrossReferences } from '../../src/utils/crossReferenceParser';
+import { formatNoteAsMarkdown, getNoteShareTitle } from '../../src/utils/noteExport';
 
 export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -236,29 +238,61 @@ export default function NoteDetailScreen() {
     ]);
   };
 
+  const handleShare = useCallback(async () => {
+    if (!note) return;
+    try {
+      const message = formatNoteAsMarkdown(note);
+      await Share.share({
+        message,
+        title: getNoteShareTitle(note),
+      });
+    } catch {
+      Alert.alert('Error', 'Failed to share note.');
+    }
+  }, [note]);
+
   const isAuthor = !!(user?.uid && note?.user_id === user.uid);
 
   useLayoutEffect(() => {
     navigation.setOptions({
       title: note?.title || 'Note',
-      headerRight: isAuthor
+      headerRight: note
         ? () => (
             <View style={styles.headerActions}>
               <Pressable
-                onPress={() => router.push({ pathname: '/note/edit', params: { id: note?.id } })}
+                onPress={handleShare}
                 style={styles.headerButton}
                 hitSlop={8}
+                accessibilityLabel="Share note"
+                testID="note-share-button"
               >
-                <Ionicons name="pencil" size={20} color={colors.accent.keyIdea} />
+                <Ionicons name="share-outline" size={20} color={colors.text.primary} />
               </Pressable>
-              <Pressable onPress={handleDelete} style={styles.headerButton} hitSlop={8}>
-                <Ionicons name="trash-outline" size={20} color={colors.accent.danger} />
-              </Pressable>
+              {isAuthor ? (
+                <>
+                  <Pressable
+                    onPress={() => router.push({ pathname: '/note/edit', params: { id: note?.id } })}
+                    style={styles.headerButton}
+                    hitSlop={8}
+                    accessibilityLabel="Edit note"
+                  >
+                    <Ionicons name="pencil" size={20} color={colors.accent.keyIdea} />
+                  </Pressable>
+                  <Pressable
+                    onPress={handleDelete}
+                    style={styles.headerButton}
+                    hitSlop={8}
+                    accessibilityLabel="Delete note"
+                  >
+                    <Ionicons name="trash-outline" size={20} color={colors.accent.danger} />
+                  </Pressable>
+                </>
+              ) : null}
             </View>
           )
         : undefined,
     });
-  }, [navigation, isAuthor, note, router]);
+  }, [navigation, isAuthor, note, router, handleShare]);
 
   const normalizedSections = useMemo(() => {
     if (!note) return [];

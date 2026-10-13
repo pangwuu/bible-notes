@@ -129,7 +129,7 @@ describe('Area 3: Note Detail Screen 404 & Authorization Bounds', () => {
     });
   });
 
-  test('hides Edit and Delete header actions when current user is not the note author', async () => {
+  test('shows Share but hides Edit and Delete when current user is not the note author', async () => {
     (useAuth as jest.Mock).mockReturnValue({
       user: { uid: 'other_user_456' }, // Note authored by 'author_user_123'
       profile: { settings: { enable_friends: false } },
@@ -163,13 +163,20 @@ describe('Area 3: Note Detail Screen 404 & Authorization Bounds', () => {
     );
 
     await waitFor(() => {
-      expect(mockSetOptions).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: 'Apostolic Fellowship',
-          headerRight: undefined, // Non-author must NOT have headerRight actions
-        })
-      );
+      expect(mockSetOptions).toHaveBeenCalled();
     });
+
+    const lastCall = mockSetOptions.mock.calls[mockSetOptions.mock.calls.length - 1][0];
+    expect(lastCall.title).toBe('Apostolic Fellowship');
+    expect(lastCall.headerRight).toBeDefined();
+
+    const HeaderActions = lastCall.headerRight;
+    const headerScreen = await render(<HeaderActions />);
+
+    expect(headerScreen.getByTestId('note-share-button')).toBeTruthy();
+    expect(headerScreen.getByTestId('ionicon-share-outline')).toBeTruthy();
+    expect(headerScreen.queryByTestId('ionicon-pencil')).toBeNull();
+    expect(headerScreen.queryByTestId('ionicon-trash-outline')).toBeNull();
   });
 
   test('renders Edit and Delete actions when user is the author and triggers delete error Alert if deleteNote rejects', async () => {
