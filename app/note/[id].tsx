@@ -533,9 +533,14 @@ export default function NoteDetailScreen() {
                   <Pressable
                     key={item.note.id}
                     style={styles.overlapBadge}
-                    onPress={() => router.push({ pathname: '/note/[id]', params: { id: item.note.id } })}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/note/compare',
+                        params: { mine: note.id, theirs: item.note.id },
+                      })
+                    }
                     accessibilityRole="button"
-                    accessibilityLabel={`${friendName} also noted ${passageSummary}`}
+                    accessibilityLabel={`Compare with ${friendName}'s note on ${passageSummary}`}
                   >
                     <View style={styles.overlapAvatar}>
                       <Text style={styles.overlapAvatarText}>{initial}</Text>
