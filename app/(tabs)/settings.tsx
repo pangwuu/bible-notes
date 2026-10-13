@@ -9,11 +9,16 @@ import {
   Portal,
   Dialog,
   Switch,
+  HelperText,
 } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { colors, spacing, radius, typography } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/AuthContext';
-import { updateUserProfile } from '../../src/services/authService';
+import {
+  updateUserProfile,
+  updateUsername,
+  deleteAccount,
+} from '../../src/services/authService';
 import { clearPassageCache, SUPPORTED_TRANSLATIONS } from '../../src/services/bibleService';
 import {
   SUPPORTED_BIBLE_VERSIONS,
@@ -24,6 +29,7 @@ import {
 import { BUILT_IN_TEMPLATES } from '../../src/constants/templates';
 import FontSizeControls from '../../src/components/FontSizeControls';
 import safeStorage from '../../src/utils/safeStorage';
+import { validateDisplayName, validateUsername } from '../../src/utils/validation';
 import type { NoteVisibility, BibleTranslation } from '../../src/types/user';
 
 export default function SettingsScreen() {
@@ -40,6 +46,18 @@ export default function SettingsScreen() {
   const [showVerseNumbers, setShowVerseNumbers] = useState<boolean>(true);
   const [defaultFontSize, setDefaultFontSize] = useState<number>(16);
 
+  // Profile edit
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [editDisplayName, setEditDisplayName] = useState('');
+  const [editUsername, setEditUsername] = useState('');
+  const [profileEditError, setProfileEditError] = useState<string | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // ESV API key
+  const [esvApiKey, setEsvApiKey] = useState('');
+  const [esvKeySavedMessage, setEsvKeySavedMessage] = useState<string | null>(null);
+  const [isSavingEsvKey, setIsSavingEsvKey] = useState(false);
+
   // Clear cache state
   const [clearCacheDialogOpen, setClearCacheDialogOpen] = useState(false);
   const [cacheClearedMessage, setCacheClearedMessage] = useState<string | null>(null);
@@ -47,6 +65,11 @@ export default function SettingsScreen() {
   // Logout confirmation dialog state
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Delete account
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Available templates (built-in + custom)
   const availableTemplates = useMemo(() => {
@@ -81,6 +104,9 @@ export default function SettingsScreen() {
         setDefaultFontSize(profile.settings.default_font_size);
         safeStorage.setItem('bible_font_size', String(profile.settings.default_font_size)).catch(() => {});
       }
+      const existingKey =
+        profile.settings?.custom_esv_api_key || profile.custom_esv_api_key || '';
+      setEsvApiKey(existingKey);
     }
   }, [profile]);
 
@@ -235,6 +261,86 @@ export default function SettingsScreen() {
     }
   };
 
+  const openEditProfile = () => {
+    setEditDisplayName(profile?.display_name || profile?.full_name || user?.displayName || '');
+    setEditUsername(profile?.username || '');
+    setProfileEditError(null);
+    setEditProfileOpen(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user?.uid) return;
+
+    const nameVal = validateDisplayName(editDisplayName);
+    if (!nameVal.isValid) {
+      setProfileEditError(nameVal.error || 'Invalid display name');
+      return;
+    }
+    const usernameVal = validateUsername(editUsername);
+    if (!usernameVal.isValid) {
+      setProfileEditError(usernameVal.error || 'Invalid username');
+      return;
+    }
+
+    setIsSavingProfile(true);
+    setProfileEditError(null);
+    try {
+      const trimmedName = editDisplayName.trim();
+      if (trimmedName !== (profile?.display_name || profile?.full_name || '')) {
+        await updateUserProfile(user.uid, {
+          display_name: trimmedName,
+          full_name: trimmedName,
+        });
+      }
+      if (editUsername.trim().toLowerCase() !== (profile?.username || '')) {
+        await updateUsername(user.uid, editUsername);
+      }
+      setEditProfileOpen(false);
+    } catch (err: any) {
+      setProfileEditError(err?.message || 'Failed to update profile');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleSaveEsvKey = async () => {
+    if (!user?.uid) return;
+    setIsSavingEsvKey(true);
+    setEsvKeySavedMessage(null);
+    try {
+      const trimmed = esvApiKey.trim();
+      await updateUserProfile(user.uid, {
+        custom_esv_api_key: trimmed,
+        settings: {
+          ...profile?.settings,
+          custom_esv_api_key: trimmed,
+        },
+      });
+      setEsvKeySavedMessage(trimmed ? 'ESV API key saved' : 'ESV API key cleared');
+      setTimeout(() => setEsvKeySavedMessage(null), 3000);
+    } catch (err) {
+      console.warn('Failed to save ESV API key:', err);
+      setEsvKeySavedMessage('Failed to save key');
+    } finally {
+      setIsSavingEsvKey(false);
+    }
+  };
+
+  const handleConfirmDeleteAccount = async () => {
+    if (!user?.uid) return;
+    setIsDeletingAccount(true);
+    setDeleteError(null);
+    try {
+      await deleteAccount(user.uid);
+      setDeleteDialogOpen(false);
+      // Auth state change redirects to login.
+    } catch (err: any) {
+      setDeleteError(err?.message || 'Failed to delete account');
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
   const displayName = profile?.display_name || profile?.full_name || user?.displayName || 'Bible Reader';
   const username = profile?.username ? `@${profile.username}` : '';
   const initialLetter = displayName.charAt(0).toUpperCase() || 'B';
@@ -250,6 +356,17 @@ export default function SettingsScreen() {
           <Text style={styles.profileName}>{displayName}</Text>
           {username ? <Text style={styles.profileUsername}>{username}</Text> : null}
           <Text style={styles.profileEmail}>{user?.email || profile?.email || ''}</Text>
+          <Button
+            mode="text"
+            compact
+            textColor={colors.accentKeyIdea}
+            style={styles.editProfileButton}
+            labelStyle={styles.editProfileLabel}
+            onPress={openEditProfile}
+            accessibilityLabel="Edit profile"
+          >
+            Edit profile
+          </Button>
         </View>
       </View>
 
@@ -409,6 +526,46 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.card}>
+        <Text style={styles.cardTitle}>Custom ESV API key</Text>
+        <Text style={styles.cardDescription}>
+          Optional Crossway ESV API token. Leave blank to use the app default.
+        </Text>
+        <TextInput
+          mode="outlined"
+          label="ESV API key"
+          value={esvApiKey}
+          onChangeText={setEsvApiKey}
+          autoCapitalize="none"
+          autoCorrect={false}
+          secureTextEntry
+          style={styles.input}
+          outlineColor={colors.borderHairline}
+          activeOutlineColor={colors.accentKeyIdea}
+          textColor={colors.textPrimary}
+          accessibilityLabel="ESV API key"
+        />
+        <View style={styles.saveKeyRow}>
+          {esvKeySavedMessage ? (
+            <Text style={styles.keySavedText}>{esvKeySavedMessage}</Text>
+          ) : (
+            <View />
+          )}
+          <Button
+            mode="contained"
+            buttonColor={colors.accentKeyIdea}
+            textColor={colors.bgBase}
+            style={styles.saveKeyButton}
+            loading={isSavingEsvKey}
+            disabled={isSavingEsvKey}
+            onPress={handleSaveEsvKey}
+            accessibilityLabel="Save ESV API key"
+          >
+            Save key
+          </Button>
+        </View>
+      </View>
+
+      <View style={styles.card}>
         <Text style={styles.cardTitle}>Passage offline cache</Text>
         <Text style={styles.cardDescription}>
           Remove downloaded Scripture passages from local device storage to free up space.
@@ -439,6 +596,19 @@ export default function SettingsScreen() {
         onPress={() => setLogoutDialogOpen(true)}
       >
         Sign out
+      </Button>
+
+      <Button
+        mode="text"
+        textColor={colors.accentDanger}
+        style={styles.deleteAccountButton}
+        onPress={() => {
+          setDeleteError(null);
+          setDeleteDialogOpen(true);
+        }}
+        accessibilityLabel="Delete account"
+      >
+        Delete account
       </Button>
 
       {/* Sign Out Confirmation Dialog */}
@@ -502,6 +672,110 @@ export default function SettingsScreen() {
             </Button>
           </Dialog.Actions>
         </Dialog>
+
+        {/* Edit Profile Dialog */}
+        <Dialog
+          visible={editProfileOpen}
+          onDismiss={() => {
+            if (!isSavingProfile) setEditProfileOpen(false);
+          }}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Edit profile</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              mode="outlined"
+              label="Display name"
+              value={editDisplayName}
+              onChangeText={setEditDisplayName}
+              style={[styles.input, styles.dialogInput]}
+              outlineColor={colors.borderHairline}
+              activeOutlineColor={colors.accentKeyIdea}
+              textColor={colors.textPrimary}
+              accessibilityLabel="Display name"
+            />
+            <TextInput
+              mode="outlined"
+              label="Username"
+              value={editUsername}
+              onChangeText={setEditUsername}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.input}
+              outlineColor={colors.borderHairline}
+              activeOutlineColor={colors.accentKeyIdea}
+              textColor={colors.textPrimary}
+              accessibilityLabel="Username"
+            />
+            {profileEditError ? (
+              <HelperText type="error" visible>
+                {profileEditError}
+              </HelperText>
+            ) : (
+              <HelperText type="info" visible style={styles.helperInfo}>
+                Username: 3–20 lowercase letters, numbers, or underscores.
+              </HelperText>
+            )}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              textColor={colors.textSecondary}
+              onPress={() => setEditProfileOpen(false)}
+              disabled={isSavingProfile}
+            >
+              Cancel
+            </Button>
+            <Button
+              textColor={colors.accentKeyIdea}
+              onPress={handleSaveProfile}
+              loading={isSavingProfile}
+              disabled={isSavingProfile}
+              accessibilityLabel="Save profile"
+            >
+              Save
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Delete Account Confirmation Dialog */}
+        <Dialog
+          visible={deleteDialogOpen}
+          onDismiss={() => {
+            if (!isDeletingAccount) setDeleteDialogOpen(false);
+          }}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Delete account</Dialog.Title>
+          <Dialog.Content>
+            <Text style={styles.dialogDescription}>
+              This permanently deletes your account, notes, friendships, and notifications. This
+              cannot be undone.
+            </Text>
+            {deleteError ? (
+              <HelperText type="error" visible>
+                {deleteError}
+              </HelperText>
+            ) : null}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              textColor={colors.textSecondary}
+              onPress={() => setDeleteDialogOpen(false)}
+              disabled={isDeletingAccount}
+            >
+              Cancel
+            </Button>
+            <Button
+              textColor={colors.accentDanger}
+              onPress={handleConfirmDeleteAccount}
+              loading={isDeletingAccount}
+              disabled={isDeletingAccount}
+              accessibilityLabel="Confirm delete account"
+            >
+              Delete forever
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
     </ScrollView>
   );
@@ -561,6 +835,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  editProfileButton: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.xs,
+    marginLeft: -spacing.sm,
+  },
+  editProfileLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginVertical: 0,
+  },
+  dialogInput: {
+    marginBottom: spacing.sm,
+  },
+  helperInfo: {
+    color: colors.textSecondary,
+  },
+  deleteAccountButton: {
+    marginTop: spacing.sm,
   },
   sectionHeader: {
     fontSize: 14,

@@ -18,11 +18,13 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
   query,
   where,
   limit,
   getDocs,
+  writeBatch,
   serverTimestamp,
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -34,6 +36,30 @@ import {
   normalizeUsername,
 } from '../utils/validation';
 import { UserProfile, UserDocument } from '../types/user';
+
+const FIRESTORE_BATCH_LIMIT = 450;
+
+async function deleteQueryInBatches(
+  collectionName: string,
+  field: string,
+  value: string | string[],
+  op: '==' | 'array-contains' = '=='
+): Promise<void> {
+  // Loop until no matching docs remain (handles > batch size).
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const colRef = collection(db, collectionName);
+    const q = query(colRef, where(field, op, value), limit(FIRESTORE_BATCH_LIMIT));
+    const snap = await getDocs(q);
+    if (snap.empty) break;
+
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+
+    if (snap.size < FIRESTORE_BATCH_LIMIT) break;
+  }
+}
 
 export interface RegisterResponse {
   user: User;
@@ -311,7 +337,7 @@ export async function updateUserProfile(
         if (snap.exists()) {
           const currentData = snap.data() as UserProfile;
           payload.search_tokens = generateSearchTokens(
-            currentData.username || '',
+            updates.username || currentData.username || '',
             updates.display_name,
             currentData.email || ''
           );
@@ -322,6 +348,68 @@ export async function updateUserProfile(
     }
 
     await updateDoc(userDocRef, payload);
+  } catch (error: any) {
+    throw new Error(formatAuthError(error));
+  }
+}
+
+/**
+ * Updates the authenticated user's username after uniqueness checks.
+ */
+export async function updateUsername(uid: string, newUsername: string): Promise<void> {
+  if (!uid) throw new Error('User ID is required');
+
+  const usernameVal = validateUsername(newUsername);
+  if (!usernameVal.isValid) {
+    throw new Error(usernameVal.error || 'Invalid username');
+  }
+
+  const normalized = normalizeUsername(newUsername);
+  const userDocRef = doc(db, 'users', uid);
+  const snap = await getDoc(userDocRef);
+  if (!snap.exists()) {
+    throw new Error('User profile not found');
+  }
+
+  const current = snap.data() as UserProfile;
+  if (current.username === normalized) {
+    return;
+  }
+
+  const available = await checkUsernameAvailable(normalized);
+  if (!available) {
+    throw new Error('That username is already taken');
+  }
+
+  const search_tokens = generateSearchTokens(
+    normalized,
+    current.display_name || current.full_name || '',
+    current.email || ''
+  );
+
+  await updateDoc(userDocRef, {
+    username: normalized,
+    search_tokens,
+    updated_at: serverTimestamp(),
+  });
+}
+
+/**
+ * Permanently deletes the user's Firestore data and Firebase Auth account.
+ * Requires a recent login; surfaces auth/requires-recent-login as a friendly error.
+ */
+export async function deleteAccount(uid: string): Promise<void> {
+  if (!uid) throw new Error('User ID is required');
+  if (!auth.currentUser || auth.currentUser.uid !== uid) {
+    throw new Error('You must be signed in to delete your account.');
+  }
+
+  try {
+    await deleteQueryInBatches('notes', 'user_id', uid, '==');
+    await deleteQueryInBatches('notifications', 'user_id', uid, '==');
+    await deleteQueryInBatches('friendships', 'user_ids', uid, 'array-contains');
+    await deleteDoc(doc(db, 'users', uid));
+    await deleteUser(auth.currentUser);
   } catch (error: any) {
     throw new Error(formatAuthError(error));
   }
@@ -355,6 +443,8 @@ export function formatAuthError(error: any): string {
       return 'Too many attempts. Please wait a moment and try again.';
     case 'auth/network-request-failed':
       return 'Network connection error. Please check your internet connection.';
+    case 'auth/requires-recent-login':
+      return 'Please sign out, sign back in, and try deleting your account again.';
     default:
       return error.message || 'An unexpected error occurred.';
   }

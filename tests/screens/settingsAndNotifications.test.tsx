@@ -67,6 +67,8 @@ jest.mock('../../src/context/AuthContext', () => ({
 
 jest.mock('../../src/services/authService', () => ({
   updateUserProfile: jest.fn(),
+  updateUsername: jest.fn(),
+  deleteAccount: jest.fn(),
 }));
 
 jest.mock('../../src/services/bibleService', () => ({
@@ -214,6 +216,92 @@ describe('Settings Screen & Notifications Screen (app/(tabs)/settings.tsx & app/
         })
       );
       expect(safeStorage.setItem).not.toHaveBeenCalledWith('enable_friends', expect.anything());
+    });
+
+    test('saves custom ESV API key via updateUserProfile', async () => {
+      (authService.updateUserProfile as jest.Mock).mockResolvedValue(undefined);
+
+      const { getByLabelText, getByText } = await renderWithPaper(<SettingsScreen />);
+
+      const keyInput = getByLabelText('ESV API key');
+      await act(async () => {
+        fireEvent.changeText(keyInput, 'my-custom-esv-key');
+      });
+
+      await act(async () => {
+        fireEvent.press(getByLabelText('Save ESV API key'));
+      });
+
+      expect(authService.updateUserProfile).toHaveBeenCalledWith(
+        'settings_user_1',
+        expect.objectContaining({
+          custom_esv_api_key: 'my-custom-esv-key',
+          settings: expect.objectContaining({
+            custom_esv_api_key: 'my-custom-esv-key',
+          }),
+        })
+      );
+
+      await waitFor(() => {
+        expect(getByText('ESV API key saved')).toBeTruthy();
+      });
+    });
+
+    test('saves edited display name and username from Edit profile dialog', async () => {
+      (authService.updateUserProfile as jest.Mock).mockResolvedValue(undefined);
+      (authService.updateUsername as jest.Mock).mockResolvedValue(undefined);
+
+      const { getByLabelText, getByText } = await renderWithPaper(<SettingsScreen />);
+
+      await act(async () => {
+        fireEvent.press(getByLabelText('Edit profile'));
+      });
+
+      await waitFor(() => {
+        expect(getByLabelText('Display name')).toBeTruthy();
+        expect(getByLabelText('Username')).toBeTruthy();
+      });
+
+      await act(async () => {
+        fireEvent.changeText(getByLabelText('Display name'), 'Updated Name');
+        fireEvent.changeText(getByLabelText('Username'), 'newsettingsuser');
+      });
+
+      await act(async () => {
+        fireEvent.press(getByLabelText('Save profile'));
+      });
+
+      expect(authService.updateUserProfile).toHaveBeenCalledWith(
+        'settings_user_1',
+        expect.objectContaining({
+          display_name: 'Updated Name',
+          full_name: 'Updated Name',
+        })
+      );
+      expect(authService.updateUsername).toHaveBeenCalledWith(
+        'settings_user_1',
+        'newsettingsuser'
+      );
+    });
+
+    test('deletes account after confirmation', async () => {
+      (authService.deleteAccount as jest.Mock).mockResolvedValue(undefined);
+
+      const { getByLabelText, getByText } = await renderWithPaper(<SettingsScreen />);
+
+      await act(async () => {
+        fireEvent.press(getByLabelText('Delete account'));
+      });
+
+      await waitFor(() => {
+        expect(getByText(/permanently deletes your account/i)).toBeTruthy();
+      });
+
+      await act(async () => {
+        fireEvent.press(getByLabelText('Confirm delete account'));
+      });
+
+      expect(authService.deleteAccount).toHaveBeenCalledWith('settings_user_1');
     });
   });
 
