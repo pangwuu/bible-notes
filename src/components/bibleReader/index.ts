@@ -11,3 +11,4 @@ export { TranslationSelector } from './TranslationSelector';
 export { VerseItem } from './VerseItem';
 export { VerseActionBar } from './VerseActionBar';
 export { ScriptureView } from './ScriptureView';
+export { CrossReferencesSheet } from './CrossReferencesSheet';

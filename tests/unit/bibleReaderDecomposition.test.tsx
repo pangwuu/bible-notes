@@ -125,6 +125,24 @@ describe('BibleReader Decomposed Sub-Components', () => {
       const text = extractNormalizedText(tree);
       expect(text).toContain('5*');
     });
+
+    it('does not render a per-verse cross-reference marker', () => {
+      const ComponentToTest = (VerseItem as any).type || VerseItem;
+      const element = (
+        <ComponentToTest
+          verse={{ verseNumber: 16, text: 'For God so loved the world' }}
+          isSelected={false}
+          isTargetHighlighted={false}
+          showVerseNumbers={true}
+          fontSize={16}
+          onToggle={jest.fn()}
+        />
+      );
+
+      const text = extractNormalizedText(ComponentToTest(element.props));
+      expect(text).not.toContain('‡');
+      expect(text).toContain('16 For God so loved the world');
+    });
   });
 
   describe('VerseActionBar', () => {
@@ -194,6 +212,26 @@ describe('BibleReader Decomposed Sub-Components', () => {
       const tree = (VerseActionBar as any)(element.props);
       const text = extractNormalizedText(tree);
       expect(text).toContain('Matt 1:1–3, 10 selected');
+    });
+
+    it('shows Related action when cross references are available', () => {
+      const onOpenCrossReferences = jest.fn();
+      const element = (
+        <VerseActionBar
+          sortedSelectedVerses={[16]}
+          linkedSectionsToJump={[]}
+          availableSections={[]}
+          activeContext={{ book: 'John', chapter: 3 }}
+          onClearSelection={jest.fn()}
+          onShareSelected={jest.fn()}
+          onOpenCrossReferences={onOpenCrossReferences}
+          crossReferenceCount={8}
+        />
+      );
+
+      const tree = (VerseActionBar as any)(element.props);
+      const text = extractNormalizedText(tree);
+      expect(text).toContain('Related (8)');
     });
   });
 

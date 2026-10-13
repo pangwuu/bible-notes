@@ -12,7 +12,8 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:rules": "firebase emulators:exec --only firestore 'jest tests/rules'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:crossrefs": "node scripts/buildCrossReferences.js"
   },
   "dependencies": {
     "@expo-google-fonts/source-serif-pro": "^0.2.3",
