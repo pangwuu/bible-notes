@@ -90,6 +90,17 @@ jest.mock('../../src/utils/safeStorage', () => ({
   },
 }));
 
+const mockDownloadTranslation = jest.fn();
+
+jest.mock('../../src/hooks/useDownloadTranslation', () => ({
+  useDownloadTranslation: () => ({
+    downloadTranslation: mockDownloadTranslation,
+    progress: {},
+    activeDownload: null,
+    isDownloading: false,
+  }),
+}));
+
 const renderWithPaper = (ui: React.ReactElement) => {
   return render(<PaperProvider>{ui}</PaperProvider>);
 };
@@ -187,6 +198,20 @@ describe('Settings Screen & Notifications Screen (app/(tabs)/settings.tsx & app/
       await waitFor(() => {
         expect(getByText('Passage cache cleared')).toBeTruthy();
       });
+    });
+
+    test('offers public-domain offline Bible download and triggers downloadTranslation', async () => {
+      const { getByLabelText, getByText } = await renderWithPaper(<SettingsScreen />);
+
+      expect(getByText('Offline Bible download')).toBeTruthy();
+      expect(getByText(/BSB — Berean Standard Bible/)).toBeTruthy();
+      expect(getByText(/KJV — King James Version/)).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.press(getByLabelText('Download BSB offline'));
+      });
+
+      expect(mockDownloadTranslation).toHaveBeenCalledWith('BSB');
     });
 
     test('purges legacy safeStorage enable_friends key on mount and toggles social features via updateUserProfile only', async () => {

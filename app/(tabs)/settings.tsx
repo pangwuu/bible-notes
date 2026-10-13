@@ -9,6 +9,7 @@ import {
   Portal,
   Dialog,
   Switch,
+  ProgressBar,
 } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { colors, spacing, radius, typography } from '../../src/constants/theme';
@@ -20,15 +21,19 @@ import {
   DEFAULT_BIBLE_VERSION_ID,
   resolveVersionId,
   getVersionMetadata,
+  OFFLINE_FIRESTORE_TRANSLATIONS,
 } from '../../src/constants/bibleVersions';
 import { BUILT_IN_TEMPLATES } from '../../src/constants/templates';
 import FontSizeControls from '../../src/components/FontSizeControls';
+import { useDownloadTranslation } from '../../src/hooks/useDownloadTranslation';
 import safeStorage from '../../src/utils/safeStorage';
 import type { NoteVisibility, BibleTranslation } from '../../src/types/user';
 
 export default function SettingsScreen() {
   const { user, profile, signOut } = useAuth();
   const router = useRouter();
+  const { downloadTranslation, progress, activeDownload, isDownloading } =
+    useDownloadTranslation();
 
   // Preferences state
   const [defaultVisibility, setDefaultVisibility] = useState<NoteVisibility>('friends');
@@ -409,6 +414,58 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.card}>
+        <Text style={styles.cardTitle}>Offline Bible download</Text>
+        <Text style={styles.cardDescription}>
+          Download a full public-domain translation seeded for offline study. Licensed editions
+          (NIV, NASB, etc.) stay on-demand with passage cache only.
+        </Text>
+        {OFFLINE_FIRESTORE_TRANSLATIONS.map((t) => {
+          const p = progress[t.code];
+          const isActive = activeDownload === t.code;
+          const isDone = p?.status === 'completed';
+          const hasError = p?.status === 'error';
+          return (
+            <View key={t.code} style={styles.offlineRow}>
+              <View style={styles.offlineTextCol}>
+                <Text style={styles.offlineTitle}>
+                  {t.shortName} — {t.fullName}
+                </Text>
+                {isActive && p ? (
+                  <>
+                    <Text style={styles.offlineStatus}>
+                      {p.currentBook} {p.currentChapter} · {p.percent}%
+                    </Text>
+                    <ProgressBar
+                      progress={Math.max(0, Math.min(1, p.percent / 100))}
+                      color={colors.accentKeyIdea}
+                      style={styles.offlineProgress}
+                    />
+                  </>
+                ) : null}
+                {isDone && !isActive ? (
+                  <Text style={styles.keySavedText}>Downloaded for offline use</Text>
+                ) : null}
+                {hasError ? (
+                  <Text style={styles.offlineError}>{p?.error || 'Download failed'}</Text>
+                ) : null}
+              </View>
+              <Button
+                mode="outlined"
+                compact
+                disabled={isDownloading}
+                textColor={colors.accentKeyIdea}
+                style={styles.offlineDownloadBtn}
+                onPress={() => downloadTranslation(t.code)}
+                accessibilityLabel={`Download ${t.shortName} offline`}
+              >
+                {isDone ? 'Re-download' : 'Download'}
+              </Button>
+            </View>
+          );
+        })}
+      </View>
+
+      <View style={styles.card}>
         <Text style={styles.cardTitle}>Passage offline cache</Text>
         <Text style={styles.cardDescription}>
           Remove downloaded Scripture passages from local device storage to free up space.
@@ -694,6 +751,43 @@ const styles = StyleSheet.create({
   },
   clearCacheBtn: {
     borderColor: colors.borderHairline,
+    borderRadius: radius.control,
+  },
+  offlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderHairline,
+  },
+  offlineTextCol: {
+    flex: 1,
+  },
+  offlineTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  offlineStatus: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  offlineProgress: {
+    marginTop: spacing.xs,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.bgSurfaceRaised,
+  },
+  offlineError: {
+    fontSize: 12,
+    color: colors.accentDanger,
+    marginTop: 4,
+  },
+  offlineDownloadBtn: {
+    borderColor: colors.accentKeyIdea,
     borderRadius: radius.control,
   },
 });
