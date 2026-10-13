@@ -24,7 +24,16 @@ import {
 import { BUILT_IN_TEMPLATES } from '../../src/constants/templates';
 import FontSizeControls from '../../src/components/FontSizeControls';
 import safeStorage from '../../src/utils/safeStorage';
+import {
+  applyStudyReminder,
+  formatReminderTime,
+  loadStudyReminderPrefs,
+  type StudyReminderPrefs,
+  DEFAULT_STUDY_REMINDER,
+} from '../../src/services/studyReminderService';
 import type { NoteVisibility, BibleTranslation } from '../../src/types/user';
+
+const REMINDER_HOUR_OPTIONS = [6, 7, 8, 9, 12, 18, 20, 21];
 
 export default function SettingsScreen() {
   const { user, profile, signOut } = useAuth();
@@ -39,6 +48,8 @@ export default function SettingsScreen() {
   );
   const [showVerseNumbers, setShowVerseNumbers] = useState<boolean>(true);
   const [defaultFontSize, setDefaultFontSize] = useState<number>(16);
+  const [reminderPrefs, setReminderPrefs] = useState<StudyReminderPrefs>(DEFAULT_STUDY_REMINDER);
+  const [reminderMessage, setReminderMessage] = useState<string | null>(null);
 
   // Clear cache state
   const [clearCacheDialogOpen, setClearCacheDialogOpen] = useState(false);
@@ -111,6 +122,8 @@ export default function SettingsScreen() {
 
     // Purge legacy local storage key so AuthContext/Firestore remains single source of truth
     safeStorage.removeItem('enable_friends').catch(() => {});
+
+    loadStudyReminderPrefs().then(setReminderPrefs).catch(() => {});
   }, []);
 
   const handleToggleVerseNumbers = async (value: boolean) => {
@@ -222,6 +235,37 @@ export default function SettingsScreen() {
     }
   };
 
+  const persistReminder = async (next: StudyReminderPrefs) => {
+    setReminderPrefs(next);
+    setReminderMessage(null);
+    const ok = await applyStudyReminder(next);
+    if (next.enabled && !ok) {
+      setReminderPrefs({ ...next, enabled: false });
+      setReminderMessage('Notification permission is required for reminders');
+      return;
+    }
+    if (user?.uid) {
+      try {
+        await updateUserProfile(user.uid, {
+          settings: {
+            ...profile?.settings,
+            study_reminder_enabled: next.enabled,
+            study_reminder_hour: next.hour,
+            study_reminder_minute: next.minute,
+          } as any,
+        });
+      } catch (err) {
+        console.warn('Failed to sync study reminder prefs:', err);
+      }
+    }
+    setReminderMessage(
+      next.enabled
+        ? `Daily reminder set for ${formatReminderTime(next.hour, next.minute)}`
+        : 'Daily reminder turned off'
+    );
+    setTimeout(() => setReminderMessage(null), 3000);
+  };
+
   const handleConfirmLogout = async () => {
     setIsLoggingOut(true);
     try {
@@ -271,6 +315,55 @@ export default function SettingsScreen() {
             accessibilityLabel="Social & Friends features"
           />
         </View>
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleTextContainer}>
+            <Text style={styles.cardTitle}>Daily study reminder</Text>
+            <Text style={styles.cardDescription}>
+              A local notification to open the app and capture a reflection. No reading plan or streak.
+            </Text>
+          </View>
+          <Switch
+            value={reminderPrefs.enabled}
+            onValueChange={(enabled) => persistReminder({ ...reminderPrefs, enabled })}
+            color={colors.accentKeyIdea}
+            accessibilityLabel="Daily study reminder"
+          />
+        </View>
+        {reminderPrefs.enabled ? (
+          <>
+            <Text style={[styles.cardDescription, { marginTop: spacing.sm }]}>
+              Reminder time: {formatReminderTime(reminderPrefs.hour, reminderPrefs.minute)}
+            </Text>
+            <View style={styles.translationChipGrid}>
+              {REMINDER_HOUR_OPTIONS.map((hour) => {
+                const selected = reminderPrefs.hour === hour;
+                return (
+                  <Button
+                    key={hour}
+                    mode={selected ? 'contained' : 'outlined'}
+                    buttonColor={selected ? colors.accentKeyIdea : undefined}
+                    textColor={selected ? colors.bgBase : colors.textPrimary}
+                    style={[
+                      styles.translationChip,
+                      !selected && styles.translationChipOutlined,
+                    ]}
+                    labelStyle={styles.translationChipLabel}
+                    onPress={() => persistReminder({ ...reminderPrefs, hour, minute: 0 })}
+                    accessibilityLabel={`Set reminder for ${formatReminderTime(hour, 0)}`}
+                  >
+                    {formatReminderTime(hour, 0)}
+                  </Button>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
+        {reminderMessage ? (
+          <Text style={styles.keySavedText}>{reminderMessage}</Text>
+        ) : null}
       </View>
 
       {/* Default note template */}

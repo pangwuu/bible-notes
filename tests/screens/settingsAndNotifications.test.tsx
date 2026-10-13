@@ -90,6 +90,14 @@ jest.mock('../../src/utils/safeStorage', () => ({
   },
 }));
 
+jest.mock('../../src/services/studyReminderService', () => ({
+  DEFAULT_STUDY_REMINDER: { enabled: false, hour: 8, minute: 0 },
+  formatReminderTime: (h: number, m: number) => `${h}:${String(m).padStart(2, '0')}`,
+  loadStudyReminderPrefs: jest.fn().mockResolvedValue({ enabled: false, hour: 8, minute: 0 }),
+  applyStudyReminder: jest.fn().mockResolvedValue(true),
+  saveStudyReminderPrefs: jest.fn(),
+}));
+
 const renderWithPaper = (ui: React.ReactElement) => {
   return render(<PaperProvider>{ui}</PaperProvider>);
 };
@@ -128,6 +136,25 @@ describe('Settings Screen & Notifications Screen (app/(tabs)/settings.tsx & app/
   });
 
   describe('SettingsScreen', () => {
+    test('enables daily study reminder and applies schedule', async () => {
+      const reminderService = require('../../src/services/studyReminderService');
+      (authService.updateUserProfile as jest.Mock).mockResolvedValue(undefined);
+
+      const { getByLabelText, getByText } = await renderWithPaper(<SettingsScreen />);
+
+      await act(async () => {
+        fireEvent(getByLabelText('Daily study reminder'), 'valueChange', true);
+      });
+
+      expect(reminderService.applyStudyReminder).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: true, hour: 8 })
+      );
+
+      await waitFor(() => {
+        expect(getByText(/Daily reminder set/)).toBeTruthy();
+      });
+    });
+
     test('updates preferred Bible translation and calls updateUserProfile', async () => {
       (authService.updateUserProfile as jest.Mock).mockResolvedValue(undefined);
 
