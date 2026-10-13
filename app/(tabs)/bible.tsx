@@ -1,41 +1,76 @@
 /**
- * Standalone Bible browse tab — read a chapter, then jump into a new note.
+ * Bible tab — the YouVersion book accordion, then a chapter reader
+ * that can step to the next or previous chapter, including across books.
  */
 
-import React, { useMemo, useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  PanResponder,
+  useWindowDimensions,
+} from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, radius, typography } from '../../src/constants/theme';
-import { CANONICAL_BOOKS } from '../../src/constants/bibleData';
+import { colors, spacing } from '../../src/constants/theme';
+import { CANONICAL_BOOKS, CanonicalBook } from '../../src/constants/bibleData';
 import { getChapterVerseCount } from '../../src/utils/bibleOrdinals';
-import { createPassageReference } from '../../src/utils/passageParser';
+import { adjacentChapter } from '../../src/utils/bibleNavigation';
+import { createPassageReference, parsePassageReferenceString } from '../../src/utils/passageParser';
 import BibleReader from '../../src/components/BibleReader';
+import { BookAccordionView } from '../../src/components/passagePicker/BookAccordionView';
+import {
+  bookMatchesQuery,
+  computeSquareTileSize,
+} from '../../src/components/passagePicker/passagePickerUtils';
 import { useAuth } from '../../src/context/AuthContext';
 import { useReaderFontSize } from '../../src/hooks/useReaderFontSize';
+import { BibleTranslation } from '../../src/types/user';
 
-type BrowseStep = 'book' | 'chapter' | 'read';
+function translationFromProfile(profile: ReturnType<typeof useAuth>['profile']): BibleTranslation {
+  const candidates = [
+    profile?.settings?.preferred_translation,
+    profile?.preferred_translation,
+  ];
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return 'ESV';
+}
+
+function versionIdFromProfile(profile: ReturnType<typeof useAuth>['profile']): number | undefined {
+  const candidates = [profile?.preferred_version_id, profile?.settings?.preferred_version_id];
+  for (const value of candidates) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return undefined;
+}
 
 export default function BibleBrowseScreen() {
   const router = useRouter();
   const { profile } = useAuth();
   const { readerFontSize, setReaderFontSize } = useReaderFontSize(16);
+  const { width: windowWidth } = useWindowDimensions();
 
-  const [step, setStep] = useState<BrowseStep>('book');
+  const [reading, setReading] = useState(false);
   const [bookName, setBookName] = useState<string | null>(null);
   const [chapter, setChapter] = useState<number | null>(null);
-  const [testamentFilter, setTestamentFilter] = useState<'ALL' | 'OT' | 'NT'>('ALL');
+  const [expandedBook, setExpandedBook] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const scrollRef = useRef<ScrollView>(null);
+
+  const tileSize = useMemo(() => computeSquareTileSize(windowWidth), [windowWidth]);
 
   const books = useMemo(() => {
-    if (testamentFilter === 'ALL') return CANONICAL_BOOKS;
-    return CANONICAL_BOOKS.filter((b) => b.testament === testamentFilter);
-  }, [testamentFilter]);
-
-  const selectedBook = useMemo(
-    () => CANONICAL_BOOKS.find((b) => b.name === bookName) || null,
-    [bookName]
-  );
+    const rawQuery = searchQuery.trim().toLowerCase();
+    const bookQuery = rawQuery.replace(/\s+\d+.*$/, '').trim();
+    const query = bookQuery.length > 0 ? bookQuery : rawQuery;
+    if (!query) return CANONICAL_BOOKS;
+    return CANONICAL_BOOKS.filter((book) => bookMatchesQuery(book, query));
+  }, [searchQuery]);
 
   const passage = useMemo(() => {
     if (!bookName || !chapter) return null;
@@ -51,6 +86,63 @@ export default function BibleBrowseScreen() {
     ]);
   }, [bookName, chapter]);
 
+  const previous = useMemo(
+    () => (bookName && chapter ? adjacentChapter(bookName, chapter, 'previous') : null),
+    [bookName, chapter]
+  );
+  const next = useMemo(
+    () => (bookName && chapter ? adjacentChapter(bookName, chapter, 'next') : null),
+    [bookName, chapter]
+  );
+
+  const openChapter = useCallback((book: string, nextChapter: number) => {
+    setBookName(book);
+    setChapter(nextChapter);
+    setExpandedBook(book);
+    setReading(true);
+  }, []);
+
+  const moveChapter = useCallback((direction: 'previous' | 'next') => {
+    if (!bookName || !chapter) return;
+    const stop = adjacentChapter(bookName, chapter, direction);
+    if (!stop) return;
+    openChapter(stop.book, stop.chapter);
+  }, [bookName, chapter, openChapter]);
+
+  const moveRef = useRef(moveChapter);
+  moveRef.current = moveChapter;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_, gesture) =>
+        Math.abs(gesture.dx) > 28 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5,
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dx <= -48) moveRef.current('next');
+        else if (gesture.dx >= 48) moveRef.current('previous');
+      },
+    })
+  ).current;
+
+  useEffect(() => {
+    if (!reading) return;
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [reading, bookName, chapter]);
+
+  const handleToggleBook = useCallback((book: CanonicalBook) => {
+    if (book.chapters === 1) {
+      openChapter(book.name, 1);
+      return;
+    }
+    setExpandedBook((current) => (current === book.name ? null : book.name));
+  }, [openChapter]);
+
+  const handleSubmitSearch = useCallback(() => {
+    const segments = parsePassageReferenceString(searchQuery);
+    const first = segments[0];
+    if (!first?.book || !first.startChapter) return;
+    openChapter(first.book, first.startChapter);
+  }, [openChapter, searchQuery]);
+
   const handleNoteThis = () => {
     if (!bookName || !chapter) return;
     router.push({
@@ -64,91 +156,50 @@ export default function BibleBrowseScreen() {
     });
   };
 
+  const returnToPicker = () => {
+    setExpandedBook(bookName);
+    setReading(false);
+  };
+
+  const referenceLabel = bookName && chapter ? `${bookName} ${chapter}` : '';
+
   return (
     <View style={styles.screen}>
-      {step !== 'read' ? (
-        <ScrollView contentContainerStyle={styles.container}>
-          <Text style={styles.heading}>Read Scripture</Text>
-          <Text style={styles.subheading}>
-            Choose a book and chapter, then capture a study note when something stands out.
-          </Text>
-
-          {step === 'book' && (
-            <>
-              <View style={styles.filterRow}>
-                {(['ALL', 'OT', 'NT'] as const).map((key) => (
-                  <Button
-                    key={key}
-                    mode={testamentFilter === key ? 'contained' : 'outlined'}
-                    buttonColor={testamentFilter === key ? colors.accentKeyIdea : undefined}
-                    textColor={testamentFilter === key ? colors.bgBase : colors.textPrimary}
-                    style={styles.filterChip}
-                    labelStyle={styles.filterLabel}
-                    onPress={() => setTestamentFilter(key)}
-                  >
-                    {key === 'ALL' ? 'All' : key === 'OT' ? 'Old Testament' : 'New Testament'}
-                  </Button>
-                ))}
-              </View>
-              <View style={styles.bookGrid}>
-                {books.map((book) => (
-                  <Pressable
-                    key={book.name}
-                    style={styles.bookChip}
-                    onPress={() => {
-                      setBookName(book.name);
-                      setChapter(null);
-                      setStep('chapter');
-                    }}
-                    accessibilityLabel={`Select ${book.name}`}
-                  >
-                    <Text style={styles.bookChipText}>{book.name}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </>
-          )}
-
-          {step === 'chapter' && selectedBook && (
-            <>
-              <Pressable
-                style={styles.backRow}
-                onPress={() => setStep('book')}
-                accessibilityLabel="Back to books"
-              >
-                <Ionicons name="chevron-back" size={18} color={colors.accentKeyIdea} />
-                <Text style={styles.backText}>{selectedBook.name}</Text>
-              </Pressable>
-              <View style={styles.chapterGrid}>
-                {Array.from({ length: selectedBook.chapters }, (_, i) => i + 1).map((ch) => (
-                  <Pressable
-                    key={ch}
-                    style={styles.chapterChip}
-                    onPress={() => {
-                      setChapter(ch);
-                      setStep('read');
-                    }}
-                    accessibilityLabel={`${selectedBook.name} chapter ${ch}`}
-                  >
-                    <Text style={styles.chapterChipText}>{ch}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </>
-          )}
-        </ScrollView>
+      {!reading ? (
+        <View style={styles.pickerPane}>
+          <View style={styles.intro}>
+            <Text style={styles.heading}>Read the Bible</Text>
+            <Text style={styles.subheading}>
+              Choose a passage, then capture your thoughts when something stands out.
+            </Text>
+          </View>
+          <BookAccordionView
+            books={books}
+            expandedBook={expandedBook}
+            highlightedChapter={bookName === expandedBook ? chapter : null}
+            searchQuery={searchQuery}
+            suggestionLabel={null}
+            tileSize={tileSize}
+            onSearchChange={setSearchQuery}
+            onClearSearch={() => setSearchQuery('')}
+            onSubmitSearch={handleSubmitSearch}
+            onToggleBook={handleToggleBook}
+            onSelectChapter={(nextChapter) => {
+              if (!expandedBook) return;
+              openChapter(expandedBook, nextChapter);
+            }}
+          />
+        </View>
       ) : (
-        <View style={styles.readPane}>
+        <View style={styles.readPane} {...panResponder.panHandlers}>
           <View style={styles.readHeader}>
             <Pressable
               style={styles.backRow}
-              onPress={() => setStep('chapter')}
-              accessibilityLabel="Back to chapters"
+              onPress={returnToPicker}
+              accessibilityLabel={`Back to books, ${referenceLabel}`}
             >
               <Ionicons name="chevron-back" size={18} color={colors.accentKeyIdea} />
-              <Text style={styles.backText}>
-                {bookName} {chapter}
-              </Text>
+              <Text style={styles.backText}>{referenceLabel}</Text>
             </Pressable>
             <Button
               mode="contained"
@@ -163,21 +214,69 @@ export default function BibleBrowseScreen() {
             </Button>
           </View>
           {passage ? (
-            <ScrollView contentContainerStyle={styles.readerContainer}>
+            <ScrollView
+              ref={scrollRef}
+              style={styles.readerScroll}
+              contentContainerStyle={styles.readerContainer}
+            >
               <BibleReader
                 passage={passage}
                 fontSize={readerFontSize}
                 onFontSizeChange={setReaderFontSize}
-                preferredTranslation={
-                  profile?.preferred_version_id ||
-                  profile?.settings?.preferred_version_id ||
-                  profile?.settings?.preferred_translation ||
-                  'ESV'
-                }
+                preferredTranslation={translationFromProfile(profile)}
+                preferredVersionId={versionIdFromProfile(profile)}
                 initiallyCollapsed={false}
               />
             </ScrollView>
           ) : null}
+          <View style={styles.chapterNav}>
+            <Pressable
+              style={styles.chapterNavButton}
+              onPress={() => moveChapter('previous')}
+              disabled={!previous}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !previous }}
+              accessibilityLabel={
+                previous
+                  ? `Previous chapter, ${previous.book} ${previous.chapter}`
+                  : 'Previous chapter'
+              }
+            >
+              <Ionicons
+                name="chevron-back"
+                size={18}
+                color={previous ? colors.accentKeyIdea : colors.textDisabled}
+              />
+              <Text
+                style={[styles.chapterNavText, !previous && styles.chapterNavTextDisabled]}
+                numberOfLines={1}
+              >
+                {previous ? `${previous.book} ${previous.chapter}` : 'Start'}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.chapterNavButton, styles.chapterNavButtonNext]}
+              onPress={() => moveChapter('next')}
+              disabled={!next}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !next }}
+              accessibilityLabel={
+                next ? `Next chapter, ${next.book} ${next.chapter}` : 'Next chapter'
+              }
+            >
+              <Text
+                style={[styles.chapterNavText, styles.chapterNavTextNext, !next && styles.chapterNavTextDisabled]}
+                numberOfLines={1}
+              >
+                {next ? `${next.book} ${next.chapter}` : 'End'}
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={next ? colors.accentKeyIdea : colors.textDisabled}
+              />
+            </Pressable>
+          </View>
         </View>
       )}
     </View>
@@ -189,9 +288,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bgBase,
   },
-  container: {
-    padding: spacing.md,
-    paddingBottom: spacing.xxl,
+  pickerPane: {
+    flex: 1,
+  },
+  intro: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
   },
   heading: {
     fontSize: 22,
@@ -202,73 +304,8 @@ const styles = StyleSheet.create({
   subheading: {
     fontSize: 13,
     color: colors.textSecondary,
-    marginBottom: spacing.md,
-    lineHeight: 18,
-  },
-  filterRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginBottom: spacing.md,
-  },
-  filterChip: {
-    borderRadius: radius.control,
-  },
-  filterLabel: {
-    fontSize: 12,
-    marginVertical: 2,
-    marginHorizontal: 6,
-  },
-  bookGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-  },
-  bookChip: {
-    backgroundColor: colors.bgSurface,
-    borderWidth: 1,
-    borderColor: colors.borderHairline,
-    borderRadius: radius.control,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs + 2,
-    minWidth: '30%',
-    flexGrow: 1,
-  },
-  bookChipText: {
-    color: colors.textPrimary,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  backRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
     marginBottom: spacing.sm,
-  },
-  backText: {
-    color: colors.accentKeyIdea,
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  chapterGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-  },
-  chapterChip: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.control,
-    backgroundColor: colors.bgSurface,
-    borderWidth: 1,
-    borderColor: colors.borderHairline,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chapterChipText: {
-    color: colors.textPrimary,
-    fontWeight: '600',
-    fontFamily: typography.body.fontFamily,
+    lineHeight: 18,
   },
   readPane: {
     flex: 1,
@@ -284,8 +321,56 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderHairline,
     backgroundColor: colors.bgSurface,
   },
+  backRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  backText: {
+    color: colors.accentKeyIdea,
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  readerScroll: {
+    flex: 1,
+  },
   readerContainer: {
     padding: spacing.md,
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.lg,
+  },
+  chapterNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderHairline,
+    backgroundColor: colors.bgSurface,
+  },
+  chapterNavButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    minHeight: 44,
+  },
+  chapterNavButtonNext: {
+    justifyContent: 'flex-end',
+  },
+  chapterNavText: {
+    color: colors.accentKeyIdea,
+    fontWeight: '600',
+    fontSize: 14,
+    flexShrink: 1,
+  },
+  chapterNavTextNext: {
+    textAlign: 'right',
+  },
+  chapterNavTextDisabled: {
+    color: colors.textDisabled,
   },
 });

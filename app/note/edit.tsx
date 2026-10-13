@@ -372,7 +372,6 @@ export default function NoteEditScreen() {
           },
         ])
       );
-      setIsDirty(true);
     } catch (err) {
       console.warn('Failed to prefill passage from browse params:', err);
     }
@@ -588,7 +587,7 @@ export default function NoteEditScreen() {
   const handleSave = useCallback(async (): Promise<boolean> => {
     if (isSavingRef.current) return false;
     if (!passage) {
-      setErrorBanner('Please select a scripture passage before saving');
+      setErrorBanner('Please select a passage before saving');
       return false;
     }
     isSavingRef.current = true;
@@ -940,11 +939,11 @@ export default function NoteEditScreen() {
             scrollViewRef.current?.scrollTo({ y: Math.max(0, targetY - 16), animated: true });
           }}
           accessibilityRole="button"
-          accessibilityLabel="Scroll to Scripture reading"
+          accessibilityLabel="Scroll to the bible passage"
           hitSlop={6}
         >
           <Ionicons name="book-outline" size={14} color={colors.accent.keyIdea} />
-          <Text style={styles.floatingBibleJumpText}>Scripture</Text>
+          <Text style={styles.floatingBibleJumpText}>To Bible</Text>
           <Ionicons name="arrow-up" size={12} color={colors.accent.keyIdea} />
         </Pressable>
       )}

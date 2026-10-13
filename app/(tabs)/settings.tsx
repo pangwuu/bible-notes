@@ -376,12 +376,12 @@ export default function SettingsScreen() {
 
         <Divider style={styles.innerDivider} />
 
-        {/* Default Scripture Font Size */}
+        {/* Default BibleReader Font Size */}
         <View style={styles.toggleRow}>
           <View style={styles.toggleTextContainer}>
             <Text style={styles.cardTitle}>Default text size</Text>
             <Text style={styles.cardDescription}>
-              Base font size for Scripture.
+              Base font size for Bible passages.
             </Text>
           </View>
           <FontSizeControls

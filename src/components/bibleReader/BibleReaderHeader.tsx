@@ -19,7 +19,7 @@ export const BibleReaderHeader: React.FC<BibleReaderHeaderProps> = ({
       style={styles.headerRow}
       onPress={onToggleCollapse}
       accessibilityRole="button"
-      accessibilityLabel={`Toggle Scripture text. Currently ${collapsed ? 'collapsed' : 'expanded'}`}
+      accessibilityLabel={`Toggle Bible text. Currently ${collapsed ? 'collapsed' : 'expanded'}`}
     >
       <View style={styles.headerLeft}>
         <Ionicons name="book-outline" size={17} color={colors.accent.keyIdea} style={styles.bookIcon} />
