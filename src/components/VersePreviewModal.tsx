@@ -104,12 +104,12 @@ export default function VersePreviewModal({
             {loading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="small" color={colors.accent.keyIdea} />
-                <Text style={styles.emptyText}>Loading Scripture text...</Text>
+                <Text style={styles.emptyText}>Loading Bible verses...</Text>
               </View>
             ) : verseText ? (
               <Text style={styles.verseText}>{verseText}</Text>
             ) : (
-              <Text style={styles.emptyText}>No Scripture text available.</Text>
+              <Text style={styles.emptyText}>No Bible text available.</Text>
             )}
           </ScrollView>
 

@@ -14,17 +14,27 @@ import {
 } from '../../src/components/PassagePicker';
 
 describe('computeSquareTileSize', () => {
-  test('keeps phone tiles in the 48–64px range and does not grow them on a wide window', () => {
+  function rowRemainder(windowWidth: number, tile: number) {
+    const contentWidth = windowWidth - 16 * 2;
+    const columns = Math.max(1, Math.floor((contentWidth + 8) / (64 + 8)));
+    const used = tile * columns + 8 * (columns - 1);
+    return contentWidth - used;
+  }
+
+  test('fills the row and adds columns on a wide window instead of a few huge tiles', () => {
     const phone = computeSquareTileSize(390);
     const smallPhone = computeSquareTileSize(320);
     const desktop = computeSquareTileSize(1280);
 
     expect(phone).toBeGreaterThanOrEqual(48);
-    expect(phone).toBeLessThanOrEqual(64);
     expect(smallPhone).toBeGreaterThanOrEqual(48);
-    expect(smallPhone).toBeLessThanOrEqual(64);
-    expect(desktop).toBeLessThanOrEqual(64);
-    expect(desktop).toBe(64);
+    expect(rowRemainder(390, phone)).toBeLessThan(8);
+    expect(rowRemainder(320, smallPhone)).toBeLessThan(8);
+    expect(rowRemainder(1280, desktop)).toBeLessThan(20);
+
+    const phoneColumns = Math.floor((390 - 32 + 8) / 72);
+    const desktopColumns = Math.floor((1280 - 32 + 8) / 72);
+    expect(desktopColumns).toBeGreaterThan(phoneColumns);
 
     const stretchedFiveColumn = Math.floor((1280 - 16 * 2 - 8 * 4) / 5);
     expect(desktop).toBeLessThan(stretchedFiveColumn);

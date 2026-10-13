@@ -165,21 +165,22 @@ export function draftFromSelection(selection: {
   );
 }
 
-/** Phone-sized chapter and verse squares. Wide layouts add columns instead of growing tiles. */
+/** Target chapter and verse square. Wide layouts add columns instead of a few huge tiles. */
 export const SQUARE_TILE_MIN = 48;
 export const SQUARE_TILE_MAX = 64;
 
 /**
  * Size of a chapter or verse square for the current window.
- * Tiles stay between 48px and 64px. Extra width becomes more columns,
- * using the same horizontal inset and gap as the chapter and verse grids.
+ * Column count is chosen so tiles stay near 64px. Each tile then grows
+ * just enough to fill the row, so the grid meets the right edge.
+ * Uses the same horizontal inset and gap as the chapter and verse grids.
  */
 export function computeSquareTileSize(windowWidth: number): number {
   const gap = spacing.sm;
-  const contentWidth = windowWidth - spacing.md * 2;
+  const contentWidth = Math.max(0, windowWidth - spacing.md * 2);
   const columns = Math.max(1, Math.floor((contentWidth + gap) / (SQUARE_TILE_MAX + gap)));
   const tile = Math.floor((contentWidth - gap * (columns - 1)) / columns);
-  return Math.min(SQUARE_TILE_MAX, Math.max(SQUARE_TILE_MIN, tile));
+  return Math.max(SQUARE_TILE_MIN, tile);
 }
 
 export function bookMatchesQuery(book: CanonicalBook, query: string): boolean {
