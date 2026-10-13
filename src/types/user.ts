@@ -35,6 +35,8 @@ export interface UserSettings {
   default_font_size?: number;
   default_template_id?: string;
   enable_friends?: boolean;
+  push_notifications_enabled?: boolean;
+  expo_push_token?: string;
 }
 
 export interface UserDocument {
@@ -53,6 +55,7 @@ export interface UserDocument {
   custom_esv_api_key?: string;
   custom_templates?: NoteTemplate[];
   search_tokens?: string[];
+  expo_push_token?: string;
   created_at: any; // FieldValue.serverTimestamp() or Timestamp
   updated_at: any; // FieldValue.serverTimestamp() or Timestamp
 }
