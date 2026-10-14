@@ -6,6 +6,8 @@
  */
 
 import React from 'react';
+import { KeyboardAvoidingView, ScrollView } from 'react-native';
+import renderer, { act as renderTree } from 'react-test-renderer';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import NoteEditScreen from '../../app/note/edit';
 import * as notesService from '../../src/services/notesService';
@@ -134,6 +136,24 @@ describe('NoteEditScreen (app/note/edit.tsx)', () => {
     jest.clearAllMocks();
     lastNavOptions = {};
     mockLocalSearchParams = {};
+  });
+
+  test('insets the note scroll view and does not pad the iOS keyboard', async () => {
+    let tree: renderer.ReactTestRenderer | undefined;
+    await renderTree(async () => {
+      tree = renderer.create(<NoteEditScreen />);
+    });
+
+    const scrollViews = tree!.root.findAllByType(ScrollView);
+    const bodyScrollView = scrollViews.find((sv) => sv.props.keyboardDismissMode === 'on-drag');
+    expect(bodyScrollView).toBeTruthy();
+    expect(bodyScrollView!.props.automaticallyAdjustKeyboardInsets).toBe(true);
+
+    const noteAvoider = tree!.root.findAllByType(KeyboardAvoidingView).find((view) =>
+      view.findAllByType(ScrollView).some((sv) => sv.props.automaticallyAdjustKeyboardInsets)
+    );
+    expect(noteAvoider).toBeTruthy();
+    expect(noteAvoider!.props.behavior).toBeUndefined();
   });
 
   test('initializes new note with default template (Swedish Method) and empty fields', async () => {

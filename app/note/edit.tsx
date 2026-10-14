@@ -58,6 +58,7 @@ import { useReaderFontSize } from '../../src/hooks/useReaderFontSize';
 import { useVersePreview } from '../../src/hooks/useVersePreview';
 import TOCSegmentBar from '../../src/components/note/TOCSegmentBar';
 import { safeStorage } from '../../src/utils/safeStorage';
+import { tailScrollOffset } from '../../src/utils/noteScroll';
 
 export default function NoteEditScreen() {
   const insets = useSafeAreaInsets();
@@ -127,6 +128,12 @@ export default function NoteEditScreen() {
   const currentNoteIdRef = useRef<string | undefined>(id);
   const editorLayoutY = useRef<number>(0);
   const sectionLayoutMap = useRef<Record<string, number>>({});
+  const sectionHeightMap = useRef<Record<string, number>>({});
+  const focusedSectionIdRef = useRef<string | null>(null);
+  const pendingRevealSectionId = useRef<string | null>(null);
+  const scrollOffsetY = useRef(0);
+  const scrollViewportHeight = useRef(0);
+  const keyboardHeightRef = useRef(0);
   const verseLayoutMap = useRef<Record<string, number>>({});
   const isSavingRef = useRef(false);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -143,6 +150,35 @@ export default function NoteEditScreen() {
         clearTimeout(highlightTimerRef.current);
       }
     };
+  }, []);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      keyboardHeightRef.current = e.endCoordinates.height;
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      keyboardHeightRef.current = 0;
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const revealSectionTail = useCallback((sectionId: string) => {
+    const sectionY = sectionLayoutMap.current[sectionId];
+    const sectionHeight = sectionHeightMap.current[sectionId];
+    if (typeof sectionY !== 'number' || typeof sectionHeight !== 'number') return;
+    if (scrollViewportHeight.current <= 0) return;
+
+    const nextOffset = tailScrollOffset({
+      tailY: editorLayoutY.current + sectionY + sectionHeight,
+      offsetY: scrollOffsetY.current,
+      viewportHeight: scrollViewportHeight.current,
+      keyboardHeight: keyboardHeightRef.current,
+    });
+    if (nextOffset === null) return;
+    scrollViewRef.current?.scrollTo({ y: nextOffset, animated: true });
   }, []);
 
   // Apply default template preference for new notes
@@ -293,7 +329,13 @@ export default function NoteEditScreen() {
       return copy;
     });
     setIsDirty(true);
-  }, [passage]);
+    pendingRevealSectionId.current = sectionId;
+    setTimeout(() => {
+      if (pendingRevealSectionId.current !== sectionId) return;
+      revealSectionTail(sectionId);
+      pendingRevealSectionId.current = null;
+    }, 50);
+  }, [passage, revealSectionTail]);
 
   const handleAddPassageSegment = useCallback((segment: PassageSegment) => {
     setPassage((prev) => {
@@ -785,7 +827,7 @@ export default function NoteEditScreen() {
 
       <KeyboardAvoidingView
         style={styles.keyboardAvoider}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 44 : 0}
       >
         <ScrollView
@@ -793,9 +835,14 @@ export default function NoteEditScreen() {
           contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
+          onLayout={(e) => {
+            scrollViewportHeight.current = e.nativeEvent.layout.height;
+          }}
           onScrollBeginDrag={Keyboard.dismiss}
           onScroll={(e) => {
             const offsetY = e.nativeEvent.contentOffset.y;
+            scrollOffsetY.current = offsetY;
             const threshold = bibleReaderBottom.current > 0 ? bibleReaderBottom.current : 350;
             setShowScrollToBible(offsetY > threshold);
           }}
@@ -909,8 +956,24 @@ export default function NoteEditScreen() {
                 onOpenManager={() => setShowTemplateManager(true)}
               />
             }
-            onSectionLayout={(sectionId, y) => {
+            onFocusSection={(sectionId) => {
+              focusedSectionIdRef.current = sectionId;
+            }}
+            onBlurSection={(sectionId) => {
+              if (focusedSectionIdRef.current === sectionId) {
+                focusedSectionIdRef.current = null;
+              }
+            }}
+            onSectionLayout={(sectionId, y, height) => {
               sectionLayoutMap.current[sectionId] = y;
+              const previousHeight = sectionHeightMap.current[sectionId];
+              sectionHeightMap.current[sectionId] = height;
+              const grew = previousHeight !== undefined && height > previousHeight + 0.5;
+              const pendingReveal = pendingRevealSectionId.current === sectionId;
+              if (!pendingReveal && !(focusedSectionIdRef.current === sectionId && grew)) {
+                return;
+              }
+              revealSectionTail(sectionId);
             }}
             onChangeSection={(index, val) => {
               const nextSections = [...sections];
