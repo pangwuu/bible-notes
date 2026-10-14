@@ -4,7 +4,7 @@
  * Governed strictly by DESIGN.md.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -37,10 +37,14 @@ export interface DynamicNoteEditorProps {
   onFocusTagInput?: () => void;
   onPreviewVerse?: (startVerse: number, endVerse: number, context?: { book?: string; chapter?: number; verses?: number[] }) => void;
   onRemoveVerseReference?: (sectionIndex: number, referenceIndex: number) => void;
-  onSectionLayout?: (sectionId: string, y: number) => void;
+  onSectionLayout?: (sectionId: string, y: number, height: number) => void;
   onSectionContentSizeChange?: (sectionId: string, width: number, height: number) => void;
+  onFocusSection?: (sectionId: string) => void;
+  onBlurSection?: (sectionId: string) => void;
   hideVisibility?: boolean;
 }
+
+const MIN_SECTION_INPUT_HEIGHT = 64;
 
 const COMMON_TAG_SUGGESTIONS = [
   'faith',
@@ -73,8 +77,11 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
   onRemoveVerseReference,
   onSectionLayout,
   onSectionContentSizeChange,
+  onFocusSection,
+  onBlurSection,
   hideVisibility = false,
 }) => {
+  const [inputHeights, setInputHeights] = useState<Record<string, number>>({});
   const combinedSuggestions = useMemo(() => {
     return Array.from(new Set([...(suggestionTags || []), ...COMMON_TAG_SUGGESTIONS]));
   }, [suggestionTags]);
@@ -165,14 +172,20 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
         const color = resolveSectionColor(section, templateSec);
         const placeholder =
           templateSec?.placeholder || `Write your reflection for ${section.title}...`;
+        const sectionId = section.id;
+        const measuredHeight = sectionId ? inputHeights[sectionId] : undefined;
 
         return (
           <React.Fragment key={section.id || idx}>
             <View
               style={styles.section}
               onLayout={(e) => {
-                if (section.id) {
-                  onSectionLayout?.(section.id, e.nativeEvent.layout.y);
+                if (sectionId) {
+                  onSectionLayout?.(
+                    sectionId,
+                    e.nativeEvent.layout.y,
+                    e.nativeEvent.layout.height
+                  );
                 }
               }}
             >
@@ -206,15 +219,29 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
                 value={section.content}
                 onChangeText={(val) => onChangeSection(idx, val)}
                 onContentSizeChange={(e) => {
-                  if (section.id) {
+                  const nextHeight = Math.max(
+                    MIN_SECTION_INPUT_HEIGHT,
+                    Math.ceil(e.nativeEvent.contentSize.height)
+                  );
+                  if (sectionId) {
+                    setInputHeights((prev) => {
+                      if (prev[sectionId] === nextHeight) return prev;
+                      return { ...prev, [sectionId]: nextHeight };
+                    });
                     onSectionContentSizeChange?.(
-                      section.id,
+                      sectionId,
                       e.nativeEvent.contentSize.width,
                       e.nativeEvent.contentSize.height
                     );
                   }
                 }}
-                onBlur={onBlur}
+                onFocus={() => {
+                  if (sectionId) onFocusSection?.(sectionId);
+                }}
+                onBlur={() => {
+                  if (sectionId) onBlurSection?.(sectionId);
+                  onBlur?.();
+                }}
                 placeholder={placeholder}
                 placeholderTextColor={colors.text.secondary}
                 multiline
@@ -223,7 +250,10 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
                 autoCapitalize="sentences"
                 autoCorrect={true}
                 editable={editable}
-                style={styles.unborderedInput}
+                style={[
+                  styles.unborderedInput,
+                  measuredHeight ? { height: measuredHeight } : null,
+                ]}
               />
             </View>
             <View style={styles.divider} accessibilityRole="none" importantForAccessibility="no" />
@@ -324,7 +354,7 @@ const styles = StyleSheet.create({
   unborderedInput: {
     ...typography.body,
     color: colors.text.primary,
-    minHeight: 64,
+    minHeight: MIN_SECTION_INPUT_HEIGHT,
     paddingTop: 4,
     paddingBottom: 28,
     paddingHorizontal: 0,

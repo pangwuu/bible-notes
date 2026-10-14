@@ -1,4 +1,4 @@
-import { Text, TextInput } from 'react-native';
+import { StyleSheet, Text, TextInput } from 'react-native';
 import renderer, { act } from 'react-test-renderer';
 import TemplateQuickSelector from '../../src/components/TemplateQuickSelector';
 import DynamicNoteEditor from '../../src/components/DynamicNoteEditor';
@@ -136,7 +136,7 @@ describe('Note UI Bug Fixes', () => {
         (i) => i.props.placeholder === DEFAULT_TEMPLATE.sections[0].placeholder
       );
       expect(sectionInput).toBeTruthy();
-      expect(sectionInput!.props.style).toEqual(
+      expect(StyleSheet.flatten(sectionInput!.props.style)).toEqual(
         expect.objectContaining({
           paddingBottom: 28,
         })
@@ -149,6 +149,20 @@ describe('Note UI Bug Fixes', () => {
       });
 
       expect(onContentSizeChangeMock).toHaveBeenCalledWith('light', 350, 120);
+      const grown = component!.root.findAllByType(TextInput).find(
+        (i) => i.props.placeholder === DEFAULT_TEMPLATE.sections[0].placeholder
+      );
+      expect(StyleSheet.flatten(grown!.props.style).height).toBe(120);
+
+      act(() => {
+        grown!.props.onContentSizeChange({
+          nativeEvent: { contentSize: { width: 350, height: 20 } },
+        });
+      });
+      const clamped = component!.root.findAllByType(TextInput).find(
+        (i) => i.props.placeholder === DEFAULT_TEMPLATE.sections[0].placeholder
+      );
+      expect(StyleSheet.flatten(clamped!.props.style).height).toBe(64);
     });
   });
 });
