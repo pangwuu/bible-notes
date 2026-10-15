@@ -119,7 +119,6 @@ export const styles = StyleSheet.create({
   },
   suggestionLabel: {
     flex: 1,
-    fontFamily: typography.body.fontFamily,
     fontSize: 16,
     lineHeight: 22,
     color: colors.textPrimary,
@@ -332,7 +331,6 @@ export const styles = StyleSheet.create({
     borderColor: colors.accentKeyIdea,
   },
   passageReference: {
-    fontFamily: typography.body.fontFamily,
     fontSize: 16,
     lineHeight: 22,
     color: colors.textPrimary,
@@ -374,7 +372,6 @@ export const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   draftReference: {
-    fontFamily: typography.body.fontFamily,
     fontSize: 16,
     lineHeight: 22,
     fontWeight: '600',
