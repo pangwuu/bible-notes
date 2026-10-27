@@ -213,6 +213,11 @@ export default function NoteEditScreen() {
     translation: profile?.settings?.preferred_translation || 'ESV',
     esvApiKey: profile?.settings?.custom_esv_api_key || profile?.custom_esv_api_key,
     onViewInContext: (data) => {
+      // Blur any focused notes input before scrolling (same as floating "To Bible").
+      // Closing the preview Modal otherwise restores focus and scrollIntoView snaps
+      // back to the notes section after an otherwise-correct scrollTo.
+      Keyboard.dismiss();
+
       let targetCanon: string | undefined;
       if (data.book && passage?.segments && passage.segments.length > 0) {
         targetCanon = findCanonicalBook(data.book)?.name || data.book;
@@ -224,7 +229,7 @@ export default function NoteEditScreen() {
           }
           return true;
         });
-        if (matchIdx >= 0) {
+        if (matchIdx >= 0 && matchIdx !== activeSegmentIndex) {
           setActiveSegmentIndex(matchIdx);
         }
       }
@@ -242,6 +247,13 @@ export default function NoteEditScreen() {
       const numVerseY = Number(verseRelY) || 0;
       const targetY = numVerseY > 0 ? Math.max(0, baseTop + numVerseY - 80) : (baseTop > 0 ? Math.max(0, baseTop - 16) : 0);
       scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+
+      // Modal focus restoration / scrollIntoView can undo the animated scroll after
+      // the preview closes; re-assert so the passage position sticks.
+      setTimeout(() => {
+        Keyboard.dismiss();
+        scrollViewRef.current?.scrollTo({ y: targetY, animated: false });
+      }, 450);
 
       if (highlightTimerRef.current) {
         clearTimeout(highlightTimerRef.current);

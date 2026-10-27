@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radii, typography } from '../constants/theme';
@@ -126,6 +127,9 @@ export default function VersePreviewModal({
               <Pressable
                 style={styles.viewInContextButton}
                 onPress={() => {
+                  // Match floating "To Bible": blur before scroll so Modal focus restore
+                  // cannot scroll the notes TextInput back into view after jump.
+                  Keyboard.dismiss();
                   onClose();
                   onViewInContext();
                 }}
