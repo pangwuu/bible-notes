@@ -11,6 +11,7 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native';
 import { Alert } from '../../src/utils/alert';
 import { Text } from 'react-native-paper';
@@ -35,6 +36,7 @@ import { useReaderFontSize } from '../../src/hooks/useReaderFontSize';
 import { useVersePreview } from '../../src/hooks/useVersePreview';
 import { TOCSegmentBar } from '../../src/components/note/TOCSegmentBar';
 import { formatMarkdownCrossReferences } from '../../src/utils/crossReferenceParser';
+import { debugAgentLog } from '../../src/utils/debugAgentLog';
 
 export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -81,10 +83,13 @@ export default function NoteDetailScreen() {
 
   const handleScrollToVerse = useCallback(
     (verseNum: number, context?: { book?: string; chapter?: number; verses?: number[] }) => {
+      Keyboard.dismiss();
+
       let targetCanon: string | undefined;
+      let matchIdx = -1;
       if (context?.book && note?.passage?.segments && note.passage.segments.length > 0) {
         targetCanon = findCanonicalBook(context.book)?.name || context.book;
-        const matchIdx = note.passage.segments.findIndex((seg) => {
+        matchIdx = note.passage.segments.findIndex((seg) => {
           const segCanon = findCanonicalBook(seg.book)?.name || seg.book;
           if (segCanon !== targetCanon) return false;
           if (typeof context.chapter === 'number') {
@@ -109,7 +114,24 @@ export default function NoteDetailScreen() {
       const baseTop = bibleReaderTop.current > 0 ? bibleReaderTop.current : (tocTop.current > 0 ? tocTop.current : 0);
       const numVerseY = Number(verseRelY) || 0;
       const targetY = numVerseY > 0 ? Math.max(0, baseTop + numVerseY - 80) : (baseTop > 0 ? Math.max(0, baseTop - 16) : 0);
+      // #region agent log
+      debugAgentLog('D', 'note/[id].tsx:handleScrollToVerse', 'detail scroll-to-verse', {
+        verseNum,
+        book: context?.book,
+        chapter: context?.chapter,
+        canonicalKey,
+        verseRelY,
+        baseTop,
+        targetY,
+        matchIdx,
+        runId: 'post-fix',
+      });
+      // #endregion
       scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+      setTimeout(() => {
+        Keyboard.dismiss();
+        scrollViewRef.current?.scrollTo({ y: targetY, animated: false });
+      }, 450);
 
       if (highlightTimerRef.current) {
         clearTimeout(highlightTimerRef.current);
