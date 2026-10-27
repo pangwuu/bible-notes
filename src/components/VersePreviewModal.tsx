@@ -12,7 +12,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radii, typography } from '../constants/theme';
 import { formatVerseRangeLabel } from '../utils/verseLinkUtils';
-import { debugAgentLog } from '../utils/debugAgentLog';
 
 export interface VersePreviewModalProps {
   visible: boolean;
@@ -128,12 +127,6 @@ export default function VersePreviewModal({
               <Pressable
                 style={styles.viewInContextButton}
                 onPress={() => {
-                  // #region agent log
-                  debugAgentLog('B', 'VersePreviewModal.tsx:jump', 'Jump pressed: dismiss keyboard, close, then view', {
-                    title,
-                    order: 'dismiss_close_then_view',
-                  });
-                  // #endregion
                   // Match floating "To Bible": blur before scroll so Modal focus restore
                   // cannot scroll the notes TextInput back into view after jump.
                   Keyboard.dismiss();

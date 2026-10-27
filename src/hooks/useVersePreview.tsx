@@ -8,7 +8,6 @@ import VersePreviewModal from '../components/VersePreviewModal';
 import { isInTab } from '../utils/crossReferenceParser';
 import { BibleTranslation } from '../types/user';
 import { resolveVersionId, getVersionMetadata } from '../constants/bibleVersions';
-import { debugAgentLog } from '../utils/debugAgentLog';
 
 export interface VersePreviewContext {
   book?: string;
@@ -219,24 +218,10 @@ export function useVersePreview({
   );
 
   const closeVersePreview = useCallback(() => {
-    // #region agent log
-    debugAgentLog('B', 'useVersePreview.tsx:closeVersePreview', 'modal closing (visible=false)', {});
-    // #endregion
     setPreviewVerseData((prev) => ({ ...prev, visible: false }));
   }, []);
 
   const handleViewInContext = useCallback(() => {
-    // #region agent log
-    debugAgentLog('B', 'useVersePreview.tsx:handleViewInContext', 'handleViewInContext invoked', {
-      visible: previewVerseData.visible,
-      startVerse: previewVerseData.startVerse,
-      endVerse: previewVerseData.endVerse,
-      book: previewVerseData.book,
-      chapter: previewVerseData.chapter,
-      verses: previewVerseData.verses,
-      hasHandler: !!onViewInContext,
-    });
-    // #endregion
     if (onViewInContext) {
       onViewInContext(previewVerseData);
     }

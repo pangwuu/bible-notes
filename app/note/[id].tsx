@@ -36,7 +36,6 @@ import { useReaderFontSize } from '../../src/hooks/useReaderFontSize';
 import { useVersePreview } from '../../src/hooks/useVersePreview';
 import { TOCSegmentBar } from '../../src/components/note/TOCSegmentBar';
 import { formatMarkdownCrossReferences } from '../../src/utils/crossReferenceParser';
-import { debugAgentLog } from '../../src/utils/debugAgentLog';
 
 export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -114,20 +113,8 @@ export default function NoteDetailScreen() {
       const baseTop = bibleReaderTop.current > 0 ? bibleReaderTop.current : (tocTop.current > 0 ? tocTop.current : 0);
       const numVerseY = Number(verseRelY) || 0;
       const targetY = numVerseY > 0 ? Math.max(0, baseTop + numVerseY - 80) : (baseTop > 0 ? Math.max(0, baseTop - 16) : 0);
-      // #region agent log
-      debugAgentLog('D', 'note/[id].tsx:handleScrollToVerse', 'detail scroll-to-verse', {
-        verseNum,
-        book: context?.book,
-        chapter: context?.chapter,
-        canonicalKey,
-        verseRelY,
-        baseTop,
-        targetY,
-        matchIdx,
-        runId: 'post-fix',
-      });
-      // #endregion
       scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+      // Re-assert after Modal focus restoration can undo the animated scroll.
       setTimeout(() => {
         Keyboard.dismiss();
         scrollViewRef.current?.scrollTo({ y: targetY, animated: false });

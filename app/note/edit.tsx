@@ -59,7 +59,6 @@ import { useVersePreview } from '../../src/hooks/useVersePreview';
 import TOCSegmentBar from '../../src/components/note/TOCSegmentBar';
 import { safeStorage } from '../../src/utils/safeStorage';
 import { tailScrollOffset } from '../../src/utils/noteScroll';
-import { debugAgentLog } from '../../src/utils/debugAgentLog';
 
 export default function NoteEditScreen() {
   const insets = useSafeAreaInsets();
@@ -156,22 +155,8 @@ export default function NoteEditScreen() {
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
       keyboardHeightRef.current = e.endCoordinates.height;
-      // #region agent log
-      debugAgentLog('A', 'edit.tsx:keyboardDidShow', 'keyboard shown', {
-        height: e.endCoordinates.height,
-        focusedSectionId: focusedSectionIdRef.current,
-        scrollOffsetY: scrollOffsetY.current,
-      });
-      // #endregion
     });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => {
-      // #region agent log
-      debugAgentLog('A', 'edit.tsx:keyboardDidHide', 'keyboard hidden', {
-        prevHeight: keyboardHeightRef.current,
-        focusedSectionId: focusedSectionIdRef.current,
-        scrollOffsetY: scrollOffsetY.current,
-      });
-      // #endregion
       keyboardHeightRef.current = 0;
     });
     return () => {
@@ -192,17 +177,6 @@ export default function NoteEditScreen() {
       viewportHeight: scrollViewportHeight.current,
       keyboardHeight: keyboardHeightRef.current,
     });
-    // #region agent log
-    debugAgentLog('E', 'edit.tsx:revealSectionTail', 'revealSectionTail called', {
-      sectionId,
-      sectionY,
-      sectionHeight,
-      nextOffset,
-      scrollOffsetY: scrollOffsetY.current,
-      keyboardHeight: keyboardHeightRef.current,
-      focusedSectionId: focusedSectionIdRef.current,
-    });
-    // #endregion
     if (nextOffset === null) return;
     scrollViewRef.current?.scrollTo({ y: nextOffset, animated: true });
   }, []);
@@ -245,10 +219,9 @@ export default function NoteEditScreen() {
       Keyboard.dismiss();
 
       let targetCanon: string | undefined;
-      let matchIdx = -1;
       if (data.book && passage?.segments && passage.segments.length > 0) {
         targetCanon = findCanonicalBook(data.book)?.name || data.book;
-        matchIdx = passage.segments.findIndex((seg) => {
+        const matchIdx = passage.segments.findIndex((seg) => {
           const segCanon = findCanonicalBook(seg.book)?.name || seg.book;
           if (segCanon !== targetCanon) return false;
           if (typeof data.chapter === 'number') {
@@ -257,13 +230,6 @@ export default function NoteEditScreen() {
           return true;
         });
         if (matchIdx >= 0 && matchIdx !== activeSegmentIndex) {
-          // #region agent log
-          debugAgentLog('C', 'edit.tsx:onViewInContext', 'setActiveSegmentIndex before scroll', {
-            matchIdx,
-            prevActiveSegmentIndex: activeSegmentIndex,
-            targetCanon,
-          });
-          // #endregion
           setActiveSegmentIndex(matchIdx);
         }
       }
@@ -280,65 +246,14 @@ export default function NoteEditScreen() {
       const baseTop = bibleReaderTop.current > 0 ? bibleReaderTop.current : (tocTop.current > 0 ? tocTop.current : 0);
       const numVerseY = Number(verseRelY) || 0;
       const targetY = numVerseY > 0 ? Math.max(0, baseTop + numVerseY - 80) : (baseTop > 0 ? Math.max(0, baseTop - 16) : 0);
-      // #region agent log
-      debugAgentLog('D', 'edit.tsx:onViewInContext', 'computed scroll target for Jump', {
-        startVerse: data.startVerse,
-        book: data.book,
-        chapter: data.chapter,
-        canonicalKey,
-        verseRelY,
-        numVerseY,
-        baseTop,
-        bibleReaderTop: bibleReaderTop.current,
-        tocTop: tocTop.current,
-        targetY,
-        scrollOffsetBefore: scrollOffsetY.current,
-        focusedSectionId: focusedSectionIdRef.current,
-        keyboardHeight: keyboardHeightRef.current,
-        matchIdx,
-        editorLayoutY: editorLayoutY.current,
-        verseMapKeysSample: Object.keys(verseLayoutMap.current).slice(0, 8),
-        runId: 'post-fix',
-      });
-      // #endregion
+      scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
 
-      const applyJumpScroll = (animated: boolean, reason: string) => {
-        // #region agent log
-        debugAgentLog('FIX', 'edit.tsx:applyJumpScroll', reason, {
-          targetY,
-          animated,
-          offsetY: scrollOffsetY.current,
-          runId: 'post-fix',
-        });
-        // #endregion
-        scrollViewRef.current?.scrollTo({ y: targetY, animated });
-      };
-
-      applyJumpScroll(true, 'initial-jump');
-
-      // Modal focus restoration / scrollIntoView races the animated scroll (logs:
-      // offset reaches ~targetY by ~350ms then jumps to ~850 by ~700ms). Re-assert
-      // after that window so the passage position sticks.
+      // Modal focus restoration / scrollIntoView can undo the animated scroll after
+      // the preview closes; re-assert so the passage position sticks.
       setTimeout(() => {
         Keyboard.dismiss();
-        applyJumpScroll(false, 'reassert-after-modal-focus');
+        scrollViewRef.current?.scrollTo({ y: targetY, animated: false });
       }, 450);
-
-      // #region agent log
-      [50, 150, 350, 700, 1200].forEach((ms) => {
-        setTimeout(() => {
-          debugAgentLog('A', 'edit.tsx:postJumpScrollSample', 'scroll offset after Jump', {
-            ms,
-            offsetY: scrollOffsetY.current,
-            targetY,
-            focusedSectionId: focusedSectionIdRef.current,
-            keyboardHeight: keyboardHeightRef.current,
-            activeSegmentIndexAfter: activeSegmentIndex,
-            runId: 'post-fix',
-          });
-        }, ms);
-      });
-      // #endregion
 
       if (highlightTimerRef.current) {
         clearTimeout(highlightTimerRef.current);
@@ -1055,21 +970,8 @@ export default function NoteEditScreen() {
             }
             onFocusSection={(sectionId) => {
               focusedSectionIdRef.current = sectionId;
-              // #region agent log
-              debugAgentLog('A', 'edit.tsx:onFocusSection', 'section focused', {
-                sectionId,
-                scrollOffsetY: scrollOffsetY.current,
-              });
-              // #endregion
             }}
             onBlurSection={(sectionId) => {
-              // #region agent log
-              debugAgentLog('A', 'edit.tsx:onBlurSection', 'section blurred', {
-                sectionId,
-                wasFocused: focusedSectionIdRef.current === sectionId,
-                scrollOffsetY: scrollOffsetY.current,
-              });
-              // #endregion
               if (focusedSectionIdRef.current === sectionId) {
                 focusedSectionIdRef.current = null;
               }
@@ -1119,15 +1021,6 @@ export default function NoteEditScreen() {
         <Pressable
           style={styles.floatingBibleJump}
           onPress={() => {
-            // #region agent log
-            debugAgentLog('A', 'edit.tsx:toBibleButton', 'To Bible pressed (contrast path)', {
-              dismissedKeyboard: true,
-              tocTop: tocTop.current,
-              bibleReaderTop: bibleReaderTop.current,
-              scrollOffsetBefore: scrollOffsetY.current,
-              focusedSectionId: focusedSectionIdRef.current,
-            });
-            // #endregion
             Keyboard.dismiss();
             const targetY = tocTop.current > 0 ? tocTop.current : bibleReaderTop.current;
             scrollViewRef.current?.scrollTo({ y: Math.max(0, targetY - 16), animated: true });
