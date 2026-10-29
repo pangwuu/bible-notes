@@ -14,7 +14,8 @@
     "ios": {
       "supportsTablet": true,
       "userInterfaceStyle": "dark",
-      "bundleIdentifier": "com.biblenotes.app"
+      "bundleIdentifier": "com.biblenotes.app",
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -38,7 +39,9 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "expo-web-browser",
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true

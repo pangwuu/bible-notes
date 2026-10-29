@@ -3,6 +3,7 @@ import {
   isInAuthGroup,
   AUTH_ROUTE,
   TABS_ROUTE,
+  COMPLETE_PROFILE_ROUTE,
 } from '../../src/utils/authRouting';
 
 describe('Auth Route Protection Redirect Matrix', () => {
@@ -31,10 +32,14 @@ describe('Auth Route Protection Redirect Matrix', () => {
       expect(getAuthRedirect(true, ['(auth)', 'register'])).toBe('/(tabs)');
     });
 
-    test('authenticated user on register page does not redirect prematurely if hasCompletedProfile is false', () => {
+    test('authenticated user with incomplete profile is sent to complete-profile', () => {
       expect(getAuthRedirect(true, ['(auth)', 'register'], false, false)).toBeNull();
+      expect(getAuthRedirect(true, ['(auth)', 'complete-profile'], false, false)).toBeNull();
       expect(getAuthRedirect(true, ['(auth)', 'register'], false, true)).toBe('/(tabs)');
-      expect(getAuthRedirect(true, ['(auth)', 'login'], false, false)).toBe('/(tabs)');
+      expect(getAuthRedirect(true, ['(auth)', 'login'], false, false)).toBe(
+        COMPLETE_PROFILE_ROUTE
+      );
+      expect(getAuthRedirect(true, ['(tabs)'], false, false)).toBe(COMPLETE_PROFILE_ROUTE);
     });
 
     test('authenticated user outside (auth) stays on current route (no redirect)', () => {
