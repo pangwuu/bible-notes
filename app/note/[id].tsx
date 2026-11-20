@@ -19,7 +19,7 @@ import { useLocalSearchParams, useNavigation, useRouter, useFocusEffect } from '
 import { Ionicons } from '@expo/vector-icons';
 import { TemplateIcon } from '../../src/components/TemplateIcon';
 import Markdown from 'react-native-markdown-display';
-import { colors, spacing, radii, typography, markdownStyles } from '../../src/constants/theme';
+import { colors, spacing, radii, typography, markdownStyles, layout } from '../../src/constants/theme';
 import { getSectionColor } from '../../src/constants/templates';
 import * as notesService from '../../src/services/notesService';
 import { Note, formatPassageDisplay, PassageReference, PassageSegment, TargetVerseHighlight } from '../../src/types/note';
@@ -868,6 +868,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl,
   },
   headerActions: {
+    marginEnd: layout.headerEdgeInset,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
