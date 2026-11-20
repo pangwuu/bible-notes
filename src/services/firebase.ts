@@ -9,7 +9,15 @@
 
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 // @ts-ignore - getReactNativePersistence is exported by React Native entry point but missing from root public TS types
-import { initializeAuth, getReactNativePersistence, getAuth, Auth } from 'firebase/auth';
+import {
+  initializeAuth,
+  getReactNativePersistence,
+  getAuth,
+  Auth,
+  browserLocalPersistence,
+  indexedDBLocalPersistence,
+} from 'firebase/auth';
+import { Platform } from 'react-native';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import safeStorage from '../utils/safeStorage';
 
@@ -33,6 +41,9 @@ export const app: FirebaseApp = getApps().length === 0
  * 
  * - In React Native mobile runtimes (iOS, Android, Expo Go), getReactNativePersistence
  *   is defined and wraps safeStorage for persistent sessions across app restarts.
+ * - On web, the React Native entry isn't used, so getReactNativePersistence is undefined;
+ *   IndexedDB (falling back to localStorage) keeps the session across reloads and
+ *   home-screen relaunches.
  * - In Node/Jest unit test environments, getReactNativePersistence is undefined;
  *   Auth initializes with default in-memory persistence to avoid native module crashes.
  * - If called multiple times (e.g., during Fast Refresh), catches the error and
@@ -40,9 +51,11 @@ export const app: FirebaseApp = getApps().length === 0
  */
 function createAuth(): Auth {
   try {
-    const persistence = typeof getReactNativePersistence === 'function'
-      ? getReactNativePersistence(safeStorage as any)
-      : undefined;
+    const persistence = Platform.OS === 'web'
+      ? [indexedDBLocalPersistence, browserLocalPersistence]
+      : typeof getReactNativePersistence === 'function'
+        ? getReactNativePersistence(safeStorage as any)
+        : undefined;
 
     return initializeAuth(app, {
       ...(persistence ? { persistence } : {}),
