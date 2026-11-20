@@ -10,6 +10,7 @@
  * - NO monospace fonts for UI
  */
 
+import { Platform } from 'react-native';
 import { MD3DarkTheme, type MD3Theme } from 'react-native-paper';
 import { DarkTheme as NavigationDarkTheme, type Theme as NavigationTheme } from '@react-navigation/native';
 import { useTheme } from 'react-native-paper';
@@ -74,6 +75,7 @@ export const layout = {
   sectionSpacing: spacing.lg,     // 24px between unrelated sections
   elementSpacing: spacing.sm,     // 8px between related label + control
   readingMaxWidth: 680,           // Cap at ~65-70 characters wide on tablet
+  headerEdgeInset: Platform.OS === 'web' ? 12 : 0, // Native nav bars inset header buttons; web headers don't
 } as const;
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
+import { Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../src/constants/theme';
@@ -10,7 +11,8 @@ export default function TabsLayout() {
   const { profile } = useAuth();
   const enableFriends = profile?.settings?.enable_friends !== false;
   const insets = useSafeAreaInsets();
-  const bottomInset = insets.bottom > 0 ? insets.bottom : 8;
+  const isWeb = Platform.OS === 'web';
+  const bottomInset = insets.bottom > 0 ? insets.bottom + (isWeb ? 4 : 0) : isWeb ? 12 : 8;
 
   return (
     <Tabs
@@ -31,9 +33,9 @@ export default function TabsLayout() {
           backgroundColor: colors.bgSurface,
           borderTopColor: colors.borderHairline,
           borderTopWidth: 1,
-          height: 56 + bottomInset,
+          height: 60 + bottomInset,
           paddingBottom: bottomInset,
-          paddingTop: 6,
+          paddingTop: 4,
         },
         tabBarItemStyle: {
           justifyContent: 'center',
@@ -44,6 +46,7 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarLabelStyle: {
           fontSize: 12,
+          lineHeight: 16,
           fontWeight: '500',
         },
         headerRight: () => <HeaderNotificationBell />,

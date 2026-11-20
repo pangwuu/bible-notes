@@ -3,7 +3,7 @@ import { View, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicato
 import { Text } from 'react-native-paper';
 import { useNavigation, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, radius } from '../src/constants/theme';
+import { colors, spacing, radius, layout } from '../src/constants/theme';
 import { useAuth } from '../src/context/AuthContext';
 import { NotificationDocument } from '../src/types/notification';
 import {
@@ -198,9 +198,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   closeButton: {
+    marginStart: layout.headerEdgeInset,
     padding: 6,
   },
   markAllButton: {
+    marginEnd: layout.headerEdgeInset,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
   },

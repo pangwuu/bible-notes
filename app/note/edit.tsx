@@ -24,7 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRouter, useLocalSearchParams } from 'expo-router';
-import { colors, spacing, radii, typography } from '../../src/constants/theme';
+import { colors, spacing, radii, typography, layout } from '../../src/constants/theme';
 import DynamicNoteEditor from '../../src/components/DynamicNoteEditor';
 import TemplateQuickSelector from '../../src/components/TemplateQuickSelector';
 import TemplateManagerModal from '../../src/components/TemplateManagerModal';
@@ -1101,6 +1101,7 @@ const styles = StyleSheet.create({
     paddingBottom: 200, // Consistent 200px whitespace for keyboard clearance & tags menu
   },
   headerButton: {
+    marginHorizontal: layout.headerEdgeInset,
     paddingHorizontal: spacing.xs,
     paddingVertical: 2,
   },
