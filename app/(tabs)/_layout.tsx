@@ -33,9 +33,9 @@ export default function TabsLayout() {
           backgroundColor: colors.bgSurface,
           borderTopColor: colors.borderHairline,
           borderTopWidth: 1,
-          height: 56 + bottomInset,
+          height: 60 + bottomInset,
           paddingBottom: bottomInset,
-          paddingTop: 6,
+          paddingTop: 4,
         },
         tabBarItemStyle: {
           justifyContent: 'center',
@@ -46,6 +46,7 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarLabelStyle: {
           fontSize: 12,
+          lineHeight: 16,
           fontWeight: '500',
         },
         headerRight: () => <HeaderNotificationBell />,
