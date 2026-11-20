@@ -1,5 +1,4 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -15,6 +14,7 @@ import {
 } from '@expo-google-fonts/source-serif-pro';
 import { colors, paperTheme, navigationTheme } from '../src/constants/theme';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
+import { AppLoadingScreen } from '../src/components/AppLoadingScreen';
 import { getAuthRedirect } from '../src/utils/authRouting';
 import { applyWebThemeChrome, resolveWebThemeChromeColor } from '../src/utils/webThemeChrome';
 
@@ -53,11 +53,7 @@ function RootNavigationLayout() {
   }, [loading, isLoggedIntoApp]);
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.accentKeyIdea} />
-      </View>
-    );
+    return <AppLoadingScreen stage={user ? 'loadingProfile' : 'signingIn'} />;
   }
 
   return (
@@ -168,7 +164,7 @@ export default function RootLayout() {
   }, [fontsLoaded, fontError]);
 
   if (!fontsLoaded && !fontError) {
-    return <View style={styles.loadingContainer} />;
+    return <AppLoadingScreen stage="starting" />;
   }
 
   return (
@@ -183,12 +179,3 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: colors.bgBase,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
