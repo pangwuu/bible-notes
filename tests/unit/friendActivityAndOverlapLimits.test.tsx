@@ -16,7 +16,6 @@ import { FriendOverlapItem } from '../../src/services/noteOverlapService';
 
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: () => null,
-  MaterialCommunityIcons: () => null,
 }));
 
 // Mock expo-router
