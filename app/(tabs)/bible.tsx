@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing } from '../../src/constants/theme';
 import { CANONICAL_BOOKS, CanonicalBook } from '../../src/constants/bibleData';
 import { getChapterVerseCount } from '../../src/utils/bibleOrdinals';

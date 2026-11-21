@@ -16,7 +16,7 @@ import {
 import { Alert } from '../../src/utils/alert';
 import { Text } from 'react-native-paper';
 import { useLocalSearchParams, useNavigation, useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { TemplateIcon } from '../../src/components/TemplateIcon';
 import Markdown from 'react-native-markdown-display';
 import { colors, spacing, radii, typography, markdownStyles, layout } from '../../src/constants/theme';

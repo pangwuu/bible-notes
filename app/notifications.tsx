@@ -2,7 +2,7 @@ import React, { useState, useEffect, useLayoutEffect, useCallback } from 'react'
 import { View, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useNavigation, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, radius, layout } from '../src/constants/theme';
 import { useAuth } from '../src/context/AuthContext';
 import { NotificationDocument } from '../src/types/notification';

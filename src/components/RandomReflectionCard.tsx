@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { Text } from 'react-native-paper';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, radius } from '../constants/theme';
 import { Note, formatPassageDisplay } from '../types/note';
 import { TemplateIcon } from './TemplateIcon';
