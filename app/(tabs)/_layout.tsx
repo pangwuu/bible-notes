@@ -6,17 +6,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/AuthContext';
 import HeaderNotificationBell from '../../src/components/HeaderNotificationBell';
+import { useIosPwaHeaderOptions } from '../../src/hooks/useIosPwaHeaderOptions';
 
 export default function TabsLayout() {
   const { profile } = useAuth();
   const enableFriends = profile?.settings?.enable_friends !== false;
   const insets = useSafeAreaInsets();
+  const iosPwaHeaderOptions = useIosPwaHeaderOptions();
   const isWeb = Platform.OS === 'web';
   const bottomInset = insets.bottom > 0 ? insets.bottom + (isWeb ? 4 : 0) : isWeb ? 12 : 8;
 
   return (
     <Tabs
       screenOptions={{
+        ...iosPwaHeaderOptions,
         headerStyle: {
           backgroundColor: colors.bgSurface,
           borderBottomWidth: 1,

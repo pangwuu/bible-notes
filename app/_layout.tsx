@@ -17,6 +17,7 @@ import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { AppLoadingScreen } from '../src/components/AppLoadingScreen';
 import { getAuthRedirect } from '../src/utils/authRouting';
 import { applyWebThemeChrome, resolveWebThemeChromeColor } from '../src/utils/webThemeChrome';
+import { useIosPwaHeaderOptions } from '../src/hooks/useIosPwaHeaderOptions';
 
 // Keep splash screen visible while fonts and initial resources load
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -30,6 +31,7 @@ function RootNavigationLayout() {
   const navigationState = useRootNavigationState();
   const hasCompletedProfile = Boolean(profile && profile.username);
   const isLoggedIntoApp = Boolean(user && hasCompletedProfile);
+  const iosPwaHeaderOptions = useIosPwaHeaderOptions();
 
   useEffect(() => {
     // Wait until navigation container is fully mounted and auth check is done
@@ -61,6 +63,7 @@ function RootNavigationLayout() {
       <StatusBar style="light" />
       <Stack
         screenOptions={{
+          ...iosPwaHeaderOptions,
           headerStyle: {
             backgroundColor: colors.bgSurface,
           },

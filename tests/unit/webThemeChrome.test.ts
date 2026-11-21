@@ -26,9 +26,18 @@ describe('Web theme chrome (mobile Safari outside safe area)', () => {
     expect(html).toContain('%WEB_TITLE%');
   });
 
-  test('app.json defaults web.themeColor to auth/page base', () => {
+  test('launch-time theme colour matches the app header so the iOS PWA status bar blends in', () => {
+    const html = fs.readFileSync(indexHtmlPath, 'utf8');
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(__dirname, '../../public/manifest.json'), 'utf8')
+    );
+    expect(html).toContain(`name="theme-color" content="${colors.bg.surface}"`);
+    expect(manifest.theme_color).toBe(colors.bg.surface);
+  });
+
+  test('app.json uses header surface for themeColor and page base for backgroundColor', () => {
     const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
-    expect(appJson.expo.web.themeColor).toBe(colors.bg.base);
+    expect(appJson.expo.web.themeColor).toBe(colors.bg.surface);
     expect(appJson.expo.web.backgroundColor).toBe(colors.bg.base);
   });
 
