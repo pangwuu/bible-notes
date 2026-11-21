@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radii, typography } from '../../constants/theme';
 import { PassageSegment } from '../../types/note';
 import { formatSegmentDisplay } from '../../utils/passageParser';

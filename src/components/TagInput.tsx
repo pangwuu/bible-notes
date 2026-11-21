@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, TextInput, Pressable, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius } from '../constants/theme';
 
 export interface TagInputProps {

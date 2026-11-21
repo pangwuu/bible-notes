@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Text, Searchbar } from 'react-native-paper';
 import { useRouter, useFocusEffect } from 'expo-router';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import { colors, spacing, radius } from '../../src/constants/theme';
 import { UserProfile } from '../../src/types/user';

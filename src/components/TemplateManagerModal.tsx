@@ -8,7 +8,7 @@ import {
   Pressable,
 } from 'react-native';
 import { Alert } from '../utils/alert';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Ionicons } from '@expo/vector-icons';
 import { TemplateIcon } from './TemplateIcon';
 import { colors, spacing, radii, typography } from '../constants/theme';
 import { NoteTemplate } from '../types/template';
