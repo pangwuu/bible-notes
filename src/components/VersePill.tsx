@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, StyleProp, ViewStyle } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radii } from '../constants/theme';
 import { formatVerseRangeLabel } from '../utils/verseLinkUtils';
 

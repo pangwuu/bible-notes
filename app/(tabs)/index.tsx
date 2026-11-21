@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { View, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useRouter, useFocusEffect } from 'expo-router';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/AuthContext';
 import * as notesService from '../../src/services/notesService';

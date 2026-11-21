@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Pressable, ViewStyle, StyleProp } from 'react-native';
 import { useRouter } from 'expo-router';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing } from '../constants/theme';
 
 interface AddNoteFABProps {

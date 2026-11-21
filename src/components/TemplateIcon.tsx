@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleProp, TextStyle } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 export interface TemplateIconProps {
   name: string;

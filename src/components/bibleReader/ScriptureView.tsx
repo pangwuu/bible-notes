@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, typography } from '../../constants/theme';
 import {
   PassageFetchResult,

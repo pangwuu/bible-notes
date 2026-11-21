@@ -22,7 +22,7 @@ import {
 import { Alert } from '../../src/utils/alert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from 'react-native-paper';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, spacing, radii, typography, layout } from '../../src/constants/theme';
 import DynamicNoteEditor from '../../src/components/DynamicNoteEditor';

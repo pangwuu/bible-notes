@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../constants/theme';
 import { CanonicalBook } from '../../constants/bibleData';
 import { styles } from './styles';
