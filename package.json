@@ -13,7 +13,8 @@
     "test:coverage": "jest --coverage",
     "test:rules": "firebase emulators:exec --only firestore 'jest tests/rules'",
     "typecheck": "tsc --noEmit",
-    "build:crossrefs": "node scripts/buildCrossReferences.js"
+    "build:crossrefs": "node scripts/buildCrossReferences.js",
+    "build:startup-images": "node scripts/generateStartupImages.js"
   },
   "dependencies": {
     "@expo-google-fonts/source-serif-pro": "^0.2.3",
