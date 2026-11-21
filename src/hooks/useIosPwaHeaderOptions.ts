@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
  * reaches a little past the bar itself. Web content can't disable it, so we
  * push header contents below it instead.
  */
-export const IOS_PWA_HEADER_CLEARANCE = 12;
+export const IOS_PWA_HEADER_CLEARANCE = 6;
 
 type NavigatorLike = { standalone?: boolean } | undefined;
 
