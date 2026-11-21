@@ -7,7 +7,6 @@ import { noteDocumentToNote } from '../../src/types/note';
 
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: () => null,
-  MaterialCommunityIcons: () => null,
 }));
 
 describe('Note UI Bug Fixes', () => {
