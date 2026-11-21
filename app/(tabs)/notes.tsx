@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { Text, SegmentedButtons, Searchbar } from 'react-native-paper';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, spacing, radii, typography } from '../../src/constants/theme';
 import * as notesService from '../../src/services/notesService';
 import { Note, formatPassageDisplay } from '../../src/types/note';

@@ -35,6 +35,63 @@
         background-color: #1A1816;
       }
     </style>
+    <style id="static-splash-styles">
+      #static-splash {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        padding: 0 24px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        text-align: center;
+      }
+      #static-splash .spinner {
+        width: 30px;
+        height: 30px;
+        margin: 3px;
+        border-radius: 50%;
+        border: 3px solid rgba(227, 165, 61, 0.2);
+        border-top-color: #E3A53D;
+        animation: static-splash-spin 0.75s linear infinite;
+      }
+      #static-splash .message {
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 20px;
+        color: #EDE7DD;
+      }
+      #static-splash .hint {
+        position: relative;
+        height: 16px;
+        width: 100%;
+        font-size: 12px;
+        line-height: 16px;
+        color: #A39C8E;
+      }
+      #static-splash .hint span {
+        position: absolute;
+        left: 0;
+        right: 0;
+        opacity: 0;
+      }
+      #static-splash .hint .slow {
+        animation: static-splash-show 0s linear 4s forwards, static-splash-hide 0s linear 10s forwards;
+      }
+      #static-splash .hint .very-slow {
+        animation: static-splash-show 0s linear 10s forwards;
+      }
+      @keyframes static-splash-spin {
+        to { transform: rotate(360deg); }
+      }
+      @keyframes static-splash-show {
+        to { opacity: 1; }
+      }
+      @keyframes static-splash-hide {
+        to { opacity: 0; }
+      }
+    </style>
   </head>
 
   <body>
@@ -43,6 +100,16 @@
       You need to enable JavaScript to run this app.
     </noscript>
     <!-- The root element for your Expo app. -->
-    <div id="root"></div>
+    <!-- Static splash: paints with the HTML, before the JS bundle arrives. React's createRoot replaces it on first render. -->
+    <div id="root">
+      <div id="static-splash" role="progressbar" aria-label="Opening Bible Notes..." aria-live="polite">
+        <div class="spinner"></div>
+        <div class="message">Opening Bible Notes...</div>
+        <div class="hint">
+          <span class="slow">Still working on it...</span>
+          <span class="very-slow">Your connection seems slow. Hang tight, nearly there.</span>
+        </div>
+      </div>
+    </div>
   </body>
 </html>

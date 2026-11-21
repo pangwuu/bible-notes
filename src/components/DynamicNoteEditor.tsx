@@ -12,7 +12,7 @@ import {
   StyleSheet,
   Pressable,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { TemplateIcon } from './TemplateIcon';
 import { colors, spacing, radii, typography } from '../constants/theme';
 import { getSectionColor } from '../constants/templates';

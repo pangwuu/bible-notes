@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { TemplateIcon } from './TemplateIcon';
 import { colors, spacing, radii, typography } from '../constants/theme';
 import { NoteTemplate } from '../types/template';
