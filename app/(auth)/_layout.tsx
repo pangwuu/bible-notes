@@ -1,11 +1,15 @@
 import React from 'react';
 import { Stack } from 'expo-router';
 import { colors } from '../../src/constants/theme';
+import { useIosPwaHeaderOptions } from '../../src/hooks/useIosPwaHeaderOptions';
 
 export default function AuthLayout() {
+  const iosPwaHeaderOptions = useIosPwaHeaderOptions();
+
   return (
     <Stack
       screenOptions={{
+        ...iosPwaHeaderOptions,
         headerStyle: {
           backgroundColor: colors.bgBase,
         },
