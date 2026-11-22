@@ -13,6 +13,22 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="Bible Notes" />
     <title>%WEB_TITLE%</title>
+    <script>
+      // Chromium browsers fire beforeinstallprompt once, possibly before the app's
+      // JavaScript has loaded. Keep the event so the in-app install guide can show
+      // the browser's own install dialog later. preventDefault() hides Chrome's
+      // mini-infobar in favour of that guide.
+      window.__bnInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', function (event) {
+        event.preventDefault();
+        window.__bnInstallPrompt = event;
+        window.dispatchEvent(new Event('bn-install-prompt-ready'));
+      });
+      window.addEventListener('appinstalled', function () {
+        window.__bnInstallPrompt = null;
+        window.dispatchEvent(new Event('bn-app-installed'));
+      });
+    </script>
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
     <style id="expo-reset">
       /* These styles make the body full-height */

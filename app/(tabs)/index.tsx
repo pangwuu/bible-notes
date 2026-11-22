@@ -12,6 +12,7 @@ import EmptyState from '../../src/components/EmptyState';
 import { FriendNoteCard } from '../../src/components/FriendNoteCard';
 import { RandomReflectionCard } from '../../src/components/RandomReflectionCard';
 import DashboardGreeting from '../../src/components/DashboardGreeting';
+import InstallAppCard from '../../src/components/InstallAppCard';
 import AddNoteFAB from '../../src/components/AddNoteFAB';
 import safeStorage from '../../src/utils/safeStorage';
 import FriendActivityLoadingIndicator from '../../src/components/FriendActivityLoadingIndicator';
@@ -155,6 +156,8 @@ export default function DashboardScreen() {
       >
         {/* CLAUDE-STYLE GREETING */}
         <DashboardGreeting />
+
+        <InstallAppCard dismissible />
 
         {/* SECTION 1: RECENT NOTES */}
         <View style={styles.sectionHeaderRow}>

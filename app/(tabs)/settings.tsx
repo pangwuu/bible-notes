@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, Platform } from 'react-native';
 import {
   Text,
   TextInput,
@@ -28,6 +28,7 @@ import FontSizeControls from '../../src/components/FontSizeControls';
 import { useDownloadTranslation } from '../../src/hooks/useDownloadTranslation';
 import safeStorage from '../../src/utils/safeStorage';
 import { useEditorPreferences } from '../../src/hooks/useEditorPreferences';
+import InstallAppCard from '../../src/components/InstallAppCard';
 import type { VerseTagPlacement } from '../../src/utils/verseLinkUtils';
 
 const PLACEMENT_PREVIEW: Record<VerseTagPlacement, { before: string; tag: string; after: string }> = {
@@ -544,6 +545,8 @@ export default function SettingsScreen() {
           </Button>
         </View>
       </View>
+
+      {Platform.OS === 'web' && <InstallAppCard />}
 
       <Divider style={styles.divider} />
 
