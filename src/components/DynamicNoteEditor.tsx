@@ -41,6 +41,7 @@ export interface DynamicNoteEditorProps {
   onSectionContentSizeChange?: (sectionId: string, width: number, height: number) => void;
   onFocusSection?: (sectionId: string) => void;
   onBlurSection?: (sectionId: string) => void;
+  onSelectionChangeSection?: (sectionId: string, start: number, end: number) => void;
   hideVisibility?: boolean;
 }
 
@@ -79,6 +80,7 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
   onSectionContentSizeChange,
   onFocusSection,
   onBlurSection,
+  onSelectionChangeSection,
   hideVisibility = false,
 }) => {
   const [inputHeights, setInputHeights] = useState<Record<string, number>>({});
@@ -237,6 +239,11 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
                 }}
                 onFocus={() => {
                   if (sectionId) onFocusSection?.(sectionId);
+                }}
+                onSelectionChange={(e) => {
+                  if (!sectionId) return;
+                  const { start, end } = e.nativeEvent.selection;
+                  onSelectionChangeSection?.(sectionId, start, end);
                 }}
                 onBlur={() => {
                   if (sectionId) onBlurSection?.(sectionId);

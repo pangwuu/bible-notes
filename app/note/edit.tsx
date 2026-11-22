@@ -50,8 +50,10 @@ import {
   formatVerseReferenceTag,
   extractVerseReferences,
   syncSectionVerseReferencesFromContent,
-  appendVerseTagOnNearestClearLine,
+  insertVerseTag,
+  removeVerseTag,
 } from '../../src/utils/verseLinkUtils';
+import { useEditorPreferences } from '../../src/hooks/useEditorPreferences';
 import { findCanonicalBook } from '../../src/constants/bibleData';
 import { createPassageReference, formatSegmentDisplay } from '../../src/utils/passageParser';
 import { useReaderFontSize } from '../../src/hooks/useReaderFontSize';
@@ -72,6 +74,8 @@ export default function NoteEditScreen() {
     verseEnd?: string;
   }>();
   const { user, profile } = useAuth();
+  const { verseTagPlacement } = useEditorPreferences();
+  const sectionCursorRef = useRef<Record<string, number>>({});
 
   const [loading, setLoading] = useState<boolean>(!!id);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -328,9 +332,17 @@ export default function NoteEditScreen() {
 
       const currentContent = targetSec.content || '';
       const hasTag = currentContent.includes(tag);
-      const updatedContent = hasTag
-        ? currentContent
-        : appendVerseTagOnNearestClearLine(currentContent, tag);
+      let updatedContent = currentContent;
+      if (!hasTag) {
+        const inserted = insertVerseTag(
+          currentContent,
+          tag,
+          verseTagPlacement,
+          sectionCursorRef.current[sectionId]
+        );
+        updatedContent = inserted.content;
+        sectionCursorRef.current[sectionId] = inserted.cursorAfter;
+      }
 
       const copy = [...prev];
       copy[secIdx] = {
@@ -347,7 +359,7 @@ export default function NoteEditScreen() {
       revealSectionTail(sectionId);
       pendingRevealSectionId.current = null;
     }, 50);
-  }, [passage, revealSectionTail]);
+  }, [passage, revealSectionTail, verseTagPlacement]);
 
   const handleAddPassageSegment = useCallback((segment: PassageSegment) => {
     setPassage((prev) => {
@@ -378,19 +390,23 @@ export default function NoteEditScreen() {
       const rawTag = (refToRemove as any).raw;
       const updatedRefs = targetSec.verseReferences.filter((_, idx) => idx !== referenceIndex);
 
-      let updatedContent = targetSec.content || '';
-      if (rawTag && updatedContent.includes(rawTag)) {
-        updatedContent = updatedContent.replace(rawTag, '').trim();
-      } else if (generatedTag && updatedContent.includes(generatedTag)) {
-        updatedContent = updatedContent.replace(generatedTag, '').trim();
-      } else {
-        // Fallback: match tags for startVerse-endVerse
-        const fallbackRegex = new RegExp(
+      const originalContent = targetSec.content || '';
+      const fallbackMatch = originalContent.match(
+        new RegExp(
           `\\[v\\.?\\s*${refToRemove.startVerse}(?:\\s*[-–—]\\s*${refToRemove.endVerse})?\\]`,
           'i'
-        );
-        updatedContent = updatedContent.replace(fallbackRegex, '').trim();
+        )
+      )?.[0];
+      let updatedContent = originalContent.trim();
+      for (const candidate of [rawTag, generatedTag, fallbackMatch]) {
+        if (!candidate) continue;
+        const removed = removeVerseTag(originalContent, candidate);
+        if (removed !== null) {
+          updatedContent = removed;
+          break;
+        }
       }
+      delete sectionCursorRef.current[targetSec.id];
 
       const copy = [...prev];
       copy[sectionIndex] = {
@@ -968,6 +984,9 @@ export default function NoteEditScreen() {
                 onOpenManager={() => setShowTemplateManager(true)}
               />
             }
+            onSelectionChangeSection={(sectionId, _start, end) => {
+              sectionCursorRef.current[sectionId] = end;
+            }}
             onFocusSection={(sectionId) => {
               focusedSectionIdRef.current = sectionId;
             }}

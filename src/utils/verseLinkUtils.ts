@@ -241,6 +241,93 @@ export function appendVerseTagOnNearestClearLine(currentContent: string, tag: st
   return `${currentContent}\n${tag}`;
 }
 
+export type VerseTagPlacement = 'newline' | 'inline' | 'cursor';
+
+export const DEFAULT_VERSE_TAG_PLACEMENT: VerseTagPlacement = 'newline';
+
+export function isVerseTagPlacement(value: unknown): value is VerseTagPlacement {
+  return value === 'newline' || value === 'inline' || value === 'cursor';
+}
+
+export interface VerseTagInsertResult {
+  content: string;
+  /** Caret index just after the inserted tag, so consecutive links stay in reading order. */
+  cursorAfter: number;
+}
+
+function insertAt(content: string, tag: string, index: number): VerseTagInsertResult {
+  const before = content.slice(0, index);
+  const after = content.slice(index);
+  const spaceBefore = before.length > 0 && !/\s$/.test(before) ? ' ' : '';
+  const spaceAfter = after.length > 0 && !/^\s/.test(after) ? ' ' : '';
+  const head = `${before}${spaceBefore}${tag}`;
+  return { content: `${head}${spaceAfter}${after}`, cursorAfter: head.length };
+}
+
+/**
+ * Inserts a verse tag according to the user's placement preference.
+ * - newline: tag goes on its own line at the end.
+ * - inline: tag continues the last line after a single space.
+ * - cursor: tag goes where the caret last was in this section; falls back to inline.
+ */
+export function insertVerseTag(
+  currentContent: string,
+  tag: string,
+  placement: VerseTagPlacement,
+  cursor?: number | null
+): VerseTagInsertResult {
+  const content = currentContent || '';
+  if (!tag) return { content, cursorAfter: content.length };
+
+  if (placement === 'newline') {
+    const next = appendVerseTagOnNearestClearLine(content, tag);
+    return { content: next, cursorAfter: next.length };
+  }
+
+  if (placement === 'cursor' && typeof cursor === 'number' && cursor >= 0 && cursor <= content.length) {
+    return insertAt(content, tag, cursor);
+  }
+
+  if (!content || content.endsWith('\n')) {
+    const next = `${content}${tag}`;
+    return { content: next, cursorAfter: next.length };
+  }
+  const trimmed = content.replace(/[ \t]+$/, '');
+  const next = `${trimmed} ${tag}`;
+  return { content: next, cursorAfter: next.length };
+}
+
+/**
+ * Removes one occurrence of a verse tag along with the whitespace that only existed
+ * to separate it, so inline tags don't leave double spaces and own-line tags don't
+ * leave blank lines. Returns null when the tag isn't present.
+ */
+export function removeVerseTag(content: string, tag: string): string | null {
+  if (!content || !tag) return null;
+  const idx = content.indexOf(tag);
+  if (idx < 0) return null;
+
+  let before = content.slice(0, idx);
+  let after = content.slice(idx + tag.length);
+
+  const beforeEndsSpace = / $/.test(before);
+  const afterStartsSpace = /^ /.test(after);
+  const beforeIsLineStart = before === '' || before.endsWith('\n');
+  const afterIsLineEnd = after === '' || after.startsWith('\n');
+
+  if (beforeEndsSpace && (afterStartsSpace || afterIsLineEnd)) {
+    before = before.slice(0, -1);
+  } else if (afterStartsSpace && beforeIsLineStart) {
+    after = after.slice(1);
+  } else if (beforeIsLineStart && after.startsWith('\n')) {
+    after = after.slice(1);
+  } else if (before.endsWith('\n') && after === '') {
+    before = before.slice(0, -1);
+  }
+
+  return `${before}${after}`.trim();
+}
+
 export interface LinkedVerseData {
   primary: LinkedSectionInfo;
   allSections: LinkedSectionInfo[];
