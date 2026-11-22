@@ -18,7 +18,13 @@ import {
   indexedDBLocalPersistence,
 } from 'firebase/auth';
 import { Platform } from 'react-native';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  Firestore,
+} from 'firebase/firestore';
 import safeStorage from '../utils/safeStorage';
 
 export const firebaseConfig = {
@@ -67,7 +73,26 @@ function createAuth(): Auth {
 
 export const auth: Auth = createAuth();
 
-// Idempotent Cloud Firestore instance
-export const db: Firestore = getFirestore(app);
+/**
+ * On web, keep Firestore's cache in IndexedDB so writes made offline survive a
+ * closed tab and sync on the next visit. The JS SDK has no durable cache on
+ * React Native, so native keeps the default in-memory cache (the note editor's
+ * local drafts cover that case). Falls back to getFirestore if Firestore was
+ * already initialized (Fast Refresh) or IndexedDB is unavailable.
+ */
+function createFirestore(): Firestore {
+  if (Platform.OS === 'web' && typeof indexedDB !== 'undefined') {
+    try {
+      return initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      });
+    } catch (_error) {
+      return getFirestore(app);
+    }
+  }
+  return getFirestore(app);
+}
+
+export const db: Firestore = createFirestore();
 
 export type { FirebaseApp, Auth, Firestore };

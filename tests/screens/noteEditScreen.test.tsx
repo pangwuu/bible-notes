@@ -14,6 +14,13 @@ import * as notesService from '../../src/services/notesService';
 import * as noteOverlapService from '../../src/services/noteOverlapService';
 import { Alert } from '../../src/utils/alert';
 import { Note } from '../../src/types/note';
+import safeStorage from '../../src/utils/safeStorage';
+import {
+  saveDraft,
+  loadDraft,
+  listNewNoteDrafts,
+  draftKeyForNote,
+} from '../../src/services/noteDraftStore';
 
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
@@ -40,7 +47,7 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockLocalSearchParams,
 }));
 
-let mockLocalSearchParams: { id?: string } = {};
+let mockLocalSearchParams: { id?: string; draft?: string } = {};
 
 const mockAuthUser = {
   uid: 'author_1',
@@ -136,6 +143,9 @@ describe('NoteEditScreen (app/note/edit.tsx)', () => {
     jest.clearAllMocks();
     lastNavOptions = {};
     mockLocalSearchParams = {};
+    return safeStorage.getAllKeys().then((keys) =>
+      Promise.all(keys.filter((k) => k.startsWith('note_draft')).map((k) => safeStorage.removeItem(k)))
+    );
   });
 
   test('insets the note scroll view and does not pad the iOS keyboard', async () => {
@@ -194,88 +204,191 @@ describe('NoteEditScreen (app/note/edit.tsx)', () => {
     expect(mockPush).toHaveBeenCalledWith('/bible-versions');
   });
 
-  test('shows alert prompt when leaving with unsaved dirty changes', async () => {
+  test('Done on a new note without a passage asks for one instead of losing the writing', async () => {
     const { getByPlaceholderText } = await render(<NoteEditScreen />);
 
-    // Type in note title to mark screen dirty
-    const titleInput = getByPlaceholderText('Note Title (Optional)');
     await act(async () => {
-      fireEvent.changeText(titleInput, 'Draft Title');
+      fireEvent.changeText(getByPlaceholderText('Note Title (Optional)'), 'No passage title');
     });
 
-    // Trigger headerLeft (Cancel/Back)
-    expect(lastNavOptions.headerLeft).toBeDefined();
     const HeaderLeft = lastNavOptions.headerLeft;
     const { getByText } = await render(<HeaderLeft />);
-
     await act(async () => {
-      fireEvent.press(getByText('Cancel'));
+      fireEvent.press(getByText('Done'));
     });
 
     expect(Alert.alert).toHaveBeenCalledWith(
-      'Unsaved Changes',
-      expect.stringContaining('save your notes before leaving'),
+      'Choose a passage to save',
+      expect.stringContaining('kept on this device'),
       expect.arrayContaining([
-        expect.objectContaining({ text: 'Cancel' }),
-        expect.objectContaining({ text: 'Discard' }),
-        expect.objectContaining({ text: 'Save' }),
+        expect.objectContaining({ text: 'Choose passage' }),
+        expect.objectContaining({ text: 'Keep as draft' }),
+        expect.objectContaining({ text: 'Discard note' }),
       ])
     );
+    expect(notesService.createNote).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
   });
 
-  test('validates passage requirement before saving', async () => {
-    const { getByText, getByPlaceholderText } = await render(<NoteEditScreen />);
-
-    // Enter note title but leave passage null
-    const titleInput = getByPlaceholderText('Note Title (Optional)');
+  test('Done on an untouched new note just leaves', async () => {
+    await render(<NoteEditScreen />);
+    const HeaderLeft = lastNavOptions.headerLeft;
+    const { getByText } = await render(<HeaderLeft />);
     await act(async () => {
-      fireEvent.changeText(titleInput, 'No passage title');
-    });
-
-    // Trigger headerRight (Save)
-    expect(lastNavOptions.headerRight).toBeDefined();
-    const HeaderRight = lastNavOptions.headerRight;
-    const { getByText: getBySaveText } = await render(<HeaderRight />);
-
-    await act(async () => {
-      fireEvent.press(getBySaveText('Save'));
-    });
-
-    // Error banner displayed in screen
-    await waitFor(() => {
-      expect(getByText(/Please select a scripture passage before saving/)).toBeTruthy();
+      fireEvent.press(getByText('Done'));
     });
     expect(notesService.createNote).not.toHaveBeenCalled();
+    expect(mockBack).toHaveBeenCalled();
   });
 
-  test('saves note and dispatches friend overlap notifications', async () => {
+  test('Done syncs an edited existing note and leaves', async () => {
     mockLocalSearchParams = { id: 'existing_note_123' };
     (notesService.getNote as jest.Mock).mockResolvedValueOnce(mockExistingNote);
-    (notesService.updateNote as jest.Mock).mockResolvedValueOnce(mockExistingNote);
+    (notesService.updateNote as jest.Mock).mockResolvedValue(mockExistingNote);
 
     const { getByDisplayValue } = await render(<NoteEditScreen />);
-
-    await waitFor(() => {
-      expect(getByDisplayValue('God works for good')).toBeTruthy();
-    });
-
-    // Trigger headerRight (Save)
-    expect(lastNavOptions.headerRight).toBeDefined();
-    const HeaderRight = lastNavOptions.headerRight;
-    const { getByText: getBySaveText } = await render(<HeaderRight />);
+    await waitFor(() => expect(getByDisplayValue('My Romans Study')).toBeTruthy());
 
     await act(async () => {
-      fireEvent.press(getBySaveText('Save'));
+      fireEvent.changeText(getByDisplayValue('My Romans Study'), 'Romans, revised');
+    });
+
+    const HeaderLeft = lastNavOptions.headerLeft;
+    const { getByText } = await render(<HeaderLeft />);
+    await act(async () => {
+      fireEvent.press(getByText('Done'));
     });
 
     await waitFor(() => {
       expect(notesService.updateNote).toHaveBeenCalledWith(
         'existing_note_123',
-        expect.objectContaining({
-          title: 'My Romans Study',
-          visibility: 'friends',
-        })
+        expect.objectContaining({ title: 'Romans, revised', visibility: 'friends' })
       );
+      expect(mockBack).toHaveBeenCalled();
     });
+  });
+
+  test('autosaves an existing note without pressing Done', async () => {
+    mockLocalSearchParams = { id: 'existing_note_123' };
+    (notesService.getNote as jest.Mock).mockResolvedValueOnce(mockExistingNote);
+    (notesService.updateNote as jest.Mock).mockResolvedValue(mockExistingNote);
+
+    const { getByDisplayValue } = await render(<NoteEditScreen />);
+    await waitFor(() => expect(getByDisplayValue('God works for good')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.changeText(getByDisplayValue('God works for good'), 'God works all things for good');
+    });
+
+    await waitFor(
+      () => {
+        expect(notesService.updateNote).toHaveBeenCalledWith(
+          'existing_note_123',
+          expect.objectContaining({
+            sections: expect.arrayContaining([
+              expect.objectContaining({ id: 'light', content: 'God works all things for good' }),
+            ]),
+          })
+        );
+      },
+      { timeout: 6000 }
+    );
+    expect(mockBack).not.toHaveBeenCalled();
+  }, 10000);
+
+  test('keeps a device draft of a new note while typing', async () => {
+    const { getByPlaceholderText } = await render(<NoteEditScreen />);
+    await act(async () => {
+      fireEvent.changeText(getByPlaceholderText('Note Title (Optional)'), 'Half-written thought');
+    });
+
+    await waitFor(
+      async () => {
+        const drafts = await listNewNoteDrafts('author_1');
+        expect(drafts[0]?.payload.title).toBe('Half-written thought');
+      },
+      { timeout: 3000 }
+    );
+    expect(notesService.createNote).not.toHaveBeenCalled();
+  });
+
+  test('offers to resume an unfinished new note', async () => {
+    await saveDraft({
+      key: 'note_draft:author_1:new:test1',
+      payload: {
+        title: 'Recovered title',
+        passage: mockExistingNote.passage,
+        templateId: 'swedish',
+        sections: mockExistingNote.sections!,
+        tags: [],
+        visibility: 'friends',
+      },
+      savedAt: Date.now(),
+    });
+
+    const { findByText, getByText, getByDisplayValue } = await render(<NoteEditScreen />);
+    expect(await findByText(/Unfinished note on Romans 8:28/)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByText('Resume'));
+    });
+    expect(getByDisplayValue('Recovered title')).toBeTruthy();
+  });
+
+  test('restores unsynced changes when reopening an existing note', async () => {
+    mockLocalSearchParams = { id: 'existing_note_123' };
+    (notesService.getNote as jest.Mock).mockResolvedValueOnce(mockExistingNote);
+    (notesService.updateNote as jest.Mock).mockResolvedValue(mockExistingNote);
+    await saveDraft({
+      key: draftKeyForNote('author_1', 'existing_note_123'),
+      noteId: 'existing_note_123',
+      payload: {
+        title: 'Edited offline',
+        passage: mockExistingNote.passage,
+        templateId: 'swedish',
+        sections: mockExistingNote.sections!,
+        tags: mockExistingNote.tags,
+        visibility: 'friends',
+      },
+      savedAt: Date.now(),
+      lastKnownServerAt: mockExistingNote.updated_at as number,
+    });
+
+    const { findByText, getByDisplayValue } = await render(<NoteEditScreen />);
+    expect(await findByText(/Restored changes that had not synced/)).toBeTruthy();
+    expect(getByDisplayValue('Edited offline')).toBeTruthy();
+  });
+
+  test('Done creates a new note once and notifies friends', async () => {
+    await saveDraft({
+      key: 'note_draft:author_1:new:create1',
+      payload: {
+        title: 'Fresh note',
+        passage: mockExistingNote.passage,
+        templateId: 'swedish',
+        sections: mockExistingNote.sections!,
+        tags: [],
+        visibility: 'friends',
+      },
+      savedAt: Date.now(),
+    });
+    mockLocalSearchParams = { draft: 'note_draft:author_1:new:create1' } as any;
+    (notesService.createNote as jest.Mock).mockResolvedValue({ ...mockExistingNote, id: 'created_1' });
+
+    const { findByDisplayValue } = await render(<NoteEditScreen />);
+    await findByDisplayValue('Fresh note');
+
+    const HeaderLeft = lastNavOptions.headerLeft;
+    const { getByText } = await render(<HeaderLeft />);
+    await act(async () => {
+      fireEvent.press(getByText('Done'));
+    });
+
+    await waitFor(() => {
+      expect(notesService.createNote).toHaveBeenCalledTimes(1);
+      expect(noteOverlapService.notifyFriendsOfNoteOverlap).toHaveBeenCalledTimes(1);
+      expect(mockBack).toHaveBeenCalled();
+    });
+    expect(await loadDraft('note_draft:author_1:new:create1')).toBeNull();
   });
 });

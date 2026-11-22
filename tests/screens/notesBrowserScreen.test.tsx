@@ -179,3 +179,34 @@ describe('NotesBrowserScreen loading and error states', () => {
     await waitFor(() => expect(getByText(/Couldn't refresh your notes/i)).toBeTruthy());
   });
 });
+
+describe('NotesBrowserScreen unfinished drafts', () => {
+  it('lists unfinished new-note drafts and resumes them in the editor', async () => {
+    const { saveDraft } = require('../../src/services/noteDraftStore');
+    await saveDraft({
+      key: 'note_draft:user_123:new:abc',
+      payload: {
+        title: 'Half done',
+        passage: mockNotes[0].passage,
+        templateId: 'swedish',
+        sections: [{ id: 'light', title: 'Key Idea', content: 'Some thoughts' }],
+        tags: [],
+        visibility: 'friends',
+      },
+      savedAt: Date.now(),
+    });
+    (notesService.getUserNotes as jest.Mock).mockResolvedValue(mockNotes);
+
+    const { findByText, getByLabelText } = await render(<NotesBrowserScreen />);
+    expect(await findByText('Unfinished note')).toBeTruthy();
+    expect(await findByText('Half done')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Resume unfinished note'));
+    });
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/note/edit',
+      params: { draft: 'note_draft:user_123:new:abc' },
+    });
+  });
+});

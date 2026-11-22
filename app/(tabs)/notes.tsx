@@ -23,6 +23,7 @@ import NoteCard from '../../src/components/NoteCard';
 import EmptyState from '../../src/components/EmptyState';
 import AddNoteFAB from '../../src/components/AddNoteFAB';
 import { findCanonicalBook, CANONICAL_BOOKS } from '../../src/constants/bibleData';
+import { NoteDraft, listNewNoteDrafts, clearDraft } from '../../src/services/noteDraftStore';
 
 export default function NotesBrowserScreen() {
   const router = useRouter();
@@ -32,12 +33,22 @@ export default function NotesBrowserScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<boolean>(false);
+  const [drafts, setDrafts] = useState<NoteDraft[]>([]);
   const [viewMode, setViewMode] = useState<'book' | 'tag'>('book');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
   const loadNotes = useCallback(async () => {
     if (!user?.uid) return;
+    listNewNoteDrafts(user.uid)
+      .then((found) =>
+        setDrafts((prev) =>
+          prev.length === found.length && prev.every((d, i) => d.key === found[i].key && d.savedAt === found[i].savedAt)
+            ? prev
+            : found
+        )
+      )
+      .catch(() => {});
     try {
       const data = await notesService.getUserNotes(user.uid);
       setNotes(data);
@@ -49,7 +60,7 @@ export default function NotesBrowserScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user]);
+  }, [user?.uid]);
 
   // Re-fetch notes every time screen regains focus (e.g. after deleting or editing a note)
   useFocusEffect(
@@ -218,6 +229,38 @@ export default function NotesBrowserScreen() {
           </View>
         )}
 
+        {drafts.map((draft) => (
+          <View key={draft.key} style={styles.draftCard}>
+            <Ionicons name="create-outline" size={18} color={colors.accent.keyIdea} />
+            <View style={styles.draftTextCol}>
+              <Text style={styles.draftTitle}>Unfinished note</Text>
+              <Text style={styles.draftMeta} numberOfLines={1}>
+                {draft.payload.title.trim() ||
+                  (draft.payload.passage ? formatPassageDisplay(draft.payload.passage) : 'No passage yet')}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => {
+                clearDraft(draft.key);
+                setDrafts((prev) => prev.filter((d) => d.key !== draft.key));
+              }}
+              style={styles.draftButton}
+              accessibilityRole="button"
+              accessibilityLabel="Discard unfinished note"
+            >
+              <Text style={[styles.draftButtonText, styles.draftButtonMuted]}>Discard</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => router.push({ pathname: '/note/edit', params: { draft: draft.key } })}
+              style={styles.draftButton}
+              accessibilityRole="button"
+              accessibilityLabel="Resume unfinished note"
+            >
+              <Text style={styles.draftButtonText}>Resume</Text>
+            </Pressable>
+          </View>
+        ))}
+
         {loading && notes.length === 0 ? (
           <View accessibilityLabel="Loading notes" accessibilityRole="progressbar">
             {[0, 1, 2, 3].map((i) => (
@@ -306,6 +349,44 @@ const styles = StyleSheet.create({
   container: {
     padding: spacing.md,
     paddingBottom: 80,
+  },
+  draftCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    backgroundColor: colors.bg.surface,
+    borderRadius: radii.content,
+    borderWidth: 1,
+    borderColor: colors.border.hairline,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent.keyIdea,
+  },
+  draftTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  draftTitle: {
+    ...typography.label,
+    color: colors.text.primary,
+  },
+  draftMeta: {
+    ...typography.caption,
+    color: colors.text.secondary,
+  },
+  draftButton: {
+    minHeight: 36,
+    paddingHorizontal: spacing.sm,
+    justifyContent: 'center',
+  },
+  draftButtonText: {
+    ...typography.label,
+    color: colors.accent.keyIdea,
+    fontWeight: '600',
+  },
+  draftButtonMuted: {
+    color: colors.text.secondary,
   },
   errorRow: {
     flexDirection: 'row',
