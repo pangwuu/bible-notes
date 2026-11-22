@@ -191,7 +191,7 @@ describe('BibleReader Decomposed Sub-Components', () => {
       const tree = (VerseActionBar as any)(element.props);
       const text = extractNormalizedText(tree);
       expect(text).toContain('v. 1–3 selected');
-      expect(text).toContain('Share');
+      expect(JSON.stringify(tree)).toContain('Share selected verses');
       expect(text).toContain('Jump to Key Idea');
       expect(text).toContain('Note in:');
       expect(text).toContain('Key Idea');
