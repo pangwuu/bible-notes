@@ -4,11 +4,9 @@
 
 import React from 'react';
 import { BibleReaderHeader } from '../../src/components/bibleReader/BibleReaderHeader';
-import { TranslationSelector } from '../../src/components/bibleReader/TranslationSelector';
 import { VerseItem } from '../../src/components/bibleReader/VerseItem';
 import { VerseActionBar } from '../../src/components/bibleReader/VerseActionBar';
 import { ScriptureView } from '../../src/components/bibleReader/ScriptureView';
-import { SUPPORTED_TRANSLATIONS } from '../../src/services/bibleService';
 
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: () => null,
@@ -50,30 +48,6 @@ describe('BibleReader Decomposed Sub-Components', () => {
       expect(typeof tree.props.onPress).toBe('function');
       tree.props.onPress();
       expect(onToggleCollapse).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('TranslationSelector', () => {
-    it('renders all supported translation pills and handles selection', () => {
-      const onSelect = jest.fn();
-      const element = (
-        <TranslationSelector
-          selectedTranslation="ESV"
-          onSelectTranslation={onSelect}
-        />
-      );
-
-      const tree = (TranslationSelector as any)(element.props);
-      const text = extractNormalizedText(tree);
-
-      for (const t of SUPPORTED_TRANSLATIONS) {
-        expect(text).toContain(t.shortName);
-      }
-
-      const pills = tree.props.children;
-      expect(pills.length).toBe(SUPPORTED_TRANSLATIONS.length);
-      pills[1].props.onPress();
-      expect(onSelect).toHaveBeenCalledWith(SUPPORTED_TRANSLATIONS[1].id);
     });
   });
 

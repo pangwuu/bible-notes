@@ -162,8 +162,8 @@ export default function NotesBrowserScreen() {
           value={viewMode}
           onValueChange={(val) => setViewMode(val as 'book' | 'tag')}
           buttons={[
-            { value: 'book', label: 'By Book' },
-            { value: 'tag', label: 'By Tag' },
+            { value: 'book', label: 'By book' },
+            { value: 'tag', label: 'By tag' },
           ]}
           style={styles.segmentedButtons}
         />

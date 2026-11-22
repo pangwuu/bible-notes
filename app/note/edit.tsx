@@ -389,7 +389,7 @@ export default function NoteEditScreen() {
 
       highlightTimerRef.current = setTimeout(() => {
         setTargetHighlightedVerse(null);
-      }, 10000);
+      }, 4000);
     },
   });
 
@@ -701,7 +701,7 @@ export default function NoteEditScreen() {
       }
 
       Alert.alert(
-        'Switch Template?',
+        'Switch template?',
         'Do you want to keep your current text in the new template or discard it?',
         [
           { text: 'Cancel', style: 'cancel' },
@@ -715,7 +715,7 @@ export default function NoteEditScreen() {
             },
           },
           {
-            text: 'Keep Text',
+            text: 'Keep text',
             onPress: () => {
               const latest = sectionsRef.current;
               const newSections: NoteSectionValue[] = targetTemplate.sections.map((sec, idx) => ({
@@ -793,12 +793,12 @@ export default function NoteEditScreen() {
 
           if (hasRemovedSections || hasReordered) {
             Alert.alert(
-              'Section Changes',
+              'Section changes',
               'Some sections with text were removed or reordered. Existing text will be preserved where possible.',
               [
                 { text: 'Cancel', style: 'cancel' },
                 {
-                  text: 'Keep My Text',
+                  text: 'Keep my text',
                   onPress: () => applyTemplatePreservingContent(template, sections),
                 },
               ]
@@ -827,11 +827,11 @@ export default function NoteEditScreen() {
           const hasContent = sections.some((s) => s.content.trim().length > 0);
           if (hasContent) {
             Alert.alert(
-              'Template Deleted',
+              'Template deleted',
               'The active template was deleted. Your note has been switched to the default template with your text preserved.',
               [
                 {
-                  text: 'Keep My Text',
+                  text: 'Keep my text',
                   onPress: () => applyTemplatePreservingContent(DEFAULT_TEMPLATE, sections),
                 },
               ]
@@ -1364,9 +1364,9 @@ export default function NoteEditScreen() {
             accessibilityLabel="Select passage reference"
           >
             <View style={styles.pickerTextColumn}>
-              <Text style={styles.pickerLabel}>Passage Reference</Text>
+              <Text style={styles.pickerLabel}>Passage</Text>
               <Text style={[styles.pickerValue, !passage && styles.pickerValueEmpty]}>
-                {passage ? formatPassageDisplay(passage) : 'Tap to select passage...'}
+                {passage ? formatPassageDisplay(passage) : 'Choose a passage'}
               </Text>
             </View>
           </Pressable>
@@ -1380,11 +1380,11 @@ export default function NoteEditScreen() {
               setTitle(val);
               setIsDirty(true);
             }}
-            placeholder="Note Title (Optional)"
+            placeholder="Title (optional)"
             placeholderTextColor={colors.text.secondary}
             style={styles.titleInput}
             maxLength={100}
-            accessibilityLabel="Note Title"
+            accessibilityLabel="Note title"
           />
         </View>
 
@@ -1644,7 +1644,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   container: {
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.md,
     paddingTop: spacing.xs,
     paddingBottom: 200, // Consistent 200px whitespace for keyboard clearance & tags menu
   },
@@ -1711,14 +1711,18 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
   errorBanner: {
-    backgroundColor: colors.accent.danger,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.bg.surface,
+    borderRadius: radii.content,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent.danger,
   },
   errorText: {
     ...typography.caption,
-    color: colors.bg.base,
-    textAlign: 'center',
+    color: colors.text.primary,
   },
   passageCardRow: {
     flexDirection: 'row',
@@ -1730,13 +1734,10 @@ const styles = StyleSheet.create({
     marginVertical: spacing.xs,
   },
   titleInput: {
-    backgroundColor: colors.bg.surfaceRaised,
-    borderRadius: radii.controls,
-    paddingHorizontal: spacing.md,
-    paddingVertical: Platform.OS === 'ios' ? spacing.sm + 2 : 0,
-    borderWidth: 1,
-    borderColor: colors.border.hairline,
-    fontSize: 16,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 0,
+    paddingVertical: Platform.OS === 'ios' ? spacing.sm : 0,
+    fontSize: typography.title.fontSize,
     fontWeight: '600',
     fontFamily: typography.body.fontFamily,
     color: colors.text.primary,

@@ -7,7 +7,7 @@ export {
 } from './types';
 export { useBibleReader } from './useBibleReader';
 export { BibleReaderHeader } from './BibleReaderHeader';
-export { TranslationSelector } from './TranslationSelector';
+export { TranslationSheet } from './TranslationSheet';
 export { VerseItem } from './VerseItem';
 export { VerseActionBar } from './VerseActionBar';
 export { ScriptureView } from './ScriptureView';

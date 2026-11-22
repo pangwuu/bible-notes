@@ -142,7 +142,7 @@ describe('NotesBrowserScreen (app/(tabs)/notes.tsx)', () => {
 
     // Switch to By Tag mode
     await act(async () => {
-      fireEvent.press(getByText('By Tag'));
+      fireEvent.press(getByText('By tag'));
     });
 
     // Filter by tag pill "#creation (1)"

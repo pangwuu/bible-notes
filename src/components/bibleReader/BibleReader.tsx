@@ -1,12 +1,12 @@
-import React, { useCallback, useContext, useEffect } from 'react';
-import { View, StyleSheet, Pressable, Keyboard } from 'react-native';
+import React, { useCallback, useContext, useEffect, useState } from 'react';
+import { View, StyleSheet, Keyboard } from 'react-native';
 import { NavigationContext } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius } from '../../constants/theme';
 import { BibleReaderProps, SYSTEM_FONTS, buildScriptureHtml, SectionOption } from './types';
 import { useBibleReader } from './useBibleReader';
 import { BibleReaderHeader } from './BibleReaderHeader';
-import { TranslationSelector } from './TranslationSelector';
+import { TranslationSheet } from './TranslationSheet';
+import { getVersionMetadata } from '../../constants/bibleVersions';
 import { VerseActionBar } from './VerseActionBar';
 import { DockedActionBar } from './DockedActionBar';
 import { ScriptureView } from './ScriptureView';
@@ -30,12 +30,13 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
     onDockedActionBarHeightChange,
   } = props;
   const isDocked = actionBarPlacement === 'docked';
+  const [translationSheetOpen, setTranslationSheetOpen] = useState(false);
+  const [textSizeOpen, setTextSizeOpen] = useState(false);
 
   const {
     selectedVersionId,
     setSelectedVersionId,
     selectedTranslation,
-    setSelectedTranslation,
     passageResult,
     loading,
     collapsed,
@@ -117,38 +118,17 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
           passageDisplay={passageDisplay}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed(!collapsed)}
+          translationLabel={getVersionMetadata(selectedVersionId).shortName}
+          onOpenTranslations={() => setTranslationSheetOpen(true)}
+          onToggleTextSize={onFontSizeChange ? () => setTextSizeOpen((open) => !open) : undefined}
+          textSizeOpen={textSizeOpen}
         />
 
         {!collapsed && (
           <View style={styles.contentBody}>
-            <View style={styles.translationRow}>
-              <View style={styles.translationSelectorWrapper}>
-                <TranslationSelector
-                  selectedTranslation={selectedTranslation}
-                  selectedVersionId={selectedVersionId}
-                  onSelectTranslation={setSelectedTranslation}
-                  onSelectVersion={setSelectedVersionId}
-                />
-              </View>
-              {onOpenVersionGuide && (
-                <Pressable
-                  onPress={onOpenVersionGuide}
-                  style={styles.versionGuideButton}
-                  accessibilityRole="button"
-                  accessibilityLabel="About Bible versions"
-                  hitSlop={8}
-                >
-                  <Ionicons name="information-circle-outline" size={20} color={colors.text.secondary} />
-                </Pressable>
-              )}
-            </View>
-
-            {onFontSizeChange && (
+            {onFontSizeChange && textSizeOpen && (
               <View style={styles.readerControlsRow}>
-                <FontSizeControls
-                  initialSize={fontSize}
-                  onSizeChange={onFontSizeChange}
-                />
+                <FontSizeControls initialSize={fontSize} onSizeChange={onFontSizeChange} />
               </View>
             )}
 
@@ -182,6 +162,14 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
         </DockedActionBar>
       )}
 
+      <TranslationSheet
+        visible={translationSheetOpen}
+        selectedVersionId={selectedVersionId}
+        onSelect={setSelectedVersionId}
+        onClose={() => setTranslationSheetOpen(false)}
+        onOpenVersionGuide={onOpenVersionGuide}
+      />
+
       <CrossReferencesSheet
         visible={crossRefSheetVisible}
         onClose={closeCrossReferences}
@@ -213,22 +201,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border.hairline,
   },
-  translationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  translationSelectorWrapper: {
-    flex: 1,
-  },
-  versionGuideButton: {
-    padding: spacing.xs,
-  },
   readerControlsRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
-    marginBottom: spacing.xs,
+    paddingTop: spacing.sm,
   },
 });
 

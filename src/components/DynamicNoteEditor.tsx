@@ -290,7 +290,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.sm,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -309,7 +308,7 @@ const styles = StyleSheet.create({
   visibilityToggle: {
     flexDirection: 'row',
     backgroundColor: colors.bg.surface,
-    borderRadius: 9999,
+    borderRadius: radii.controls,
     padding: 2,
     borderWidth: 1,
     borderColor: colors.border.hairline,
@@ -317,9 +316,10 @@ const styles = StyleSheet.create({
   visOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.sm,
+    minHeight: 32,
+    paddingHorizontal: spacing.sm + 4,
     paddingVertical: 4,
-    borderRadius: 9999,
+    borderRadius: radii.controls,
     gap: 4,
   },
   visOptionActive: {
@@ -339,9 +339,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border.hairline,
     marginVertical: spacing.sm,
   },
-  section: {
-    paddingHorizontal: spacing.sm,
-  },
+  section: {},
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -92,8 +92,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border.hairline,
   },
   fontBtn: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    minWidth: 36,
+    minHeight: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   fontBtnText: {
     fontSize: 15,

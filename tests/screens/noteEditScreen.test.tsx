@@ -172,8 +172,8 @@ describe('NoteEditScreen (app/note/edit.tsx)', () => {
     expect(getByText('Key Idea')).toBeTruthy();
     expect(getByText('Question')).toBeTruthy();
     expect(getByText('Application')).toBeTruthy();
-    expect(getByText('Tap to select passage...')).toBeTruthy();
-    expect(getByPlaceholderText('Note Title (Optional)')).toBeTruthy();
+    expect(getByText('Choose a passage')).toBeTruthy();
+    expect(getByPlaceholderText('Title (optional)')).toBeTruthy();
   });
 
   test('loads existing note by id and populates title, passage, and sections', async () => {
@@ -196,6 +196,10 @@ describe('NoteEditScreen (app/note/edit.tsx)', () => {
 
     const { findByLabelText } = await render(<NoteEditScreen />);
 
+    const translationButton = await findByLabelText(/Change translation/);
+    await act(async () => {
+      fireEvent.press(translationButton);
+    });
     const guideButton = await findByLabelText('About Bible versions');
     await act(async () => {
       fireEvent.press(guideButton);
@@ -208,7 +212,7 @@ describe('NoteEditScreen (app/note/edit.tsx)', () => {
     const { getByPlaceholderText } = await render(<NoteEditScreen />);
 
     await act(async () => {
-      fireEvent.changeText(getByPlaceholderText('Note Title (Optional)'), 'No passage title');
+      fireEvent.changeText(getByPlaceholderText('Title (optional)'), 'No passage title');
     });
 
     const HeaderLeft = lastNavOptions.headerLeft;
@@ -299,7 +303,7 @@ describe('NoteEditScreen (app/note/edit.tsx)', () => {
   test('keeps a device draft of a new note while typing', async () => {
     const { getByPlaceholderText } = await render(<NoteEditScreen />);
     await act(async () => {
-      fireEvent.changeText(getByPlaceholderText('Note Title (Optional)'), 'Half-written thought');
+      fireEvent.changeText(getByPlaceholderText('Title (optional)'), 'Half-written thought');
     });
 
     await waitFor(
