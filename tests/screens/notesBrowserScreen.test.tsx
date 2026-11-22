@@ -158,3 +158,24 @@ describe('NotesBrowserScreen (app/(tabs)/notes.tsx)', () => {
     expect(queryByText('Justification by Faith')).toBeNull();
   });
 });
+
+describe('NotesBrowserScreen loading and error states', () => {
+  it('does not claim there are no notes while the first fetch is pending', async () => {
+    const resolvers: Array<(notes: Note[]) => void> = [];
+    (notesService.getUserNotes as jest.Mock).mockImplementation(
+      () => new Promise<Note[]>((resolve) => { resolvers.push(resolve); })
+    );
+    const { queryByText, getByLabelText } = await render(<NotesBrowserScreen />);
+    expect(getByLabelText('Loading notes')).toBeTruthy();
+    expect(queryByText(/No notes found/i)).toBeNull();
+    (notesService.getUserNotes as jest.Mock).mockResolvedValue([]);
+    await act(async () => resolvers.forEach((r) => r([])));
+    await waitFor(() => expect(queryByText(/No notes found/i)).toBeTruthy());
+  });
+
+  it('shows an inline message when the fetch fails', async () => {
+    (notesService.getUserNotes as jest.Mock).mockRejectedValue(new Error('offline'));
+    const { getByText } = await render(<NotesBrowserScreen />);
+    await waitFor(() => expect(getByText(/Couldn't refresh your notes/i)).toBeTruthy());
+  });
+});

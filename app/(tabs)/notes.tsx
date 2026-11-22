@@ -31,6 +31,7 @@ export default function NotesBrowserScreen() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'book' | 'tag'>('book');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
@@ -40,8 +41,10 @@ export default function NotesBrowserScreen() {
     try {
       const data = await notesService.getUserNotes(user.uid);
       setNotes(data);
+      setLoadError(false);
     } catch {
-      // Retain existing cached notes
+      // Keep whatever notes are already on screen; just tell the user the refresh failed.
+      setLoadError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -206,7 +209,26 @@ export default function NotesBrowserScreen() {
           </View>
         )}
 
-        {filteredNotes.length === 0 ? (
+        {loadError && (
+          <View style={styles.errorRow} accessibilityLiveRegion="polite">
+            <Ionicons name="cloud-offline-outline" size={16} color={colors.text.secondary} />
+            <Text style={styles.errorText}>
+              Couldn't refresh your notes. Pull down to try again.
+            </Text>
+          </View>
+        )}
+
+        {loading && notes.length === 0 ? (
+          <View accessibilityLabel="Loading notes" accessibilityRole="progressbar">
+            {[0, 1, 2, 3].map((i) => (
+              <View key={i} style={styles.skeletonCard}>
+                <View style={[styles.skeletonLine, styles.skeletonTitle]} />
+                <View style={styles.skeletonLine} />
+                <View style={[styles.skeletonLine, styles.skeletonShort]} />
+              </View>
+            ))}
+          </View>
+        ) : filteredNotes.length === 0 ? (
           notes.length > 0 ? (
             <EmptyState
               icon="search-outline"
@@ -284,6 +306,44 @@ const styles = StyleSheet.create({
   container: {
     padding: spacing.md,
     paddingBottom: 80,
+  },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
+    backgroundColor: colors.bg.surface,
+    borderRadius: radii.content,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent.danger,
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.text.secondary,
+    flex: 1,
+  },
+  skeletonCard: {
+    backgroundColor: colors.bg.surface,
+    borderRadius: radii.content,
+    borderWidth: 1,
+    borderColor: colors.border.hairline,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  skeletonLine: {
+    height: 10,
+    borderRadius: 2,
+    backgroundColor: colors.bg.surfaceRaised,
+  },
+  skeletonTitle: {
+    width: '45%',
+    height: 14,
+  },
+  skeletonShort: {
+    width: '70%',
   },
   tagPillRow: {
     flexDirection: 'row',
