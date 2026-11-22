@@ -46,7 +46,8 @@ import type { NoteVisibility, BibleTranslation } from '../../src/types/user';
 export default function SettingsScreen() {
   const { user, profile, signOut } = useAuth();
   const router = useRouter();
-  const { verseTagPlacement, setVerseTagPlacement } = useEditorPreferences();
+  const { verseTagPlacement, setVerseTagPlacement, autoScrollOnLink, setAutoScrollOnLink } =
+    useEditorPreferences();
   const { downloadTranslation, progress, activeDownload, isDownloading } =
     useDownloadTranslation();
 
@@ -380,6 +381,24 @@ export default function SettingsScreen() {
 
       <Text style={styles.sectionHeader}>Note editor</Text>
       <View style={styles.card}>
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleTextContainer}>
+            <Text style={styles.cardTitle}>Move to note after linking</Text>
+            <Text style={styles.cardDescription}>
+              After you link a verse to a section, scroll down to that section. Turn off to stay on
+              the passage and link several verses in a row.
+            </Text>
+          </View>
+          <Switch
+            value={autoScrollOnLink}
+            onValueChange={setAutoScrollOnLink}
+            color={colors.accentKeyIdea}
+            accessibilityLabel="Move to note after linking"
+          />
+        </View>
+
+        <Divider style={styles.innerDivider} />
+
         <Text style={styles.cardTitle}>Linked verse placement</Text>
         <Text style={styles.cardDescription}>{PLACEMENT_HELP[verseTagPlacement]}</Text>
         <SegmentedButtons

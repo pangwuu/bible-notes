@@ -31,6 +31,9 @@ const VerseItemComponent: React.FC<VerseItemProps> = ({
     <Text
       onLayout={onLayout}
       onPress={() => onToggle(verse.verseNumber)}
+      accessibilityRole="button"
+      accessibilityState={{ selected: isSelected }}
+      accessibilityHint="Selects this verse to link, share or find related passages"
       style={[
         styles.verseTextUnit,
         isSelected && styles.verseSelected,

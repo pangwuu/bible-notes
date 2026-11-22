@@ -21,7 +21,7 @@ import {
 } from 'react-native';
 import { Alert } from '../../src/utils/alert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text } from 'react-native-paper';
+import { Text, Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, spacing, radii, typography, layout } from '../../src/constants/theme';
@@ -74,7 +74,16 @@ export default function NoteEditScreen() {
     verseEnd?: string;
   }>();
   const { user, profile } = useAuth();
-  const { verseTagPlacement } = useEditorPreferences();
+  const {
+    verseTagPlacement,
+    autoScrollOnLink,
+    setAutoScrollOnLink,
+    autoScrollPromptSeen,
+    markAutoScrollPromptSeen,
+  } = useEditorPreferences();
+  const [linkFeedback, setLinkFeedback] = useState<
+    { sectionId: string; sectionTitle: string; kind: 'prompt' | 'linked' } | null
+  >(null);
   const sectionCursorRef = useRef<Record<string, number>>({});
 
   const [loading, setLoading] = useState<boolean>(!!id);
@@ -184,6 +193,18 @@ export default function NoteEditScreen() {
     if (nextOffset === null) return;
     scrollViewRef.current?.scrollTo({ y: nextOffset, animated: true });
   }, []);
+
+  const scheduleRevealSection = useCallback(
+    (sectionId: string) => {
+      pendingRevealSectionId.current = sectionId;
+      setTimeout(() => {
+        if (pendingRevealSectionId.current !== sectionId) return;
+        revealSectionTail(sectionId);
+        pendingRevealSectionId.current = null;
+      }, 50);
+    },
+    [revealSectionTail]
+  );
 
   // Apply default template preference for new notes
   useEffect(() => {
@@ -353,13 +374,17 @@ export default function NoteEditScreen() {
       return copy;
     });
     setIsDirty(true);
-    pendingRevealSectionId.current = sectionId;
-    setTimeout(() => {
-      if (pendingRevealSectionId.current !== sectionId) return;
-      revealSectionTail(sectionId);
-      pendingRevealSectionId.current = null;
-    }, 50);
-  }, [passage, revealSectionTail, verseTagPlacement]);
+    const sectionTitle =
+      sectionsRef.current.find((s) => s.id === sectionId)?.title || 'your note';
+    if (autoScrollOnLink) {
+      scheduleRevealSection(sectionId);
+      if (!autoScrollPromptSeen) {
+        setLinkFeedback({ sectionId, sectionTitle, kind: 'prompt' });
+      }
+    } else {
+      setLinkFeedback({ sectionId, sectionTitle, kind: 'linked' });
+    }
+  }, [passage, verseTagPlacement, autoScrollOnLink, autoScrollPromptSeen, scheduleRevealSection]);
 
   const handleAddPassageSegment = useCallback((segment: PassageSegment) => {
     setPassage((prev) => {
@@ -957,6 +982,7 @@ export default function NoteEditScreen() {
                 }
               }}
               targetHighlightedVerse={targetHighlightedVerse}
+              actionBarPlacement="docked"
             />
           </View>
         )}
@@ -1053,6 +1079,57 @@ export default function NoteEditScreen() {
           <Ionicons name="arrow-up" size={12} color={colors.accent.keyIdea} />
         </Pressable>
       )}
+
+      {linkFeedback?.kind === 'prompt' && (
+        <View style={styles.linkPrompt} accessibilityLiveRegion="polite">
+          <Text style={styles.linkPromptText}>
+            Moved you to {linkFeedback.sectionTitle} after linking. Keep doing this?
+          </Text>
+          <Text style={styles.linkPromptHint}>You can change this anytime in Settings.</Text>
+          <View style={styles.linkPromptActions}>
+            <Pressable
+              onPress={() => {
+                setAutoScrollOnLink(false);
+                markAutoScrollPromptSeen();
+                setLinkFeedback(null);
+              }}
+              style={styles.linkPromptButton}
+              accessibilityRole="button"
+            >
+              <Text style={styles.linkPromptButtonText}>Stay on passage</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setAutoScrollOnLink(true);
+                markAutoScrollPromptSeen();
+                setLinkFeedback(null);
+              }}
+              style={[styles.linkPromptButton, styles.linkPromptButtonPrimary]}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.linkPromptButtonText, styles.linkPromptButtonTextPrimary]}>
+                Keep moving me
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      <Snackbar
+        visible={linkFeedback?.kind === 'linked'}
+        onDismiss={() => setLinkFeedback(null)}
+        duration={3500}
+        style={styles.snackbar}
+        action={{
+          label: 'View',
+          textColor: colors.accent.keyIdea,
+          onPress: () => {
+            if (linkFeedback) scheduleRevealSection(linkFeedback.sectionId);
+          },
+        }}
+      >
+        <Text style={styles.snackbarText}>Linked to {linkFeedback?.sectionTitle}</Text>
+      </Snackbar>
 
       {/* In-Place Verse Preview Modal */}
       {renderVersePreviewModal()}
@@ -1213,6 +1290,60 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 6,
     zIndex: 20,
+  },
+  linkPrompt: {
+    position: 'absolute',
+    left: spacing.sm,
+    right: spacing.sm,
+    bottom: spacing.md,
+    backgroundColor: colors.bg.surfaceRaised,
+    borderRadius: radii.sheet,
+    borderWidth: 1,
+    borderColor: colors.border.hairline,
+    padding: spacing.md,
+    gap: spacing.xs,
+    zIndex: 30,
+  },
+  linkPromptText: {
+    ...typography.label,
+    color: colors.text.primary,
+  },
+  linkPromptHint: {
+    ...typography.caption,
+    color: colors.text.secondary,
+  },
+  linkPromptActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  linkPromptButton: {
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.controls,
+    borderWidth: 1,
+    borderColor: colors.border.hairline,
+    justifyContent: 'center',
+  },
+  linkPromptButtonPrimary: {
+    backgroundColor: colors.accent.keyIdea,
+    borderColor: colors.accent.keyIdea,
+  },
+  linkPromptButtonText: {
+    ...typography.label,
+    color: colors.text.primary,
+  },
+  linkPromptButtonTextPrimary: {
+    color: colors.bg.base,
+    fontWeight: '600',
+  },
+  snackbar: {
+    backgroundColor: colors.bg.surfaceRaised,
+  },
+  snackbarText: {
+    ...typography.label,
+    color: colors.text.primary,
   },
   floatingBibleJumpText: {
     ...typography.caption,

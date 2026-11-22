@@ -20,6 +20,7 @@ interface VerseActionBarProps {
   onAttachToSection?: (verses: number[], sectionId: string, context?: { book?: string; chapter?: number }) => void;
   onOpenCrossReferences?: () => void;
   crossReferenceCount?: number;
+  variant?: 'inline' | 'docked';
 }
 
 export const VerseActionBar: React.FC<VerseActionBarProps> = ({
@@ -34,6 +35,7 @@ export const VerseActionBar: React.FC<VerseActionBarProps> = ({
   onAttachToSection,
   onOpenCrossReferences,
   crossReferenceCount = 0,
+  variant = 'inline',
 }) => {
   if (sortedSelectedVerses.length === 0) return null;
 
@@ -48,7 +50,10 @@ export const VerseActionBar: React.FC<VerseActionBarProps> = ({
   const showAttach = !!onAttachToSection && availableSections.length > 0;
 
   return (
-    <View style={styles.floatingActionBar}>
+    <View
+      style={[styles.floatingActionBar, variant === 'docked' && styles.docked]}
+      accessibilityLabel={`Actions for ${rangeLabel}`}
+    >
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
           <Ionicons name="checkmark-circle" size={15} color={colors.accent.keyIdea} />
@@ -166,6 +171,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     marginBottom: spacing.xs,
     gap: spacing.sm,
+  },
+  docked: {
+    borderRadius: radius.sheet,
+    marginTop: 0,
+    marginBottom: 0,
+    padding: spacing.md - 4,
   },
   headerRow: {
     flexDirection: 'row',

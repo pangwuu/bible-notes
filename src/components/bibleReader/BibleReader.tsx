@@ -1,5 +1,6 @@
-import React, { useCallback } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import React, { useCallback, useContext, useEffect } from 'react';
+import { View, StyleSheet, Pressable, Keyboard } from 'react-native';
+import { NavigationContext } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius } from '../../constants/theme';
 import { BibleReaderProps, SYSTEM_FONTS, buildScriptureHtml, SectionOption } from './types';
@@ -7,6 +8,7 @@ import { useBibleReader } from './useBibleReader';
 import { BibleReaderHeader } from './BibleReaderHeader';
 import { TranslationSelector } from './TranslationSelector';
 import { VerseActionBar } from './VerseActionBar';
+import { DockedActionBar } from './DockedActionBar';
 import { ScriptureView } from './ScriptureView';
 import { CrossReferencesSheet, versesForTarget } from './CrossReferencesSheet';
 import FontSizeControls from '../FontSizeControls';
@@ -24,7 +26,10 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
     onJumpToSection,
     onFontSizeChange,
     onOpenVersionGuide,
+    actionBarPlacement = 'inline',
+    onDockedActionBarHeightChange,
   } = props;
+  const isDocked = actionBarPlacement === 'docked';
 
   const {
     selectedVersionId,
@@ -56,6 +61,35 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
     crossRefTargets,
     closeCrossReferences,
   } = useBibleReader(props);
+
+  // A docked bar lives at the app root, so it must not outlive this screen's focus.
+  const navigation = useContext(NavigationContext);
+  useEffect(() => {
+    if (!isDocked || !navigation) return;
+    return navigation.addListener('blur', clearSelectedVerses);
+  }, [isDocked, navigation, clearSelectedVerses]);
+
+  const hasSelection = sortedSelectedVerses.length > 0;
+  useEffect(() => {
+    if (isDocked && hasSelection) Keyboard.dismiss();
+  }, [isDocked, hasSelection]);
+
+  const actionBar = (
+    <VerseActionBar
+      variant={isDocked ? 'docked' : 'inline'}
+      sortedSelectedVerses={sortedSelectedVerses}
+      linkedSectionsToJump={linkedSectionsToJump}
+      availableSections={availableSections}
+      targetPassage={targetPassage}
+      activeContext={activeContext}
+      onClearSelection={clearSelectedVerses}
+      onShareSelected={handleShareSelected}
+      onJumpToSection={onJumpToSection}
+      onAttachToSection={onAttachToSection}
+      onOpenCrossReferences={handleOpenCrossReferencesForSelection}
+      crossReferenceCount={selectedCrossReferenceCount}
+    />
+  );
 
   const handleAttachCrossReference = useCallback(
     (target: CrossReferenceTarget, sectionId: string) => {
@@ -133,25 +167,20 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
               onToggleVerse={handleToggleVerse}
               onRetry={handleRetry}
               onVerseLayout={props.onVerseLayout}
-              actionSlot={
-                <VerseActionBar
-                  sortedSelectedVerses={sortedSelectedVerses}
-                  linkedSectionsToJump={linkedSectionsToJump}
-                  availableSections={availableSections}
-                  targetPassage={targetPassage}
-                  activeContext={activeContext}
-                  onClearSelection={clearSelectedVerses}
-                  onShareSelected={handleShareSelected}
-                  onJumpToSection={onJumpToSection}
-                  onAttachToSection={onAttachToSection}
-                  onOpenCrossReferences={handleOpenCrossReferencesForSelection}
-                  crossReferenceCount={selectedCrossReferenceCount}
-                />
-              }
+              actionSlot={isDocked ? null : actionBar}
             />
           </View>
         )}
       </View>
+
+      {isDocked && (
+        <DockedActionBar
+          visible={hasSelection && !collapsed && !crossRefSheetVisible}
+          onHeightChange={onDockedActionBarHeightChange}
+        >
+          {actionBar}
+        </DockedActionBar>
+      )}
 
       <CrossReferencesSheet
         visible={crossRefSheetVisible}

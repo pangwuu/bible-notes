@@ -618,6 +618,7 @@ export default function NoteDetailScreen() {
             }
           }}
           targetHighlightedVerse={targetHighlightedVerse}
+          actionBarPlacement="docked"
         />
       </View>
 
