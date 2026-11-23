@@ -6,6 +6,7 @@ import { colors, spacing, radius } from '../../constants/theme';
 import { PassageReference } from '../../types/note';
 import { formatVerseRangeLabel, LinkedSectionInfo } from '../../utils/verseLinkUtils';
 import { SectionOption } from './types';
+import { OverflowChipRow } from './OverflowChipRow';
 
 interface VerseActionBarProps {
   sortedSelectedVerses: number[];
@@ -19,6 +20,7 @@ interface VerseActionBarProps {
   onAttachToSection?: (verses: number[], sectionId: string, context?: { book?: string; chapter?: number }) => void;
   onOpenCrossReferences?: () => void;
   crossReferenceCount?: number;
+  variant?: 'inline' | 'docked';
 }
 
 export const VerseActionBar: React.FC<VerseActionBarProps> = ({
@@ -33,6 +35,7 @@ export const VerseActionBar: React.FC<VerseActionBarProps> = ({
   onAttachToSection,
   onOpenCrossReferences,
   crossReferenceCount = 0,
+  variant = 'inline',
 }) => {
   if (sortedSelectedVerses.length === 0) return null;
 
@@ -43,60 +46,74 @@ export const VerseActionBar: React.FC<VerseActionBarProps> = ({
     sortedSelectedVerses
   );
 
+  const showJumps = linkedSectionsToJump.length > 0 && !!onJumpToSection;
+  const showAttach = !!onAttachToSection && availableSections.length > 0;
+
   return (
-    <View style={styles.floatingActionBar}>
-      <View style={styles.actionHeaderRow}>
-        <View style={styles.actionHeaderLeft}>
+    <View
+      style={[styles.floatingActionBar, variant === 'docked' && styles.docked]}
+      accessibilityLabel={`Actions for ${rangeLabel}`}
+    >
+      <View style={styles.headerRow}>
+        <View style={styles.headerLeft}>
           <Ionicons name="checkmark-circle" size={15} color={colors.accent.keyIdea} />
-          <Text style={styles.actionHeaderTitle}>{rangeLabel} selected</Text>
+          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+            {rangeLabel} selected
+          </Text>
         </View>
-        <Pressable
-          onPress={onClearSelection}
-          style={styles.actionCloseBtn}
-          hitSlop={6}
-          accessibilityLabel="Clear selection"
-        >
-          <Ionicons name="close" size={16} color={colors.text.secondary} />
-        </Pressable>
+
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={onShareSelected}
+            style={[styles.headerBtn, styles.iconOnlyBtn]}
+            accessibilityRole="button"
+            accessibilityLabel="Share selected verses"
+            hitSlop={6}
+          >
+            <Ionicons name="share-outline" size={16} color={colors.text.primary} />
+          </Pressable>
+
+          {onOpenCrossReferences && crossReferenceCount > 0 && (
+            <Pressable
+              onPress={onOpenCrossReferences}
+              style={[styles.headerBtn, styles.headerBtnRelated]}
+              accessibilityRole="button"
+              accessibilityLabel={`Show ${crossReferenceCount} related passages`}
+              hitSlop={6}
+            >
+              <Ionicons name="git-network-outline" size={15} color={colors.accent.question} />
+              <Text style={[styles.headerBtnText, { color: colors.accent.question }]}>
+                Related ({crossReferenceCount})
+              </Text>
+            </Pressable>
+          )}
+
+          <Pressable
+            onPress={onClearSelection}
+            style={styles.closeBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Clear selection"
+            hitSlop={8}
+          >
+            <Ionicons name="close" size={18} color={colors.text.secondary} />
+          </Pressable>
+        </View>
       </View>
 
-      <View style={styles.actionControlsRow}>
-        {/* Share action */}
-        <Pressable
-          onPress={onShareSelected}
-          style={styles.actionBtnPill}
-          accessibilityLabel="Share selected verses"
-        >
-          <Ionicons name="share-outline" size={14} color={colors.text.primary} />
-          <Text style={styles.actionBtnPillText}>Share</Text>
-        </Pressable>
-
-        {onOpenCrossReferences && crossReferenceCount > 0 && (
-          <Pressable
-            onPress={onOpenCrossReferences}
-            style={[styles.actionBtnPill, styles.actionBtnRelated]}
-            accessibilityLabel={`Show ${crossReferenceCount} related passages`}
-          >
-            <Ionicons name="git-network-outline" size={14} color={colors.accent.question} />
-            <Text style={[styles.actionBtnPillText, { color: colors.accent.question }]}>
-              Related{crossReferenceCount > 0 ? ` (${crossReferenceCount})` : ''}
-            </Text>
-          </Pressable>
-        )}
-
-        {/* Jump to Note actions - supports multiple linked sections */}
-        {linkedSectionsToJump.length > 0 && onJumpToSection && (
-          <View style={styles.jumpGroupRow}>
+      {showJumps && (
+        <View style={styles.chipRow}>
+          <OverflowChipRow>
             {linkedSectionsToJump.map((sec) => (
               <Pressable
                 key={sec.sectionId}
                 onPress={() => {
-                  onJumpToSection(sec.sectionId);
+                  onJumpToSection!(sec.sectionId);
                   setTimeout(() => {
                     onClearSelection();
                   }, 350);
                 }}
-                style={[styles.actionBtnPill, styles.actionBtnJump]}
+                style={[styles.chip, { borderColor: sec.sectionColor || colors.accent.keyIdea }]}
+                accessibilityRole="button"
                 accessibilityLabel={`Jump to ${sec.sectionTitle}`}
               >
                 <Ionicons
@@ -104,54 +121,42 @@ export const VerseActionBar: React.FC<VerseActionBarProps> = ({
                   size={14}
                   color={sec.sectionColor || colors.accent.keyIdea}
                 />
-                <Text
-                  style={[
-                    styles.actionBtnPillText,
-                    { color: sec.sectionColor || colors.accent.keyIdea },
-                  ]}
-                >
+                <Text style={[styles.chipText, { color: sec.sectionColor || colors.accent.keyIdea }]}>
                   Jump to {sec.sectionTitle}
                 </Text>
               </Pressable>
             ))}
-          </View>
-        )}
+          </OverflowChipRow>
+        </View>
+      )}
 
-        {/* Quick-Pick Section Buttons */}
-        {onAttachToSection && (
-          <View style={styles.sectionPickerWrap}>
-            <Text style={styles.sectionPickerPrompt}>Note in:</Text>
-            <View style={styles.sectionPickerRow}>
-              {availableSections.map((sec) => (
-                <Pressable
-                  key={sec.id}
-                  onPress={() => {
-                    const fallbackSeg = targetPassage?.segments?.[0];
-                    const book = activeContext?.book || fallbackSeg?.book;
-                    const chapter = activeContext?.chapter || fallbackSeg?.startChapter;
-                    onAttachToSection(sortedSelectedVerses, sec.id, {
-                      book,
-                      chapter,
-                    });
-                    onClearSelection();
-                  }}
-                  style={styles.sectionPickBtn}
-                  accessibilityLabel={`Attach to ${sec.title}`}
-                >
-                  {sec.icon && (
-                    <TemplateIcon
-                      name={sec.icon}
-                      size={13}
-                      color={sec.color || colors.accent.keyIdea}
-                    />
-                  )}
-                  <Text style={styles.sectionPickBtnText}>{sec.title}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        )}
-      </View>
+      {showAttach && (
+        <View style={styles.chipRow}>
+          <Text style={styles.rowPrompt}>Note in:</Text>
+          <OverflowChipRow>
+            {availableSections.map((sec) => (
+              <Pressable
+                key={sec.id}
+                onPress={() => {
+                  const fallbackSeg = targetPassage?.segments?.[0];
+                  const book = activeContext?.book || fallbackSeg?.book;
+                  const chapter = activeContext?.chapter || fallbackSeg?.startChapter;
+                  onAttachToSection!(sortedSelectedVerses, sec.id, { book, chapter });
+                  onClearSelection();
+                }}
+                style={styles.chip}
+                accessibilityRole="button"
+                accessibilityLabel={`Attach to ${sec.title}`}
+              >
+                {sec.icon && (
+                  <TemplateIcon name={sec.icon} size={14} color={sec.color || colors.accent.keyIdea} />
+                )}
+                <Text style={styles.chipText}>{sec.title}</Text>
+              </Pressable>
+            ))}
+          </OverflowChipRow>
+        </View>
+      )}
     </View>
   );
 };
@@ -165,90 +170,92 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     marginTop: spacing.sm,
     marginBottom: spacing.xs,
+    gap: spacing.sm,
   },
-  actionHeaderRow: {
+  docked: {
+    borderRadius: radius.sheet,
+    marginTop: 0,
+    marginBottom: 0,
+    padding: spacing.md - 4,
+  },
+  headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.xs + 2,
+    gap: spacing.sm,
   },
-  actionHeaderLeft: {
+  headerLeft: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   },
-  actionHeaderTitle: {
+  headerTitle: {
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: '600',
     color: colors.text.primary,
   },
-  actionCloseBtn: {
-    padding: 2,
-  },
-  actionControlsRow: {
+  headerActions: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: spacing.xs + 2,
+    gap: spacing.xs,
+    flexShrink: 0,
   },
-  actionBtnPill: {
+  headerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    minHeight: 32,
+    paddingHorizontal: spacing.sm,
     backgroundColor: colors.bg.base,
     borderRadius: radius.control,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
     borderWidth: 1,
     borderColor: colors.border.hairline,
   },
-  actionBtnPillText: {
+  iconOnlyBtn: {
+    width: 32,
+    paddingHorizontal: 0,
+    justifyContent: 'center',
+  },
+  headerBtnRelated: {
+    borderColor: colors.accent.question,
+  },
+  headerBtnText: {
     fontSize: 12,
     fontWeight: '600',
     color: colors.text.primary,
   },
-  actionBtnJump: {
-    borderColor: colors.accent.keyIdea,
+  closeBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  actionBtnRelated: {
-    borderColor: colors.accent.question,
-  },
-  jumpGroupRow: {
+  chipRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: spacing.xs + 2,
+    gap: spacing.sm,
   },
-  sectionPickerWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  sectionPickerPrompt: {
+  rowPrompt: {
     fontSize: 11,
     color: colors.text.secondary,
     fontWeight: '500',
+    flexShrink: 0,
   },
-  sectionPickerRow: {
+  chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    flexWrap: 'wrap',
-  },
-  sectionPickBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
+    minHeight: 32,
+    paddingHorizontal: spacing.sm,
     backgroundColor: colors.bg.base,
     borderRadius: radius.control,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
     borderWidth: 1,
     borderColor: colors.border.hairline,
   },
-  sectionPickBtnText: {
-    fontSize: 11,
+  chipText: {
+    fontSize: 12,
     fontWeight: '600',
     color: colors.text.primary,
   },

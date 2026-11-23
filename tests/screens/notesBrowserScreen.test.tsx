@@ -142,7 +142,7 @@ describe('NotesBrowserScreen (app/(tabs)/notes.tsx)', () => {
 
     // Switch to By Tag mode
     await act(async () => {
-      fireEvent.press(getByText('By Tag'));
+      fireEvent.press(getByText('By tag'));
     });
 
     // Filter by tag pill "#creation (1)"
@@ -156,5 +156,57 @@ describe('NotesBrowserScreen (app/(tabs)/notes.tsx)', () => {
 
     expect(getByText('Creation Story')).toBeTruthy();
     expect(queryByText('Justification by Faith')).toBeNull();
+  });
+});
+
+describe('NotesBrowserScreen loading and error states', () => {
+  it('does not claim there are no notes while the first fetch is pending', async () => {
+    const resolvers: Array<(notes: Note[]) => void> = [];
+    (notesService.getUserNotes as jest.Mock).mockImplementation(
+      () => new Promise<Note[]>((resolve) => { resolvers.push(resolve); })
+    );
+    const { queryByText, getByLabelText } = await render(<NotesBrowserScreen />);
+    expect(getByLabelText('Loading notes')).toBeTruthy();
+    expect(queryByText(/No notes found/i)).toBeNull();
+    (notesService.getUserNotes as jest.Mock).mockResolvedValue([]);
+    await act(async () => resolvers.forEach((r) => r([])));
+    await waitFor(() => expect(queryByText(/No notes found/i)).toBeTruthy());
+  });
+
+  it('shows an inline message when the fetch fails', async () => {
+    (notesService.getUserNotes as jest.Mock).mockRejectedValue(new Error('offline'));
+    const { getByText } = await render(<NotesBrowserScreen />);
+    await waitFor(() => expect(getByText(/Couldn't refresh your notes/i)).toBeTruthy());
+  });
+});
+
+describe('NotesBrowserScreen unfinished drafts', () => {
+  it('lists unfinished new-note drafts and resumes them in the editor', async () => {
+    const { saveDraft } = require('../../src/services/noteDraftStore');
+    await saveDraft({
+      key: 'note_draft:user_123:new:abc',
+      payload: {
+        title: 'Half done',
+        passage: mockNotes[0].passage,
+        templateId: 'swedish',
+        sections: [{ id: 'light', title: 'Key Idea', content: 'Some thoughts' }],
+        tags: [],
+        visibility: 'friends',
+      },
+      savedAt: Date.now(),
+    });
+    (notesService.getUserNotes as jest.Mock).mockResolvedValue(mockNotes);
+
+    const { findByText, getByLabelText } = await render(<NotesBrowserScreen />);
+    expect(await findByText('Unfinished note')).toBeTruthy();
+    expect(await findByText('Half done')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Resume unfinished note'));
+    });
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/note/edit',
+      params: { draft: 'note_draft:user_123:new:abc' },
+    });
   });
 });

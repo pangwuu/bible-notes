@@ -31,6 +31,9 @@ const VerseItemComponent: React.FC<VerseItemProps> = ({
     <Text
       onLayout={onLayout}
       onPress={() => onToggle(verse.verseNumber)}
+      accessibilityRole="button"
+      accessibilityState={{ selected: isSelected }}
+      accessibilityHint="Selects this verse to link, share or find related passages"
       style={[
         styles.verseTextUnit,
         isSelected && styles.verseSelected,
@@ -51,6 +54,7 @@ const VerseItemComponent: React.FC<VerseItemProps> = ({
         <Text
           style={[
             styles.verseNumberText,
+            { fontSize: Math.max(11, Math.round(fontSize * 0.65)) },
             linkedSection
               ? { color: linkedSection.sectionColor || colors.accent.keyIdea, fontWeight: '700' }
               : null,
@@ -84,8 +88,10 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
     textDecorationColor: colors.accent.keyIdea,
   },
+  // "Where you landed" uses a neutral parchment wash so it reads differently from the
+  // amber, underlined "what you selected" state.
   verseTargetHighlighted: {
-    backgroundColor: 'rgba(227, 165, 61, 0.45)',
+    backgroundColor: 'rgba(237, 231, 221, 0.16)',
   },
   verseHeading: {
     fontFamily: typography.body.fontFamily,

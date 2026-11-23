@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, Platform } from 'react-native';
 import {
   Text,
   TextInput,
@@ -27,11 +27,28 @@ import { BUILT_IN_TEMPLATES } from '../../src/constants/templates';
 import FontSizeControls from '../../src/components/FontSizeControls';
 import { useDownloadTranslation } from '../../src/hooks/useDownloadTranslation';
 import safeStorage from '../../src/utils/safeStorage';
+import { useEditorPreferences } from '../../src/hooks/useEditorPreferences';
+import InstallAppCard from '../../src/components/InstallAppCard';
+import type { VerseTagPlacement } from '../../src/utils/verseLinkUtils';
+
+const PLACEMENT_PREVIEW: Record<VerseTagPlacement, { before: string; tag: string; after: string }> = {
+  newline: { before: 'God gives freely, not grudgingly.\n', tag: '[John 3:16]', after: '' },
+  inline: { before: 'God gives freely, not grudgingly. ', tag: '[John 3:16]', after: '' },
+  cursor: { before: 'God gives freely ', tag: '[John 3:16]', after: ' not grudgingly.' },
+};
+
+const PLACEMENT_HELP: Record<VerseTagPlacement, string> = {
+  newline: 'Each linked verse starts on its own line at the end of the section.',
+  inline: 'Linked verses continue the last line, after a space.',
+  cursor: 'Linked verses go where you were last typing in that section.',
+};
 import type { NoteVisibility, BibleTranslation } from '../../src/types/user';
 
 export default function SettingsScreen() {
   const { user, profile, signOut } = useAuth();
   const router = useRouter();
+  const { verseTagPlacement, setVerseTagPlacement, autoScrollOnLink, setAutoScrollOnLink } =
+    useEditorPreferences();
   const { downloadTranslation, progress, activeDownload, isDownloading } =
     useDownloadTranslation();
 
@@ -363,6 +380,48 @@ export default function SettingsScreen() {
         </Button>
       </View>
 
+      <Text style={styles.sectionHeader}>Note editor</Text>
+      <View style={styles.card}>
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleTextContainer}>
+            <Text style={styles.cardTitle}>Move to note after linking</Text>
+            <Text style={styles.cardDescription}>
+              After you link a verse to a section, scroll down to that section. Turn off to stay on
+              the passage and link several verses in a row.
+            </Text>
+          </View>
+          <Switch
+            value={autoScrollOnLink}
+            onValueChange={setAutoScrollOnLink}
+            color={colors.accentKeyIdea}
+            accessibilityLabel="Move to note after linking"
+          />
+        </View>
+
+        <Divider style={styles.innerDivider} />
+
+        <Text style={styles.cardTitle}>Linked verse placement</Text>
+        <Text style={styles.cardDescription}>{PLACEMENT_HELP[verseTagPlacement]}</Text>
+        <SegmentedButtons
+          value={verseTagPlacement}
+          onValueChange={(val) => setVerseTagPlacement(val as VerseTagPlacement)}
+          buttons={[
+            { value: 'newline', label: 'New line' },
+            { value: 'inline', label: 'Same line' },
+            { value: 'cursor', label: 'At cursor' },
+          ]}
+          style={styles.segmentedButtons}
+        />
+        <View style={styles.previewContainer}>
+          <Text style={styles.previewHeaderLabel}>Preview</Text>
+          <Text style={styles.previewScriptureText}>
+            {PLACEMENT_PREVIEW[verseTagPlacement].before}
+            <Text style={styles.previewVerseNum}>{PLACEMENT_PREVIEW[verseTagPlacement].tag}</Text>
+            {PLACEMENT_PREVIEW[verseTagPlacement].after}
+          </Text>
+        </View>
+      </View>
+
       <Text style={styles.sectionHeader}>Bible display</Text>
       <View style={styles.card}>
         <View style={styles.toggleRow}>
@@ -486,6 +545,8 @@ export default function SettingsScreen() {
           </Button>
         </View>
       </View>
+
+      {Platform.OS === 'web' && <InstallAppCard />}
 
       <Divider style={styles.divider} />
 

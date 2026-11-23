@@ -41,6 +41,13 @@ export interface BibleReaderProps {
   onVerseLayout?: (verseKey: string, y: number) => void;
   onOpenVersionGuide?: () => void;
   onAddPassageSegment?: (segment: PassageSegment) => void;
+  /**
+   * 'inline' renders the verse action bar under the passage (default).
+   * 'docked' pins it to the bottom of the screen so it appears next to the tap.
+   */
+  actionBarPlacement?: 'inline' | 'docked';
+  /** Reports the docked bar's height (0 when hidden) so screens can pad their scroll content. */
+  onDockedActionBarHeightChange?: (height: number) => void;
 }
 
 export const DEFAULT_SECTION_OPTIONS: SectionOption[] = [

@@ -18,7 +18,8 @@ export const TOCSegmentBar: React.FC<TOCSegmentBarProps> = ({
   onSelectSegment,
   onLayout,
 }) => {
-  if (!segments || segments.length === 0) {
+  // With a single segment the bar would only repeat the passage reference.
+  if (!segments || segments.length < 2) {
     return null;
   }
 
@@ -31,7 +32,7 @@ export const TOCSegmentBar: React.FC<TOCSegmentBarProps> = ({
     >
       <View style={styles.tocHeaderRow}>
         <Ionicons name="list-outline" size={14} color={colors.accent.keyIdea} />
-        <Text style={styles.tocTitle}>Table of Contents</Text>
+        <Text style={styles.tocTitle}>Table of contents</Text>
       </View>
       <ScrollView
         horizontal
@@ -52,7 +53,7 @@ export const TOCSegmentBar: React.FC<TOCSegmentBarProps> = ({
                 activeSegmentIndex === null && styles.tocPillTextActive,
               ]}
             >
-              Entire Passage
+              Entire passage
             </Text>
           </Pressable>
         )}
@@ -102,7 +103,8 @@ const styles = StyleSheet.create({
   },
   tocPill: {
     paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 4,
+    minHeight: 32,
+    justifyContent: 'center',
     borderRadius: radii.controls,
     backgroundColor: colors.bg.surfaceRaised,
     borderWidth: 1,

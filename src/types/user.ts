@@ -35,6 +35,10 @@ export interface UserSettings {
   default_font_size?: number;
   default_template_id?: string;
   enable_friends?: boolean;
+  /** Where a linked verse tag is inserted in a note section. */
+  verse_tag_placement?: 'newline' | 'inline' | 'cursor';
+  /** Scroll down to the note section after linking a verse from the reader. */
+  auto_scroll_on_link?: boolean;
 }
 
 export interface UserDocument {

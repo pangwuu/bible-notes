@@ -135,7 +135,7 @@ export default function NoteDetailScreen() {
       }
       highlightTimerRef.current = setTimeout(() => {
         setTargetHighlightedVerse(null);
-      }, 10000);
+      }, 4000);
     },
     [note?.passage?.segments]
   );
@@ -618,6 +618,7 @@ export default function NoteDetailScreen() {
             }
           }}
           targetHighlightedVerse={targetHighlightedVerse}
+          actionBarPlacement="docked"
         />
       </View>
 

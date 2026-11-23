@@ -80,7 +80,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.sm,
     marginBottom: spacing.xs,
   },
   headerLeft: {
@@ -112,7 +111,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.sm,
     gap: spacing.xs,
   },
   pill: {
@@ -121,9 +119,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.border.hairline,
-    borderRadius: 9999,
+    borderRadius: radii.controls,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
+    minHeight: 36,
   },
   pillActive: {
     backgroundColor: colors.accent.keyIdea,

@@ -41,6 +41,7 @@ export interface DynamicNoteEditorProps {
   onSectionContentSizeChange?: (sectionId: string, width: number, height: number) => void;
   onFocusSection?: (sectionId: string) => void;
   onBlurSection?: (sectionId: string) => void;
+  onSelectionChangeSection?: (sectionId: string, start: number, end: number) => void;
   hideVisibility?: boolean;
 }
 
@@ -79,6 +80,7 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
   onSectionContentSizeChange,
   onFocusSection,
   onBlurSection,
+  onSelectionChangeSection,
   hideVisibility = false,
 }) => {
   const [inputHeights, setInputHeights] = useState<Record<string, number>>({});
@@ -238,6 +240,11 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
                 onFocus={() => {
                   if (sectionId) onFocusSection?.(sectionId);
                 }}
+                onSelectionChange={(e) => {
+                  if (!sectionId) return;
+                  const { start, end } = e.nativeEvent.selection;
+                  onSelectionChangeSection?.(sectionId, start, end);
+                }}
                 onBlur={() => {
                   if (sectionId) onBlurSection?.(sectionId);
                   onBlur?.();
@@ -283,7 +290,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.sm,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -302,7 +308,7 @@ const styles = StyleSheet.create({
   visibilityToggle: {
     flexDirection: 'row',
     backgroundColor: colors.bg.surface,
-    borderRadius: 9999,
+    borderRadius: radii.controls,
     padding: 2,
     borderWidth: 1,
     borderColor: colors.border.hairline,
@@ -310,9 +316,10 @@ const styles = StyleSheet.create({
   visOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.sm,
+    minHeight: 32,
+    paddingHorizontal: spacing.sm + 4,
     paddingVertical: 4,
-    borderRadius: 9999,
+    borderRadius: radii.controls,
     gap: 4,
   },
   visOptionActive: {
@@ -332,9 +339,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border.hairline,
     marginVertical: spacing.sm,
   },
-  section: {
-    paddingHorizontal: spacing.sm,
-  },
+  section: {},
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',

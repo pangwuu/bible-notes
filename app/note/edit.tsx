@@ -13,7 +13,7 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
-  BackHandler,
+  AppState,
   Keyboard,
   TextInput,
   Platform,
@@ -21,7 +21,7 @@ import {
 } from 'react-native';
 import { Alert } from '../../src/utils/alert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text } from 'react-native-paper';
+import { Text, Snackbar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, spacing, radii, typography, layout } from '../../src/constants/theme';
@@ -50,28 +50,87 @@ import {
   formatVerseReferenceTag,
   extractVerseReferences,
   syncSectionVerseReferencesFromContent,
-  appendVerseTagOnNearestClearLine,
+  insertVerseTag,
+  removeVerseTag,
 } from '../../src/utils/verseLinkUtils';
+import { useEditorPreferences } from '../../src/hooks/useEditorPreferences';
+import { carrySectionsToTemplate } from '../../src/utils/templateSwitch';
 import { findCanonicalBook } from '../../src/constants/bibleData';
 import { createPassageReference, formatSegmentDisplay } from '../../src/utils/passageParser';
 import { useReaderFontSize } from '../../src/hooks/useReaderFontSize';
 import { useVersePreview } from '../../src/hooks/useVersePreview';
 import TOCSegmentBar from '../../src/components/note/TOCSegmentBar';
 import { safeStorage } from '../../src/utils/safeStorage';
+import {
+  NoteDraft,
+  NoteDraftPayload,
+  clearDraft,
+  draftHasContent,
+  draftKeyForNote,
+  listNewNoteDrafts,
+  loadDraft,
+  newDraftKey,
+  saveDraft,
+  toMillis,
+} from '../../src/services/noteDraftStore';
+
+const LOCAL_IDLE_MS = 800;
+const REMOTE_IDLE_MS = 3000;
+const REMOTE_MAX_WAIT_MS = 15000;
+const SERVER_TIMEOUT_MS = 10000;
+const CONFLICT_TOLERANCE_MS = 10000;
+
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'device' | 'error';
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
+function describeDraft(draft: NoteDraft): string {
+  return draft.payload.passage ? formatPassageDisplay(draft.payload.passage) : 'no passage yet';
+}
 import { tailScrollOffset } from '../../src/utils/noteScroll';
 
 export default function NoteEditScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const router = useRouter();
-  const { id, book, chapter, verseStart, verseEnd } = useLocalSearchParams<{
+  const { id, book, chapter, verseStart, verseEnd, draft: draftParam } = useLocalSearchParams<{
     id?: string;
+    draft?: string;
     book?: string;
     chapter?: string;
     verseStart?: string;
     verseEnd?: string;
   }>();
   const { user, profile } = useAuth();
+  const {
+    verseTagPlacement,
+    autoScrollOnLink,
+    setAutoScrollOnLink,
+    autoScrollPromptSeen,
+    markAutoScrollPromptSeen,
+  } = useEditorPreferences();
+  const [linkFeedback, setLinkFeedback] = useState<
+    { sectionId: string; sectionTitle: string; kind: 'prompt' | 'linked' } | null
+  >(null);
+  const sectionCursorRef = useRef<Record<string, number>>({});
+  const [templateNotice, setTemplateNotice] = useState<{
+    message: string;
+    previous: { template: NoteTemplate; sections: NoteSectionValue[] };
+  } | null>(null);
 
   const [loading, setLoading] = useState<boolean>(!!id);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -124,8 +183,60 @@ export default function NoteEditScreen() {
     profile?.default_visibility || 'friends'
   );
 
-  const [currentNoteId, setCurrentNoteId] = useState<string | undefined>(id);
   const currentNoteIdRef = useRef<string | undefined>(id);
+
+  // Autosave bookkeeping
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [recoveryOffer, setRecoveryOffer] = useState<
+    | { kind: 'restored'; serverPayload: NoteDraftPayload }
+    | { kind: 'resume'; draft: NoteDraft }
+    | null
+  >(null);
+  const draftKeyRef = useRef<string | null>(null);
+  const localTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remoteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remoteInFlightRef = useRef(false);
+  const remoteRerunRef = useRef(false);
+  const pendingRemoteSinceRef = useRef<number | null>(null);
+  const changeVersionRef = useRef(0);
+  const lastKnownServerAtRef = useRef<number | undefined>(undefined);
+  const localDraftOkRef = useRef(true);
+  const createPromiseRef = useRef<Promise<any> | null>(null);
+  const allowLeaveRef = useRef(false);
+  const originalSnapshotRef = useRef<NoteDraftPayload | null>(null);
+  const scheduleRemoteSaveRef = useRef<() => void>(() => {});
+  const customTemplatesRef = useRef(profile?.custom_templates);
+  customTemplatesRef.current = profile?.custom_templates;
+
+  const latestRef = useRef<NoteDraftPayload>({
+    title: '',
+    passage: null,
+    templateId: '',
+    sections: [],
+    tags: [],
+    visibility: 'friends',
+  });
+  latestRef.current = {
+    title,
+    passage,
+    templateId: activeTemplate.id,
+    sections,
+    tags,
+    visibility,
+  };
+  const activeTemplateRef = useRef(activeTemplate);
+  activeTemplateRef.current = activeTemplate;
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
+
+  const applyPayload = useCallback((payload: NoteDraftPayload) => {
+    setTitle(payload.title);
+    setPassage(payload.passage);
+    setActiveTemplate(getTemplateById(payload.templateId, customTemplatesRef.current));
+    setSections(payload.sections);
+    setTags(payload.tags);
+    setVisibility(payload.visibility);
+  }, []);
   const editorLayoutY = useRef<number>(0);
   const sectionLayoutMap = useRef<Record<string, number>>({});
   const sectionHeightMap = useRef<Record<string, number>>({});
@@ -180,6 +291,18 @@ export default function NoteEditScreen() {
     if (nextOffset === null) return;
     scrollViewRef.current?.scrollTo({ y: nextOffset, animated: true });
   }, []);
+
+  const scheduleRevealSection = useCallback(
+    (sectionId: string) => {
+      pendingRevealSectionId.current = sectionId;
+      setTimeout(() => {
+        if (pendingRevealSectionId.current !== sectionId) return;
+        revealSectionTail(sectionId);
+        pendingRevealSectionId.current = null;
+      }, 50);
+    },
+    [revealSectionTail]
+  );
 
   // Apply default template preference for new notes
   useEffect(() => {
@@ -271,7 +394,7 @@ export default function NoteEditScreen() {
 
       highlightTimerRef.current = setTimeout(() => {
         setTargetHighlightedVerse(null);
-      }, 10000);
+      }, 4000);
     },
   });
 
@@ -328,9 +451,17 @@ export default function NoteEditScreen() {
 
       const currentContent = targetSec.content || '';
       const hasTag = currentContent.includes(tag);
-      const updatedContent = hasTag
-        ? currentContent
-        : appendVerseTagOnNearestClearLine(currentContent, tag);
+      let updatedContent = currentContent;
+      if (!hasTag) {
+        const inserted = insertVerseTag(
+          currentContent,
+          tag,
+          verseTagPlacement,
+          sectionCursorRef.current[sectionId]
+        );
+        updatedContent = inserted.content;
+        sectionCursorRef.current[sectionId] = inserted.cursorAfter;
+      }
 
       const copy = [...prev];
       copy[secIdx] = {
@@ -341,13 +472,17 @@ export default function NoteEditScreen() {
       return copy;
     });
     setIsDirty(true);
-    pendingRevealSectionId.current = sectionId;
-    setTimeout(() => {
-      if (pendingRevealSectionId.current !== sectionId) return;
-      revealSectionTail(sectionId);
-      pendingRevealSectionId.current = null;
-    }, 50);
-  }, [passage, revealSectionTail]);
+    const sectionTitle =
+      sectionsRef.current.find((s) => s.id === sectionId)?.title || 'your note';
+    if (autoScrollOnLink) {
+      scheduleRevealSection(sectionId);
+      if (!autoScrollPromptSeen) {
+        setLinkFeedback({ sectionId, sectionTitle, kind: 'prompt' });
+      }
+    } else {
+      setLinkFeedback({ sectionId, sectionTitle, kind: 'linked' });
+    }
+  }, [passage, verseTagPlacement, autoScrollOnLink, autoScrollPromptSeen, scheduleRevealSection]);
 
   const handleAddPassageSegment = useCallback((segment: PassageSegment) => {
     setPassage((prev) => {
@@ -378,19 +513,23 @@ export default function NoteEditScreen() {
       const rawTag = (refToRemove as any).raw;
       const updatedRefs = targetSec.verseReferences.filter((_, idx) => idx !== referenceIndex);
 
-      let updatedContent = targetSec.content || '';
-      if (rawTag && updatedContent.includes(rawTag)) {
-        updatedContent = updatedContent.replace(rawTag, '').trim();
-      } else if (generatedTag && updatedContent.includes(generatedTag)) {
-        updatedContent = updatedContent.replace(generatedTag, '').trim();
-      } else {
-        // Fallback: match tags for startVerse-endVerse
-        const fallbackRegex = new RegExp(
+      const originalContent = targetSec.content || '';
+      const fallbackMatch = originalContent.match(
+        new RegExp(
           `\\[v\\.?\\s*${refToRemove.startVerse}(?:\\s*[-–—]\\s*${refToRemove.endVerse})?\\]`,
           'i'
-        );
-        updatedContent = updatedContent.replace(fallbackRegex, '').trim();
+        )
+      )?.[0];
+      let updatedContent = originalContent.trim();
+      for (const candidate of [rawTag, generatedTag, fallbackMatch]) {
+        if (!candidate) continue;
+        const removed = removeVerseTag(originalContent, candidate);
+        if (removed !== null) {
+          updatedContent = removed;
+          break;
+        }
       }
+      delete sectionCursorRef.current[targetSec.id];
 
       const copy = [...prev];
       copy[sectionIndex] = {
@@ -442,7 +581,7 @@ export default function NoteEditScreen() {
     }
   }, [id, book, chapter, verseStart, verseEnd]);
 
-  // Load existing note if editing
+  // Load existing note if editing, then reapply any unsynced draft from this device.
   useEffect(() => {
     if (!id) return;
     let isMounted = true;
@@ -451,31 +590,67 @@ export default function NoteEditScreen() {
       try {
         const existing = await notesService.getNote(id);
         if (existing && isMounted) {
-          setTitle(existing.title || '');
-          setPassage(existing.passage);
-          const tpl = getTemplateById(existing.templateId, profile?.custom_templates);
-          setActiveTemplate(tpl);
-
-          if (existing.sections && existing.sections.length > 0) {
-            setSections(existing.sections.map((s) => ({
-              ...s,
-              content: (s.content || '').trim(),
-            })));
-          } else {
-            // Synthesize from legacy Swedish fields
-            setSections([
-              { id: 'light', title: 'Key Idea', icon: 'bulb-outline', content: (existing.lightContent || '').trim() },
-              { id: 'question', title: 'Question', icon: 'help-circle-outline', content: (existing.questionContent || '').trim() },
-              { id: 'arrow', title: 'Application', icon: 'footsteps-outline', content: (existing.arrowContent || '').trim() },
-            ]);
-          }
-
-          setTags(existing.tags);
-          setVisibility(existing.visibility);
+          const serverSections: NoteSectionValue[] =
+            existing.sections && existing.sections.length > 0
+              ? existing.sections.map((s) => ({ ...s, content: (s.content || '').trim() }))
+              : [
+                  // Synthesize from legacy Swedish fields
+                  { id: 'light', title: 'Key Idea', icon: 'bulb-outline', content: (existing.lightContent || '').trim() },
+                  { id: 'question', title: 'Question', icon: 'help-circle-outline', content: (existing.questionContent || '').trim() },
+                  { id: 'arrow', title: 'Application', icon: 'footsteps-outline', content: (existing.arrowContent || '').trim() },
+                ];
+          const serverPayload: NoteDraftPayload = {
+            title: existing.title || '',
+            passage: existing.passage,
+            templateId: existing.templateId || DEFAULT_TEMPLATE.id,
+            sections: serverSections,
+            tags: existing.tags,
+            visibility: existing.visibility,
+          };
+          applyPayload(serverPayload);
+          originalSnapshotRef.current = serverPayload;
+          const serverAt = toMillis(existing.updated_at ?? existing.updatedAt);
+          lastKnownServerAtRef.current = serverAt;
           setIsDirty(false);
+
+          if (user?.uid) {
+            const key = draftKeyForNote(user.uid, id);
+            draftKeyRef.current = key;
+            const draft = await loadDraft(key);
+            if (draft && isMounted) {
+              const editedElsewhere =
+                typeof serverAt === 'number' &&
+                typeof draft.lastKnownServerAt === 'number' &&
+                serverAt > draft.lastKnownServerAt + CONFLICT_TOLERANCE_MS;
+              if (editedElsewhere) {
+                Alert.alert(
+                  'This note changed on another device',
+                  'You also have changes on this device that were never synced. Which version do you want to keep?',
+                  [
+                    {
+                      text: 'Use saved version',
+                      style: 'cancel',
+                      onPress: () => clearDraft(key),
+                    },
+                    {
+                      text: "Keep this device's changes",
+                      onPress: () => {
+                        applyPayload(draft.payload);
+                        setIsDirty(true);
+                      },
+                    },
+                  ]
+                );
+              } else {
+                applyPayload(draft.payload);
+                setIsDirty(true);
+                setRecoveryOffer({ kind: 'restored', serverPayload });
+              }
+            }
+          }
         }
       } catch (err) {
-        if (isMounted) setErrorBanner('Failed to load note.');
+        if (isMounted) setErrorBanner("Couldn't load this note. Check your connection and try again.");
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -484,80 +659,80 @@ export default function NoteEditScreen() {
     return () => {
       isMounted = false;
     };
-  }, [id, profile?.custom_templates]);
+    // Load once per note. Profile snapshots (e.g. a settings change) must not reload
+    // the note and overwrite edits; custom templates are read through a ref instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, user?.uid]);
 
-  // Template switching logic with dirty state handling
-  const handleSelectTemplate = useCallback(
-    (targetTemplate: NoteTemplate) => {
-      if (targetTemplate.id === activeTemplate.id) return;
-
-      const currentSections = sectionsRef.current;
-      const hasText = currentSections.some((s) => s.content.trim().length > 0);
-      if (!hasText) {
-        setActiveTemplate(targetTemplate);
-        setSections(initializeSectionValues(targetTemplate));
-        setIsDirty(true);
+  // New notes: resume a specific draft, or offer the most recent unfinished one.
+  useEffect(() => {
+    if (id || !user?.uid) return;
+    let isMounted = true;
+    (async () => {
+      if (draftParam) {
+        const draft = await loadDraft(String(draftParam));
+        if (draft && isMounted) {
+          draftKeyRef.current = draft.key;
+          applyPayload(draft.payload);
+          setIsDirty(true);
+          setSaveStatus('device');
+        }
         return;
       }
+      if (book) return; // Opened from "Note this" in the Bible tab: stay focused on that passage.
+      const drafts = await listNewNoteDrafts(user.uid);
+      if (drafts.length > 0 && isMounted) {
+        setRecoveryOffer({ kind: 'resume', draft: drafts[0] });
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, user?.uid, draftParam]);
 
-      Alert.alert(
-        'Switch Template?',
-        'Do you want to keep your current text in the new template or discard it?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: () => {
-              setActiveTemplate(targetTemplate);
-              setSections(initializeSectionValues(targetTemplate));
-              setIsDirty(true);
-            },
-          },
-          {
-            text: 'Keep Text',
-            onPress: () => {
-              const latest = sectionsRef.current;
-              const newSections: NoteSectionValue[] = targetTemplate.sections.map((sec, idx) => ({
-                id: sec.id,
-                title: sec.title,
-                icon: sec.icon || 'document-text-outline',
-                color: sec.color || getSectionColor(sec.id),
-                content: latest[idx]?.content || '',
-                verseReferences: latest[idx]?.verseReferences,
-              }));
-              setActiveTemplate(targetTemplate);
-              setSections(newSections);
-              setIsDirty(true);
-            },
-          },
-        ]
+  // Template switching logic with dirty state handling
+  /**
+   * Switches template right away, carrying the writing across (see
+   * carrySectionsToTemplate), and offers Undo afterwards instead of asking first.
+   */
+  const switchTemplate = useCallback(
+    (targetTemplate: NoteTemplate, message: string) => {
+      const previous = { template: activeTemplateRef.current, sections: sectionsRef.current };
+      const hasWriting = previous.sections.some(
+        (s) => s.content.trim().length > 0 || (s.verseReferences?.length ?? 0) > 0
       );
-    },
-    [activeTemplate.id]
-  );
-
-  // Template CRUD actions
-  const applyTemplatePreservingContent = useCallback(
-    (template: NoteTemplate, currentSections: NoteSectionValue[]) => {
-      const newSections: NoteSectionValue[] = template.sections.map((sec, idx) => {
-        // Try matching by section id first; fallback to index position
-        const existing = currentSections.find((s) => s.id === sec.id) || currentSections[idx];
-        return {
-          id: sec.id,
-          title: sec.title,
-          icon: sec.icon,
-          color: sec.color,
-          content: existing?.content || '',
-        };
-      });
-      setActiveTemplate(template);
-      setSections(newSections);
+      setActiveTemplate(targetTemplate);
+      setSections(
+        hasWriting
+          ? carrySectionsToTemplate(previous.sections, targetTemplate)
+          : initializeSectionValues(targetTemplate)
+      );
+      sectionCursorRef.current = {};
       setIsDirty(true);
+      setTemplateNotice(hasWriting ? { message, previous } : null);
     },
     []
   );
 
+  const handleSelectTemplate = useCallback(
+    (targetTemplate: NoteTemplate) => {
+      if (targetTemplate.id === activeTemplateRef.current.id) return;
+      switchTemplate(targetTemplate, `Switched to ${targetTemplate.name}. Your writing came with it.`);
+    },
+    [switchTemplate]
+  );
+
+  const undoTemplateSwitch = useCallback(() => {
+    if (!templateNotice) return;
+    setActiveTemplate(templateNotice.previous.template);
+    setSections(templateNotice.previous.sections);
+    sectionCursorRef.current = {};
+    setIsDirty(true);
+    setTemplateNotice(null);
+  }, [templateNotice]);
+
+  // Template CRUD actions
   const handleSaveCustomTemplate = useCallback(
     async (template: NoteTemplate) => {
       if (!user?.uid) return;
@@ -574,45 +749,16 @@ export default function NoteEditScreen() {
       try {
         await updateUserProfile(user.uid, { custom_templates: updated });
 
-        // If editing the active template or activating this template
-        if (activeTemplate.id === template.id) {
-          // Detect if any section with non-empty content was removed or reordered
-          const existingWithContent = sections.filter((s) => s.content.trim().length > 0);
-          const newIds = template.sections.map((s) => s.id);
-
-          const hasRemovedSections = existingWithContent.some(
-            (s) => !newIds.includes(s.id)
-          );
-
-          // Check if the relative ordering of persisting sections with content has changed
-          const persistingIds = existingWithContent
-            .map((s) => s.id)
-            .filter((id) => newIds.includes(id));
-          const newIndices = persistingIds.map((id) => newIds.indexOf(id));
-          const hasReordered = newIndices.some((pos, idx) => idx > 0 && pos < newIndices[idx - 1]);
-
-          if (hasRemovedSections || hasReordered) {
-            Alert.alert(
-              'Section Changes',
-              'Some sections with text were removed or reordered. Existing text will be preserved where possible.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Keep My Text',
-                  onPress: () => applyTemplatePreservingContent(template, sections),
-                },
-              ]
-            );
-          } else {
-            // No sections with text were removed or reordered (e.g. icon, color, title, or new section added)
-            applyTemplatePreservingContent(template, sections);
-          }
+        // Editing the template this note uses: re-apply it so renamed, added or
+        // removed sections show up, keeping all of the writing.
+        if (activeTemplateRef.current.id === template.id) {
+          switchTemplate(template, `Updated ${template.name}. Your writing was kept.`);
         }
       } catch (err) {
         Alert.alert('Error', 'Failed to save custom template.');
       }
     },
-    [user?.uid, profile?.custom_templates, activeTemplate.id, sections, applyTemplatePreservingContent]
+    [user?.uid, profile?.custom_templates, switchTemplate]
   );
 
   const handleDeleteCustomTemplate = useCallback(
@@ -623,118 +769,220 @@ export default function NoteEditScreen() {
 
       try {
         await updateUserProfile(user.uid, { custom_templates: filtered });
-        if (activeTemplate.id === templateId) {
-          const hasContent = sections.some((s) => s.content.trim().length > 0);
-          if (hasContent) {
-            Alert.alert(
-              'Template Deleted',
-              'The active template was deleted. Your note has been switched to the default template with your text preserved.',
-              [
-                {
-                  text: 'Keep My Text',
-                  onPress: () => applyTemplatePreservingContent(DEFAULT_TEMPLATE, sections),
-                },
-              ]
-            );
-          } else {
-            setActiveTemplate(DEFAULT_TEMPLATE);
-            setSections(initializeSectionValues(DEFAULT_TEMPLATE));
-          }
+        if (activeTemplateRef.current.id === templateId) {
+          switchTemplate(
+            DEFAULT_TEMPLATE,
+            `Template deleted. This note now uses ${DEFAULT_TEMPLATE.name}, with your writing kept.`
+          );
         }
       } catch (err) {
         Alert.alert('Error', 'Failed to delete custom template.');
       }
     },
-    [user?.uid, profile?.custom_templates, activeTemplate.id, sections, applyTemplatePreservingContent]
+    [user?.uid, profile?.custom_templates, switchTemplate]
   );
 
-  // Master Save Handler
-  const handleSave = useCallback(async (): Promise<boolean> => {
-    if (isSavingRef.current) return false;
-    if (!passage) {
-      setErrorBanner('Please select a passage before saving');
-      return false;
+  // ---------------------------------------------------------------------------
+  // Saving
+  //
+  // Every change is written to a device-local draft ~800ms after typing stops.
+  // Notes that already exist in Firestore are also synced ~3s after typing stops
+  // (and at least every 15s while typing continues). New notes are only created
+  // in Firestore when the user taps Done, because creating a note notifies
+  // friends and they shouldn't be pinged about half-written notes.
+  // ---------------------------------------------------------------------------
+
+  const getDraftKey = useCallback((): string | null => {
+    if (draftKeyRef.current) return draftKeyRef.current;
+    if (!user?.uid) return null;
+    draftKeyRef.current = currentNoteIdRef.current
+      ? draftKeyForNote(user.uid, currentNoteIdRef.current)
+      : newDraftKey(user.uid);
+    return draftKeyRef.current;
+  }, [user?.uid]);
+
+  const writeLocalDraft = useCallback(async (): Promise<boolean> => {
+    if (localTimerRef.current) {
+      clearTimeout(localTimerRef.current);
+      localTimerRef.current = null;
     }
-    isSavingRef.current = true;
-    setIsSaving(true);
-    setErrorBanner(null);
+    const payload = latestRef.current;
+    const isNew = !currentNoteIdRef.current;
+    if (isNew && !draftHasContent(payload) && !payload.passage) return true;
+    const key = getDraftKey();
+    if (!key) return false;
+    const ok = await saveDraft({
+      key,
+      noteId: currentNoteIdRef.current,
+      payload,
+      savedAt: Date.now(),
+      lastKnownServerAt: lastKnownServerAtRef.current,
+    });
+    localDraftOkRef.current = ok;
+    if (isNew) setSaveStatus(ok ? 'device' : 'error');
+    return ok;
+  }, [getDraftKey]);
 
-    const targetId = currentNoteIdRef.current || id;
+  const discardLocalDraft = useCallback(async () => {
+    isDirtyRef.current = false;
+    if (localTimerRef.current) {
+      clearTimeout(localTimerRef.current);
+      localTimerRef.current = null;
+    }
+    if (draftKeyRef.current) await clearDraft(draftKeyRef.current);
+  }, []);
 
-    // Sync section verse references with in-text tags and sanitize content
-    const syncedSections = syncSectionVerseReferencesFromContent(sections, passage);
-    const sanitizedSections = syncedSections.map((s) => ({
-      ...s,
-      content: (s.content || '').trim(),
-    }));
-    setSections(syncedSections);
-
-    // Extract Swedish fields for backwards compatibility
+  /** Sends the latest editor state to Firestore. Never touches editor state, so typing isn't disturbed. */
+  const persistToServer = useCallback(async (): Promise<boolean> => {
+    const snapshot = latestRef.current;
+    if (!snapshot.passage) return false;
+    const template = activeTemplateRef.current;
+    const syncedSections = syncSectionVerseReferencesFromContent(snapshot.sections, snapshot.passage);
+    const sanitizedSections = syncedSections.map((s) => ({ ...s, content: (s.content || '').trim() }));
     const lightContent = sanitizedSections.find((s) => s.id === 'light')?.content || '';
     const questionContent = sanitizedSections.find((s) => s.id === 'question')?.content || '';
     const arrowContent = sanitizedSections.find((s) => s.id === 'arrow')?.content || '';
+    const fields = {
+      title: snapshot.title.trim() || undefined,
+      passage: snapshot.passage,
+      templateId: template.id,
+      templateName: template.name,
+      sections: sanitizedSections,
+      lightContent,
+      questionContent,
+      arrowContent,
+      tags: snapshot.tags,
+      visibility: snapshot.visibility,
+    };
 
-    try {
-      let savedNote;
-      const cleanTitle = title.trim() || undefined;
-      if (targetId) {
-        savedNote = await notesService.updateNote(targetId, {
-          title: cleanTitle,
-          passage,
-          templateId: activeTemplate.id,
-          templateName: activeTemplate.name,
-          sections: sanitizedSections,
-          lightContent,
-          questionContent,
-          arrowContent,
-          tags,
-          visibility,
-        });
-      } else {
-        savedNote = await notesService.createNote({
+    const existingId = currentNoteIdRef.current;
+    if (existingId) {
+      await withTimeout(notesService.updateNote(existingId, fields), SERVER_TIMEOUT_MS);
+      return true;
+    }
+
+    // Reuse an in-flight create so a retried Done can never produce a duplicate note.
+    if (!createPromiseRef.current) {
+      const newKey = draftKeyRef.current;
+      createPromiseRef.current = notesService
+        .createNote({
           userId: user?.uid || '',
           authorUsername: profile?.username || user?.displayName || '',
           authorDisplayName: profile?.display_name || user?.displayName || '',
-          title: cleanTitle,
-          passage,
-          templateId: activeTemplate.id,
-          templateName: activeTemplate.name,
-          sections: sanitizedSections,
-          lightContent,
-          questionContent,
-          arrowContent,
-          tags,
-          visibility,
+          ...fields,
+        })
+        .then((savedNote) => {
+          if (newKey) clearDraft(newKey);
+          if (savedNote?.id) {
+            currentNoteIdRef.current = savedNote.id;
+            draftKeyRef.current = user?.uid ? draftKeyForNote(user.uid, savedNote.id) : null;
+            if (snapshot.visibility === 'friends' && user?.uid) {
+              const authorName = profile?.display_name || profile?.username || user?.displayName || 'A friend';
+              notifyFriendsOfNoteOverlap(user.uid, authorName, savedNote).catch((err) => {
+                console.warn('Failed to dispatch friend overlap notifications:', err);
+              });
+            }
+          }
+          return savedNote;
+        })
+        .catch((err) => {
+          createPromiseRef.current = null;
+          throw err;
         });
-        if (savedNote?.id) {
-          setCurrentNoteId(savedNote.id);
-          currentNoteIdRef.current = savedNote.id;
-        }
-      }
-
-      // If note is visible to friends, evaluate verse overlaps and notify friends asynchronously ONLY on note creation
-      const isNewNote = !targetId;
-      if (isNewNote && savedNote && visibility === 'friends' && user?.uid) {
-        const authorName = profile?.display_name || profile?.username || user?.displayName || 'A friend';
-        notifyFriendsOfNoteOverlap(user.uid, authorName, savedNote).catch((err) => {
-          console.warn('Failed to dispatch friend overlap notifications:', err);
-        });
-      }
-
-      setIsDirty(false);
-      return true;
-    } catch (err: any) {
-      setIsDirty(true);
-      setErrorBanner('Failed to save note. Changes retained locally.');
-      return false;
-    } finally {
-      isSavingRef.current = false;
-      setIsSaving(false);
     }
-  }, [id, user, profile, passage, activeTemplate, sections, tags, visibility, title]);
+    await withTimeout(createPromiseRef.current, SERVER_TIMEOUT_MS);
+    return true;
+  }, [user, profile]);
+
+  const runRemoteSave = useCallback(async () => {
+    if (remoteTimerRef.current) {
+      clearTimeout(remoteTimerRef.current);
+      remoteTimerRef.current = null;
+    }
+    if (!currentNoteIdRef.current || !latestRef.current.passage) return;
+    if (remoteInFlightRef.current) {
+      remoteRerunRef.current = true;
+      return;
+    }
+    remoteInFlightRef.current = true;
+    pendingRemoteSinceRef.current = null;
+    const version = changeVersionRef.current;
+    setSaveStatus('saving');
+    try {
+      await persistToServer();
+      lastKnownServerAtRef.current = Date.now();
+      if (version === changeVersionRef.current) {
+        setIsDirty(false);
+        await discardLocalDraft();
+      }
+      setSaveStatus('saved');
+    } catch {
+      setSaveStatus('error');
+    } finally {
+      remoteInFlightRef.current = false;
+    }
+    if (remoteRerunRef.current || version !== changeVersionRef.current) {
+      remoteRerunRef.current = false;
+      scheduleRemoteSaveRef.current();
+    }
+  }, [persistToServer, discardLocalDraft]);
+
+  const scheduleRemoteSave = useCallback(() => {
+    const now = Date.now();
+    if (pendingRemoteSinceRef.current === null) pendingRemoteSinceRef.current = now;
+    const delay = Math.max(
+      0,
+      Math.min(REMOTE_IDLE_MS, pendingRemoteSinceRef.current + REMOTE_MAX_WAIT_MS - now)
+    );
+    if (remoteTimerRef.current) clearTimeout(remoteTimerRef.current);
+    remoteTimerRef.current = setTimeout(() => {
+      runRemoteSave();
+    }, delay);
+  }, [runRemoteSave]);
+  scheduleRemoteSaveRef.current = scheduleRemoteSave;
+
+  // Autosave whenever the user changes something.
+  useEffect(() => {
+    if (!isDirty || loading) return;
+    changeVersionRef.current += 1;
+    if (localTimerRef.current) clearTimeout(localTimerRef.current);
+    localTimerRef.current = setTimeout(() => {
+      writeLocalDraft();
+    }, LOCAL_IDLE_MS);
+    if (currentNoteIdRef.current) scheduleRemoteSave();
+  }, [title, passage, sections, tags, visibility, activeTemplate.id, isDirty, loading, writeLocalDraft, scheduleRemoteSave]);
+
+  // Write the draft immediately when the app is backgrounded or the tab is hidden.
+  useEffect(() => {
+    const flush = () => {
+      if (isDirtyRef.current) writeLocalDraft();
+    };
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') flush();
+    });
+    const hasWindow = Platform.OS === 'web' && typeof window !== 'undefined';
+    const onVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') flush();
+    };
+    if (hasWindow) {
+      window.addEventListener('pagehide', flush);
+      document.addEventListener('visibilitychange', onVisibility);
+    }
+    return () => {
+      appStateSub.remove();
+      if (hasWindow) {
+        window.removeEventListener('pagehide', flush);
+        document.removeEventListener('visibilitychange', onVisibility);
+      }
+      flush();
+      if (localTimerRef.current) clearTimeout(localTimerRef.current);
+      if (remoteTimerRef.current) clearTimeout(remoteTimerRef.current);
+    };
+  }, [writeLocalDraft]);
 
   // Safe back navigation helper to prevent unhandled GO_BACK actions
   const navigateBack = useCallback(() => {
+    allowLeaveRef.current = true;
     if (router.canGoBack()) {
       router.back();
     } else {
@@ -742,84 +990,200 @@ export default function NoteEditScreen() {
     }
   }, [router]);
 
-  // Explicit Save
-  const handleExplicitSave = useCallback(async () => {
-    const success = await handleSave();
-    if (success) {
-      navigateBack();
-    }
-  }, [handleSave, navigateBack]);
+  /**
+   * Leaves the editor, making sure nothing is lost: new notes are created,
+   * existing notes are synced, and if the server can't be reached the local
+   * draft stays behind for next time.
+   */
+  const handleDone = useCallback(
+    async (leave: () => void = navigateBack) => {
+      if (isSavingRef.current) return;
+      const finish = () => {
+        allowLeaveRef.current = true;
+        leave();
+      };
+      const payload = latestRef.current;
+      const isNew = !currentNoteIdRef.current;
 
-  // Back confirmation dialog
-  const handleBack = useCallback(() => {
-    if (isDirty) {
-      Alert.alert(
-        'Unsaved Changes',
-        'Do you want to save your notes before leaving?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: () => {
-              setIsDirty(false);
-              navigateBack();
-            },
-          },
-          {
-            text: 'Save',
-            onPress: async () => {
-              const success = await handleSave();
-              if (success) {
-                setIsDirty(false);
-                navigateBack();
-              }
-            },
-          },
-        ]
-      );
-    } else {
-      navigateBack();
-    }
-  }, [isDirty, navigateBack, handleSave]);
+      if (isNew && !draftHasContent(payload)) {
+        await discardLocalDraft();
+        finish();
+        return;
+      }
 
-  // Intercept Android hardware back button when note has unsaved changes
+      if (isNew && !payload.passage) {
+        Alert.alert(
+          'Choose a passage to save',
+          'A note needs a passage before it can be saved. Your writing is kept on this device until then.',
+          [
+            { text: 'Choose passage', onPress: () => setShowPicker(true) },
+            {
+              text: 'Keep as draft',
+              style: 'cancel',
+              onPress: async () => {
+                await writeLocalDraft();
+                finish();
+              },
+            },
+            {
+              text: 'Discard note',
+              style: 'destructive',
+              onPress: async () => {
+                await discardLocalDraft();
+                finish();
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      if (!isNew && !isDirtyRef.current) {
+        finish();
+        return;
+      }
+
+      if (remoteTimerRef.current) clearTimeout(remoteTimerRef.current);
+      await writeLocalDraft();
+      isSavingRef.current = true;
+      setIsSaving(true);
+      setErrorBanner(null);
+      try {
+        await persistToServer();
+        setIsDirty(false);
+        await discardLocalDraft();
+        finish();
+      } catch {
+        setSaveStatus('error');
+        Alert.alert(
+          "Couldn't reach the server",
+          'Your note is saved on this device and will finish syncing when you are back online.',
+          [
+            { text: 'Stay here', style: 'cancel' },
+            { text: 'Leave anyway', onPress: finish },
+          ]
+        );
+      } finally {
+        isSavingRef.current = false;
+        setIsSaving(false);
+      }
+    },
+    [navigateBack, discardLocalDraft, writeLocalDraft, persistToServer]
+  );
+
+  const handleDiscard = useCallback(() => {
+    const isNew = !currentNoteIdRef.current;
+    if (isNew) {
+      Alert.alert('Discard this note?', 'Everything you wrote in this note will be deleted.', [
+        { text: 'Keep editing', style: 'cancel' },
+        {
+          text: 'Discard note',
+          style: 'destructive',
+          onPress: async () => {
+            await discardLocalDraft();
+            navigateBack();
+          },
+        },
+      ]);
+      return;
+    }
+    const original = originalSnapshotRef.current;
+    if (!original) return;
+    Alert.alert(
+      'Discard changes?',
+      'This puts the note back the way it was when you opened it.',
+      [
+        { text: 'Keep editing', style: 'cancel' },
+        {
+          text: 'Discard changes',
+          style: 'destructive',
+          onPress: () => {
+            applyPayload(original);
+            setIsDirty(true);
+          },
+        },
+      ]
+    );
+  }, [discardLocalDraft, navigateBack, applyPayload]);
+
+  // Every way of leaving (header, swipe-back, Android back) goes through handleDone.
   useEffect(() => {
-    if (!isDirty) return;
-
-    const onHardwareBackPress = () => {
-      handleBack();
-      return true; // Prevent default Android back navigation
+    const unsubscribe = navigation.addListener?.('beforeRemove', (e: any) => {
+      if (allowLeaveRef.current) return;
+      e.preventDefault();
+      handleDone(() => navigation.dispatch(e.data.action));
+    });
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
     };
+  }, [navigation, handleDone]);
 
-    const subscription = BackHandler.addEventListener('hardwareBackPress', onHardwareBackPress);
-    return () => subscription.remove();
-  }, [isDirty, handleBack]);
+  const statusLabel = (() => {
+    if (isSaving) return 'Saving…';
+    switch (saveStatus) {
+      case 'saving':
+        return 'Saving…';
+      case 'saved':
+        return isDirty ? '' : 'Saved';
+      case 'device':
+        return 'Draft saved';
+      case 'error':
+        return currentNoteIdRef.current ? 'Not synced' : 'Not saved';
+      default:
+        return '';
+    }
+  })();
 
   // Navigation Header Setup
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: id ? 'Edit Note' : 'New Note',
-      gestureEnabled: !isDirty,
+      title: id ? 'Edit note' : 'New note',
       headerLeft: () => (
-        <Pressable onPress={handleBack} style={styles.headerButton} hitSlop={8}>
-          <Text style={styles.headerBackText}>Cancel</Text>
-        </Pressable>
-      ),
-      headerRight: () => (
         <Pressable
-          onPress={handleExplicitSave}
+          onPress={() => handleDone()}
           disabled={isSaving}
           style={styles.headerButton}
           hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Done, save and close"
         >
-          <Text style={[styles.headerSaveText, isSaving && { opacity: 0.6 }]}>
-            {isSaving ? 'Saving...' : 'Save'}
-          </Text>
+          <Text style={[styles.headerDoneText, isSaving && { opacity: 0.6 }]}>Done</Text>
         </Pressable>
       ),
+      headerRight: () => (
+        <View style={styles.headerRightRow}>
+          {statusLabel ? (
+            <Pressable
+              onPress={saveStatus === 'error' ? () => runRemoteSave() : undefined}
+              disabled={saveStatus !== 'error' || !currentNoteIdRef.current}
+              accessibilityRole={saveStatus === 'error' ? 'button' : 'text'}
+              accessibilityLabel={saveStatus === 'error' ? `${statusLabel}. Tap to retry` : statusLabel}
+              accessibilityLiveRegion="polite"
+              hitSlop={8}
+            >
+              <Text
+                style={[
+                  styles.headerStatusText,
+                  saveStatus === 'error' && styles.headerStatusError,
+                ]}
+              >
+                {statusLabel}
+              </Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={handleDiscard}
+            style={styles.headerIconButton}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={currentNoteIdRef.current ? 'Discard changes' : 'Discard note'}
+          >
+            <Ionicons name="ellipsis-horizontal" size={20} color={colors.text.secondary} />
+          </Pressable>
+        </View>
+      ),
     });
-  }, [navigation, id, isSaving, handleExplicitSave, handleBack]);
+  }, [navigation, id, isSaving, handleDone, handleDiscard, statusLabel, saveStatus, runRemoteSave]);
 
   if (loading) {
     return (
@@ -834,6 +1198,69 @@ export default function NoteEditScreen() {
       {errorBanner && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorText}>{errorBanner}</Text>
+        </View>
+      )}
+
+      {recoveryOffer && (
+        <View style={styles.recoveryBanner} accessibilityLiveRegion="polite">
+          <Ionicons name="time-outline" size={16} color={colors.accent.keyIdea} />
+          <Text style={styles.recoveryText}>
+            {recoveryOffer.kind === 'restored'
+              ? 'Restored changes that had not synced yet.'
+              : `Unfinished note on ${describeDraft(recoveryOffer.draft)}.`}
+          </Text>
+          {recoveryOffer.kind === 'restored' ? (
+            <Pressable
+              onPress={() => {
+                applyPayload(recoveryOffer.serverPayload);
+                setIsDirty(true);
+                setRecoveryOffer(null);
+              }}
+              style={styles.recoveryButton}
+              accessibilityRole="button"
+            >
+              <Text style={styles.recoveryButtonText}>Undo</Text>
+            </Pressable>
+          ) : (
+            <>
+              <Pressable
+                onPress={() => {
+                  clearDraft(recoveryOffer.draft.key);
+                  setRecoveryOffer(null);
+                }}
+                style={styles.recoveryButton}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.recoveryButtonText, styles.recoveryButtonMuted]}>Discard</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  const { draft } = recoveryOffer;
+                  const abandonedKey = draftKeyRef.current;
+                  draftKeyRef.current = draft.key;
+                  applyPayload(draft.payload);
+                  setIsDirty(true);
+                  setSaveStatus('device');
+                  setRecoveryOffer(null);
+                  if (abandonedKey && abandonedKey !== draft.key) clearDraft(abandonedKey);
+                }}
+                style={styles.recoveryButton}
+                accessibilityRole="button"
+              >
+                <Text style={styles.recoveryButtonText}>Resume</Text>
+              </Pressable>
+            </>
+          )}
+          {recoveryOffer.kind === 'restored' && (
+            <Pressable
+              onPress={() => setRecoveryOffer(null)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss"
+            >
+              <Ionicons name="close" size={16} color={colors.text.secondary} />
+            </Pressable>
+          )}
         </View>
       )}
 
@@ -871,9 +1298,9 @@ export default function NoteEditScreen() {
             accessibilityLabel="Select passage reference"
           >
             <View style={styles.pickerTextColumn}>
-              <Text style={styles.pickerLabel}>Passage Reference</Text>
+              <Text style={styles.pickerLabel}>Passage</Text>
               <Text style={[styles.pickerValue, !passage && styles.pickerValueEmpty]}>
-                {passage ? formatPassageDisplay(passage) : 'Tap to select passage...'}
+                {passage ? formatPassageDisplay(passage) : 'Choose a passage'}
               </Text>
             </View>
           </Pressable>
@@ -887,11 +1314,11 @@ export default function NoteEditScreen() {
               setTitle(val);
               setIsDirty(true);
             }}
-            placeholder="Note Title (Optional)"
+            placeholder="Title (optional)"
             placeholderTextColor={colors.text.secondary}
             style={styles.titleInput}
             maxLength={100}
-            accessibilityLabel="Note Title"
+            accessibilityLabel="Note title"
           />
         </View>
 
@@ -941,6 +1368,7 @@ export default function NoteEditScreen() {
                 }
               }}
               targetHighlightedVerse={targetHighlightedVerse}
+              actionBarPlacement="docked"
             />
           </View>
         )}
@@ -968,6 +1396,9 @@ export default function NoteEditScreen() {
                 onOpenManager={() => setShowTemplateManager(true)}
               />
             }
+            onSelectionChangeSection={(sectionId, _start, end) => {
+              sectionCursorRef.current[sectionId] = end;
+            }}
             onFocusSection={(sectionId) => {
               focusedSectionIdRef.current = sectionId;
             }}
@@ -1035,6 +1466,71 @@ export default function NoteEditScreen() {
         </Pressable>
       )}
 
+      {linkFeedback?.kind === 'prompt' && (
+        <View style={styles.linkPrompt} accessibilityLiveRegion="polite">
+          <Text style={styles.linkPromptText}>
+            Moved you to {linkFeedback.sectionTitle} after linking. Keep doing this?
+          </Text>
+          <Text style={styles.linkPromptHint}>You can change this anytime in Settings.</Text>
+          <View style={styles.linkPromptActions}>
+            <Pressable
+              onPress={() => {
+                setAutoScrollOnLink(false);
+                markAutoScrollPromptSeen();
+                setLinkFeedback(null);
+              }}
+              style={styles.linkPromptButton}
+              accessibilityRole="button"
+            >
+              <Text style={styles.linkPromptButtonText}>Stay on passage</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setAutoScrollOnLink(true);
+                markAutoScrollPromptSeen();
+                setLinkFeedback(null);
+              }}
+              style={[styles.linkPromptButton, styles.linkPromptButtonPrimary]}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.linkPromptButtonText, styles.linkPromptButtonTextPrimary]}>
+                Keep moving me
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      <Snackbar
+        visible={linkFeedback?.kind === 'linked'}
+        onDismiss={() => setLinkFeedback(null)}
+        duration={3500}
+        style={styles.snackbar}
+        action={{
+          label: 'View',
+          textColor: colors.accent.keyIdea,
+          onPress: () => {
+            if (linkFeedback) scheduleRevealSection(linkFeedback.sectionId);
+          },
+        }}
+      >
+        <Text style={styles.snackbarText}>Linked to {linkFeedback?.sectionTitle}</Text>
+      </Snackbar>
+
+      <Snackbar
+        visible={!!templateNotice}
+        onDismiss={() => setTemplateNotice(null)}
+        duration={6000}
+        style={styles.snackbar}
+        action={{
+          label: 'Undo',
+          textColor: colors.accent.keyIdea,
+          onPress: undoTemplateSwitch,
+        }}
+      >
+        <Text style={styles.snackbarText}>{templateNotice?.message}</Text>
+      </Snackbar>
+
       {/* In-Place Verse Preview Modal */}
       {renderVersePreviewModal()}
 
@@ -1096,7 +1592,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   container: {
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.md,
     paddingTop: spacing.xs,
     paddingBottom: 200, // Consistent 200px whitespace for keyboard clearance & tags menu
   },
@@ -1105,24 +1601,76 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     paddingVertical: 2,
   },
-  headerBackText: {
-    ...typography.body,
-    color: colors.text.secondary,
-  },
-  headerSaveText: {
-    ...typography.body,
+  headerDoneText: {
+    ...typography.label,
+    fontSize: 16,
     color: colors.accent.keyIdea,
     fontWeight: '600',
   },
-  errorBanner: {
-    backgroundColor: colors.accent.danger,
+  headerRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginRight: layout.headerEdgeInset,
+  },
+  headerStatusText: {
+    ...typography.caption,
+    color: colors.text.secondary,
+  },
+  headerStatusError: {
+    color: colors.accent.danger,
+    fontWeight: '600',
+  },
+  headerIconButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recoveryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    backgroundColor: colors.bg.surface,
+    borderRadius: radii.content,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent.keyIdea,
+  },
+  recoveryText: {
+    ...typography.caption,
+    color: colors.text.primary,
+    flex: 1,
+  },
+  recoveryButton: {
+    minHeight: 32,
+    paddingHorizontal: spacing.sm,
+    justifyContent: 'center',
+  },
+  recoveryButtonText: {
+    ...typography.label,
+    color: colors.accent.keyIdea,
+    fontWeight: '600',
+  },
+  recoveryButtonMuted: {
+    color: colors.text.secondary,
+  },
+  errorBanner: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.bg.surface,
+    borderRadius: radii.content,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent.danger,
   },
   errorText: {
     ...typography.caption,
-    color: colors.bg.base,
-    textAlign: 'center',
+    color: colors.text.primary,
   },
   passageCardRow: {
     flexDirection: 'row',
@@ -1134,13 +1682,10 @@ const styles = StyleSheet.create({
     marginVertical: spacing.xs,
   },
   titleInput: {
-    backgroundColor: colors.bg.surfaceRaised,
-    borderRadius: radii.controls,
-    paddingHorizontal: spacing.md,
-    paddingVertical: Platform.OS === 'ios' ? spacing.sm + 2 : 0,
-    borderWidth: 1,
-    borderColor: colors.border.hairline,
-    fontSize: 16,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 0,
+    paddingVertical: Platform.OS === 'ios' ? spacing.sm : 0,
+    fontSize: typography.title.fontSize,
     fontWeight: '600',
     fontFamily: typography.body.fontFamily,
     color: colors.text.primary,
@@ -1194,6 +1739,60 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 6,
     zIndex: 20,
+  },
+  linkPrompt: {
+    position: 'absolute',
+    left: spacing.sm,
+    right: spacing.sm,
+    bottom: spacing.md,
+    backgroundColor: colors.bg.surfaceRaised,
+    borderRadius: radii.sheet,
+    borderWidth: 1,
+    borderColor: colors.border.hairline,
+    padding: spacing.md,
+    gap: spacing.xs,
+    zIndex: 30,
+  },
+  linkPromptText: {
+    ...typography.label,
+    color: colors.text.primary,
+  },
+  linkPromptHint: {
+    ...typography.caption,
+    color: colors.text.secondary,
+  },
+  linkPromptActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  linkPromptButton: {
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.controls,
+    borderWidth: 1,
+    borderColor: colors.border.hairline,
+    justifyContent: 'center',
+  },
+  linkPromptButtonPrimary: {
+    backgroundColor: colors.accent.keyIdea,
+    borderColor: colors.accent.keyIdea,
+  },
+  linkPromptButtonText: {
+    ...typography.label,
+    color: colors.text.primary,
+  },
+  linkPromptButtonTextPrimary: {
+    color: colors.bg.base,
+    fontWeight: '600',
+  },
+  snackbar: {
+    backgroundColor: colors.bg.surfaceRaised,
+  },
+  snackbarText: {
+    ...typography.label,
+    color: colors.text.primary,
   },
   floatingBibleJumpText: {
     ...typography.caption,
