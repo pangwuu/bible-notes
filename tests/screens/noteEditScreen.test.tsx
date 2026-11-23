@@ -396,3 +396,35 @@ describe('NoteEditScreen (app/note/edit.tsx)', () => {
     expect(await loadDraft('note_draft:author_1:new:create1')).toBeNull();
   });
 });
+
+describe('NoteEditScreen template switching', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    lastNavOptions = {};
+    mockLocalSearchParams = {};
+  });
+
+  test('switches immediately, keeps the writing, and offers Undo', async () => {
+    const { getAllByPlaceholderText, getByLabelText, findByText, getByText, getByDisplayValue, queryByDisplayValue } =
+      await render(<NoteEditScreen />);
+
+    const firstSection = getAllByPlaceholderText(/./).find((el) => el.props.multiline)!;
+    await act(async () => {
+      fireEvent.changeText(firstSection, 'God is faithful');
+    });
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Select template SOAP Study'));
+    });
+
+    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(await findByText(/Switched to SOAP Study/)).toBeTruthy();
+    expect(getByDisplayValue('Key Idea:\nGod is faithful')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByText('Undo'));
+    });
+    expect(getByDisplayValue('God is faithful')).toBeTruthy();
+    expect(queryByDisplayValue('Key Idea:\nGod is faithful')).toBeNull();
+  });
+});

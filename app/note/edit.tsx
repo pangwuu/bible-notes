@@ -54,6 +54,7 @@ import {
   removeVerseTag,
 } from '../../src/utils/verseLinkUtils';
 import { useEditorPreferences } from '../../src/hooks/useEditorPreferences';
+import { carrySectionsToTemplate } from '../../src/utils/templateSwitch';
 import { findCanonicalBook } from '../../src/constants/bibleData';
 import { createPassageReference, formatSegmentDisplay } from '../../src/utils/passageParser';
 import { useReaderFontSize } from '../../src/hooks/useReaderFontSize';
@@ -126,6 +127,10 @@ export default function NoteEditScreen() {
     { sectionId: string; sectionTitle: string; kind: 'prompt' | 'linked' } | null
   >(null);
   const sectionCursorRef = useRef<Record<string, number>>({});
+  const [templateNotice, setTemplateNotice] = useState<{
+    message: string;
+    previous: { template: NoteTemplate; sections: NoteSectionValue[] };
+  } | null>(null);
 
   const [loading, setLoading] = useState<boolean>(!!id);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -687,77 +692,47 @@ export default function NoteEditScreen() {
   }, [id, user?.uid, draftParam]);
 
   // Template switching logic with dirty state handling
-  const handleSelectTemplate = useCallback(
-    (targetTemplate: NoteTemplate) => {
-      if (targetTemplate.id === activeTemplate.id) return;
-
-      const currentSections = sectionsRef.current;
-      const hasText = currentSections.some((s) => s.content.trim().length > 0);
-      if (!hasText) {
-        setActiveTemplate(targetTemplate);
-        setSections(initializeSectionValues(targetTemplate));
-        setIsDirty(true);
-        return;
-      }
-
-      Alert.alert(
-        'Switch template?',
-        'Do you want to keep your current text in the new template or discard it?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: () => {
-              setActiveTemplate(targetTemplate);
-              setSections(initializeSectionValues(targetTemplate));
-              setIsDirty(true);
-            },
-          },
-          {
-            text: 'Keep text',
-            onPress: () => {
-              const latest = sectionsRef.current;
-              const newSections: NoteSectionValue[] = targetTemplate.sections.map((sec, idx) => ({
-                id: sec.id,
-                title: sec.title,
-                icon: sec.icon || 'document-text-outline',
-                color: sec.color || getSectionColor(sec.id),
-                content: latest[idx]?.content || '',
-                verseReferences: latest[idx]?.verseReferences,
-              }));
-              setActiveTemplate(targetTemplate);
-              setSections(newSections);
-              setIsDirty(true);
-            },
-          },
-        ]
+  /**
+   * Switches template right away, carrying the writing across (see
+   * carrySectionsToTemplate), and offers Undo afterwards instead of asking first.
+   */
+  const switchTemplate = useCallback(
+    (targetTemplate: NoteTemplate, message: string) => {
+      const previous = { template: activeTemplateRef.current, sections: sectionsRef.current };
+      const hasWriting = previous.sections.some(
+        (s) => s.content.trim().length > 0 || (s.verseReferences?.length ?? 0) > 0
       );
-    },
-    [activeTemplate.id]
-  );
-
-  // Template CRUD actions
-  const applyTemplatePreservingContent = useCallback(
-    (template: NoteTemplate, currentSections: NoteSectionValue[]) => {
-      const newSections: NoteSectionValue[] = template.sections.map((sec, idx) => {
-        // Try matching by section id first; fallback to index position
-        const existing = currentSections.find((s) => s.id === sec.id) || currentSections[idx];
-        return {
-          id: sec.id,
-          title: sec.title,
-          icon: sec.icon,
-          color: sec.color,
-          content: existing?.content || '',
-        };
-      });
-      setActiveTemplate(template);
-      setSections(newSections);
+      setActiveTemplate(targetTemplate);
+      setSections(
+        hasWriting
+          ? carrySectionsToTemplate(previous.sections, targetTemplate)
+          : initializeSectionValues(targetTemplate)
+      );
+      sectionCursorRef.current = {};
       setIsDirty(true);
+      setTemplateNotice(hasWriting ? { message, previous } : null);
     },
     []
   );
 
+  const handleSelectTemplate = useCallback(
+    (targetTemplate: NoteTemplate) => {
+      if (targetTemplate.id === activeTemplateRef.current.id) return;
+      switchTemplate(targetTemplate, `Switched to ${targetTemplate.name}. Your writing came with it.`);
+    },
+    [switchTemplate]
+  );
+
+  const undoTemplateSwitch = useCallback(() => {
+    if (!templateNotice) return;
+    setActiveTemplate(templateNotice.previous.template);
+    setSections(templateNotice.previous.sections);
+    sectionCursorRef.current = {};
+    setIsDirty(true);
+    setTemplateNotice(null);
+  }, [templateNotice]);
+
+  // Template CRUD actions
   const handleSaveCustomTemplate = useCallback(
     async (template: NoteTemplate) => {
       if (!user?.uid) return;
@@ -774,45 +749,16 @@ export default function NoteEditScreen() {
       try {
         await updateUserProfile(user.uid, { custom_templates: updated });
 
-        // If editing the active template or activating this template
-        if (activeTemplate.id === template.id) {
-          // Detect if any section with non-empty content was removed or reordered
-          const existingWithContent = sections.filter((s) => s.content.trim().length > 0);
-          const newIds = template.sections.map((s) => s.id);
-
-          const hasRemovedSections = existingWithContent.some(
-            (s) => !newIds.includes(s.id)
-          );
-
-          // Check if the relative ordering of persisting sections with content has changed
-          const persistingIds = existingWithContent
-            .map((s) => s.id)
-            .filter((id) => newIds.includes(id));
-          const newIndices = persistingIds.map((id) => newIds.indexOf(id));
-          const hasReordered = newIndices.some((pos, idx) => idx > 0 && pos < newIndices[idx - 1]);
-
-          if (hasRemovedSections || hasReordered) {
-            Alert.alert(
-              'Section changes',
-              'Some sections with text were removed or reordered. Existing text will be preserved where possible.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Keep my text',
-                  onPress: () => applyTemplatePreservingContent(template, sections),
-                },
-              ]
-            );
-          } else {
-            // No sections with text were removed or reordered (e.g. icon, color, title, or new section added)
-            applyTemplatePreservingContent(template, sections);
-          }
+        // Editing the template this note uses: re-apply it so renamed, added or
+        // removed sections show up, keeping all of the writing.
+        if (activeTemplateRef.current.id === template.id) {
+          switchTemplate(template, `Updated ${template.name}. Your writing was kept.`);
         }
       } catch (err) {
         Alert.alert('Error', 'Failed to save custom template.');
       }
     },
-    [user?.uid, profile?.custom_templates, activeTemplate.id, sections, applyTemplatePreservingContent]
+    [user?.uid, profile?.custom_templates, switchTemplate]
   );
 
   const handleDeleteCustomTemplate = useCallback(
@@ -823,29 +769,17 @@ export default function NoteEditScreen() {
 
       try {
         await updateUserProfile(user.uid, { custom_templates: filtered });
-        if (activeTemplate.id === templateId) {
-          const hasContent = sections.some((s) => s.content.trim().length > 0);
-          if (hasContent) {
-            Alert.alert(
-              'Template deleted',
-              'The active template was deleted. Your note has been switched to the default template with your text preserved.',
-              [
-                {
-                  text: 'Keep my text',
-                  onPress: () => applyTemplatePreservingContent(DEFAULT_TEMPLATE, sections),
-                },
-              ]
-            );
-          } else {
-            setActiveTemplate(DEFAULT_TEMPLATE);
-            setSections(initializeSectionValues(DEFAULT_TEMPLATE));
-          }
+        if (activeTemplateRef.current.id === templateId) {
+          switchTemplate(
+            DEFAULT_TEMPLATE,
+            `Template deleted. This note now uses ${DEFAULT_TEMPLATE.name}, with your writing kept.`
+          );
         }
       } catch (err) {
         Alert.alert('Error', 'Failed to delete custom template.');
       }
     },
-    [user?.uid, profile?.custom_templates, activeTemplate.id, sections, applyTemplatePreservingContent]
+    [user?.uid, profile?.custom_templates, switchTemplate]
   );
 
   // ---------------------------------------------------------------------------
@@ -1581,6 +1515,20 @@ export default function NoteEditScreen() {
         }}
       >
         <Text style={styles.snackbarText}>Linked to {linkFeedback?.sectionTitle}</Text>
+      </Snackbar>
+
+      <Snackbar
+        visible={!!templateNotice}
+        onDismiss={() => setTemplateNotice(null)}
+        duration={6000}
+        style={styles.snackbar}
+        action={{
+          label: 'Undo',
+          textColor: colors.accent.keyIdea,
+          onPress: undoTemplateSwitch,
+        }}
+      >
+        <Text style={styles.snackbarText}>{templateNotice?.message}</Text>
       </Snackbar>
 
       {/* In-Place Verse Preview Modal */}
