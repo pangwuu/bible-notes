@@ -57,4 +57,10 @@ describe('carrySectionsToTemplate', () => {
       expect(all).toContain(text);
     }
   });
+
+  it('leaves out the old section names when labelMovedText is off', () => {
+    const [notes] = carrySectionsToTemplate(swedish, tpl('blank'), { labelMovedText: false });
+    expect(notes.content).toBe('God is faithful\n\nWhy wait?\n\nTrust today');
+    expect(notes.content).not.toContain('Question:');
+  });
 });

@@ -122,6 +122,7 @@ export default function NoteEditScreen() {
     setAutoScrollOnLink,
     autoScrollPromptSeen,
     markAutoScrollPromptSeen,
+    labelMovedSections,
   } = useEditorPreferences();
   const [linkFeedback, setLinkFeedback] = useState<
     { sectionId: string; sectionTitle: string; kind: 'prompt' | 'linked' } | null
@@ -705,14 +706,16 @@ export default function NoteEditScreen() {
       setActiveTemplate(targetTemplate);
       setSections(
         hasWriting
-          ? carrySectionsToTemplate(previous.sections, targetTemplate)
+          ? carrySectionsToTemplate(previous.sections, targetTemplate, {
+              labelMovedText: labelMovedSections,
+            })
           : initializeSectionValues(targetTemplate)
       );
       sectionCursorRef.current = {};
       setIsDirty(true);
       setTemplateNotice(hasWriting ? { message, previous } : null);
     },
-    []
+    [labelMovedSections]
   );
 
   const handleSelectTemplate = useCallback(

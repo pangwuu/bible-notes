@@ -18,6 +18,7 @@ import {
   limit,
   startAfter,
   serverTimestamp,
+  writeBatch,
   DocumentSnapshot,
 } from 'firebase/firestore';
 import safeStorage from '../utils/safeStorage';
@@ -345,37 +346,131 @@ export async function updateNote(noteId: string, updates: UpdateNoteInput): Prom
   return updatedNote;
 }
 
+/** How long a deleted note stays in Recently Deleted before it is purged. */
+export const TRASH_RETENTION_DAYS = 30;
+const TRASH_RETENTION_MS = TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+export interface DeletedNote extends Note {
+  deletedAt: number;
+}
+
+function toMillis(value: any): number {
+  if (typeof value === 'number') return value;
+  if (value?.toMillis) return value.toMillis();
+  return 0;
+}
+
+async function removeFromLocalCaches(noteId: string, userId?: string) {
+  await safeStorage.removeItem(`note_${noteId}`);
+  await safeStorage.removeItem(`pending_offline_save_${noteId}`);
+  if (!userId) return;
+  try {
+    const cachedUserNotes = await safeStorage.getItem(`user_notes_${userId}`);
+    if (cachedUserNotes) {
+      const list = JSON.parse(cachedUserNotes) as Note[];
+      const filtered = list.filter((n) => n.id !== noteId);
+      await safeStorage.setItem(`user_notes_${userId}`, JSON.stringify(filtered));
+    }
+  } catch {}
+}
+
 /**
- * Delete a note from Cloud Firestore and local storage.
+ * Move a note to Recently Deleted.
+ *
+ * The note document is copied to `deleted_notes/{id}` and removed from `notes`
+ * in one batch, so it is never in both places or neither. Every query that
+ * reads `notes` (your list, friends' feeds, overlap checks) stops seeing it
+ * without needing a "deleted" filter.
+ *
+ * Throws if the note can't be read from the server, rather than deleting it
+ * locally only: that used to make notes disappear and later come back.
  */
 export async function deleteNote(noteId: string): Promise<void> {
   const validId = parseNoteId(noteId);
   const noteRef = doc(db, 'notes', validId);
 
-  // Retrieve existing note to identify user for user_notes sync
-  const existing = await getNote(validId);
-
-  try {
-    await deleteDoc(noteRef);
-  } catch (err) {
-    // Continue local cleanup even if offline
+  const snap = await getDoc(noteRef);
+  if (!snap.exists()) {
+    await removeFromLocalCaches(validId, auth.currentUser?.uid);
+    return;
   }
+  const data = snap.data();
 
-  await safeStorage.removeItem(`note_${validId}`);
-  await safeStorage.removeItem(`pending_offline_save_${validId}`);
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'deleted_notes', validId), { ...data, deleted_at: serverTimestamp() });
+  batch.delete(noteRef);
+  await batch.commit();
 
-  // Sync user_notes cache
+  await removeFromLocalCaches(validId, data.user_id || auth.currentUser?.uid);
+}
+
+/**
+ * Put a note from Recently Deleted back in `notes`, with the same id so links
+ * and notifications pointing at it work again.
+ */
+export async function restoreNote(noteId: string): Promise<Note> {
+  const validId = parseNoteId(noteId);
+  const trashRef = doc(db, 'deleted_notes', validId);
+  const snap = await getDoc(trashRef);
+  if (!snap.exists()) {
+    throw new Error('This note is no longer in Recently Deleted.');
+  }
+  const { deleted_at, ...data } = snap.data() as any;
+
+  const batch = writeBatch(db);
+  // restored_at tells the onNoteCreated function not to notify friends again.
+  batch.set(doc(db, 'notes', validId), { ...data, restored_at: serverTimestamp() });
+  batch.delete(trashRef);
+  await batch.commit();
+
+  const restored = noteDocumentToNote(data, validId);
+  await safeStorage.setItem(`note_${validId}`, JSON.stringify(restored));
   try {
-    const currentUid = existing?.userId || existing?.user_id || auth.currentUser?.uid;
-    if (currentUid) {
-      const cachedUserNotes = await safeStorage.getItem(`user_notes_${currentUid}`);
-      if (cachedUserNotes) {
-        const list = JSON.parse(cachedUserNotes) as Note[];
-        const filtered = list.filter((n) => n.id !== validId);
-        await safeStorage.setItem(`user_notes_${currentUid}`, JSON.stringify(filtered));
-      }
+    const uid = data.user_id;
+    const cachedUserNotes = uid ? await safeStorage.getItem(`user_notes_${uid}`) : null;
+    if (cachedUserNotes) {
+      const list = (JSON.parse(cachedUserNotes) as Note[]).filter((n) => n.id !== validId);
+      list.unshift(restored);
+      await safeStorage.setItem(`user_notes_${uid}`, JSON.stringify(list));
     }
   } catch {}
+
+  return restored;
+}
+
+/**
+ * List a user's Recently Deleted notes, newest deletion first. Notes older than
+ * TRASH_RETENTION_DAYS are purged here, since there is no scheduled job to do it.
+ */
+export async function getDeletedNotes(userId: string): Promise<DeletedNote[]> {
+  if (!userId) return [];
+  const snap = await getDocs(query(collection(db, 'deleted_notes'), where('user_id', '==', userId)));
+
+  const now = Date.now();
+  const kept: DeletedNote[] = [];
+  const expired: string[] = [];
+  snap.forEach((docSnap) => {
+    const data = docSnap.data();
+    // A just-deleted note's server timestamp can read as null until the write lands.
+    const deletedAt = toMillis(data.deleted_at) || now;
+    if (now - deletedAt > TRASH_RETENTION_MS) {
+      expired.push(docSnap.id);
+    } else {
+      kept.push({ ...noteDocumentToNote(data, docSnap.id), deletedAt });
+    }
+  });
+
+  if (expired.length > 0) {
+    Promise.all(expired.map((id) => deleteDoc(doc(db, 'deleted_notes', id)))).catch(() => {});
+  }
+
+  return kept.sort((a, b) => b.deletedAt - a.deletedAt);
+}
+
+/** Delete a note from Recently Deleted for good. */
+export async function permanentlyDeleteNote(noteId: string): Promise<void> {
+  const validId = parseNoteId(noteId);
+  await deleteDoc(doc(db, 'deleted_notes', validId));
 }
 
 /**

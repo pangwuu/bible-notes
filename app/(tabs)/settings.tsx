@@ -47,8 +47,14 @@ import type { NoteVisibility, BibleTranslation } from '../../src/types/user';
 export default function SettingsScreen() {
   const { user, profile, signOut } = useAuth();
   const router = useRouter();
-  const { verseTagPlacement, setVerseTagPlacement, autoScrollOnLink, setAutoScrollOnLink } =
-    useEditorPreferences();
+  const {
+    verseTagPlacement,
+    setVerseTagPlacement,
+    autoScrollOnLink,
+    setAutoScrollOnLink,
+    labelMovedSections,
+    setLabelMovedSections,
+  } = useEditorPreferences();
   const { downloadTranslation, progress, activeDownload, isDownloading } =
     useDownloadTranslation();
 
@@ -400,6 +406,25 @@ export default function SettingsScreen() {
 
         <Divider style={styles.innerDivider} />
 
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleTextContainer}>
+            <Text style={styles.cardTitle}>Label moved text when switching template</Text>
+            <Text style={styles.cardDescription}>
+              {labelMovedSections
+                ? 'Text that lands in a differently named section starts with its old name, like "Prayer:".'
+                : 'Text moves into the new sections as it is, without its old section name.'}
+            </Text>
+          </View>
+          <Switch
+            value={labelMovedSections}
+            onValueChange={setLabelMovedSections}
+            color={colors.accentKeyIdea}
+            accessibilityLabel="Label moved text when switching template"
+          />
+        </View>
+
+        <Divider style={styles.innerDivider} />
+
         <Text style={styles.cardTitle}>Linked verse placement</Text>
         <Text style={styles.cardDescription}>{PLACEMENT_HELP[verseTagPlacement]}</Text>
         <SegmentedButtons
@@ -420,6 +445,22 @@ export default function SettingsScreen() {
             {PLACEMENT_PREVIEW[verseTagPlacement].after}
           </Text>
         </View>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Recently Deleted</Text>
+        <Text style={styles.cardDescription}>
+          Deleted notes stay here for 30 days. Restore one or delete it for good.
+        </Text>
+        <Button
+          mode="outlined"
+          icon="delete-restore"
+          textColor={colors.accentKeyIdea}
+          style={styles.aboutVersionsButton}
+          onPress={() => router.push('/recently-deleted')}
+        >
+          Open Recently Deleted
+        </Button>
       </View>
 
       <Text style={styles.sectionHeader}>Bible display</Text>

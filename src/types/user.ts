@@ -39,6 +39,8 @@ export interface UserSettings {
   verse_tag_placement?: 'newline' | 'inline' | 'cursor';
   /** Scroll down to the note section after linking a verse from the reader. */
   auto_scroll_on_link?: boolean;
+  /** When switching template, start moved text with its old section name ("Prayer:"). */
+  label_moved_sections?: boolean;
 }
 
 export interface UserDocument {

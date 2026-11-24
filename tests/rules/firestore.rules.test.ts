@@ -106,4 +106,20 @@ describe('Firestore Security Rules Integration (Emulator)', () => {
     expect(content).toContain('match /notes/{noteId}');
     expect(content).toContain('match /friendships/{friendshipId}');
   });
+
+  conditionalTest('deleted_notes: only the owner can trash, read, restore or purge', async () => {
+    if (!testEnv) return;
+    const ownerDb = testEnv.authenticatedContext('owner_1').firestore();
+    const otherDb = testEnv.authenticatedContext('other_1').firestore();
+
+    await assertSucceeds(setDoc(doc(ownerDb, 'deleted_notes/n1'), { user_id: 'owner_1' }));
+    await assertFails(setDoc(doc(otherDb, 'deleted_notes/n2'), { user_id: 'owner_1' }));
+
+    await assertSucceeds(getDoc(doc(ownerDb, 'deleted_notes/n1')));
+    await assertFails(getDoc(doc(otherDb, 'deleted_notes/n1')));
+
+    await assertFails(updateDoc(doc(ownerDb, 'deleted_notes/n1'), { title: 'edited' }));
+    await assertFails(deleteDoc(doc(otherDb, 'deleted_notes/n1')));
+    await assertSucceeds(deleteDoc(doc(ownerDb, 'deleted_notes/n1')));
+  });
 });

@@ -49,6 +49,24 @@ describe('Cloud Functions: onNoteCreated', () => {
     expect(mockBatch.commit).not.toHaveBeenCalled();
   });
 
+  test('does not notify again for a note restored from Recently Deleted', async () => {
+    const mockSnap = {
+      data: () => ({
+        visibility: 'friends',
+        book: 'Romans',
+        start_verse_id: 28145,
+        end_verse_id: 28147,
+        user_id: 'user_1',
+        restored_at: 'SOME_TIMESTAMP',
+      }),
+    };
+
+    await onNoteCreated.run({ data: mockSnap, params: { noteId: 'note_123' } });
+
+    expect(mockFirestore.collection).not.toHaveBeenCalled();
+    expect(mockBatch.commit).not.toHaveBeenCalled();
+  });
+
   test('exits early when essential fields (book, start_verse_id, user_id) are missing', async () => {
     const mockSnap = {
       data: () => ({

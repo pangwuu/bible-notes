@@ -37,6 +37,11 @@ exports.onNoteCreated = onDocumentCreated("notes/{noteId}", async (event) => {
   const noteData = snapshot.data();
   const noteId = event.params.noteId;
 
+  // A note restored from Recently Deleted already notified friends when it was first made.
+  if (noteData.restored_at) {
+    return;
+  }
+
   // Only notify if note visibility is set to 'friends'
   if (noteData.visibility !== "friends") {
     return;

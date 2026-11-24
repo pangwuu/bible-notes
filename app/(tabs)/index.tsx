@@ -5,6 +5,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/AuthContext';
+import { onNotesChanged } from '../../src/state/noteTrash';
 import * as notesService from '../../src/services/notesService';
 import { Note } from '../../src/types/note';
 import NoteCard from '../../src/components/NoteCard';
@@ -120,6 +121,8 @@ export default function DashboardScreen() {
       loadDashboardData();
     }, [loadDashboardData])
   );
+
+  useEffect(() => onNotesChanged(() => loadDashboardData()), [loadDashboardData]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

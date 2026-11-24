@@ -4,7 +4,7 @@
  * Governed strictly by DESIGN.md.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -24,6 +24,7 @@ import EmptyState from '../../src/components/EmptyState';
 import AddNoteFAB from '../../src/components/AddNoteFAB';
 import { findCanonicalBook, CANONICAL_BOOKS } from '../../src/constants/bibleData';
 import { NoteDraft, listNewNoteDrafts, clearDraft } from '../../src/services/noteDraftStore';
+import { onNotesChanged } from '../../src/state/noteTrash';
 
 export default function NotesBrowserScreen() {
   const router = useRouter();
@@ -68,6 +69,8 @@ export default function NotesBrowserScreen() {
       loadNotes();
     }, [loadNotes])
   );
+
+  useEffect(() => onNotesChanged(() => loadNotes()), [loadNotes]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
