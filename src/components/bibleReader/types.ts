@@ -48,6 +48,8 @@ export interface BibleReaderProps {
   actionBarPlacement?: 'inline' | 'docked';
   /** Reports the docked bar's height (0 when hidden) so screens can pad their scroll content. */
   onDockedActionBarHeightChange?: (height: number) => void;
+  /** Window-bottom offset for the docked bar, for screens with a tab bar or footer. */
+  dockedActionBarBottomOffset?: number;
 }
 
 export const DEFAULT_SECTION_OPTIONS: SectionOption[] = [

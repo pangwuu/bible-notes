@@ -176,6 +176,23 @@ describe('NoteEditScreen (app/note/edit.tsx)', () => {
     expect(getByPlaceholderText('Title (optional)')).toBeTruthy();
   });
 
+  test('attaches verses picked in the Bible tab to the chosen section', async () => {
+    mockLocalSearchParams = {
+      book: 'Romans',
+      chapter: '8',
+      verseStart: '1',
+      verseEnd: '39',
+      templateId: 'swedish',
+      attachSection: 'question',
+      attachVerses: '28,29',
+    } as any;
+
+    const { findByDisplayValue, getAllByText } = await render(<NoteEditScreen />);
+
+    expect(getAllByText('Romans 8').length).toBeGreaterThan(0);
+    expect(await findByDisplayValue(/\[Rom 8:28-29\]/)).toBeTruthy();
+  });
+
   test('loads existing note by id and populates title, passage, and sections', async () => {
     mockLocalSearchParams = { id: 'existing_note_123' };
     (notesService.getNote as jest.Mock).mockResolvedValueOnce(mockExistingNote);

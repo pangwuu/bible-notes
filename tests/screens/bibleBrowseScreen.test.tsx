@@ -4,6 +4,7 @@ import { PaperProvider } from 'react-native-paper';
 import BibleBrowseScreen from '../../app/(tabs)/bible';
 
 const mockPush = jest.fn();
+let mockReaderProps: Record<string, any> = {};
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -27,15 +28,14 @@ jest.mock('../../src/components/BibleReader', () => {
   const { Text } = require('react-native');
   return {
     __esModule: true,
-    default: ({ preferredTranslation, preferredVersionId }: {
-      preferredTranslation?: string;
-      preferredVersionId?: number;
-    }) =>
-      React.createElement(
+    default: (props: { preferredTranslation?: string; preferredVersionId?: number }) => {
+      mockReaderProps = props;
+      return React.createElement(
         Text,
         { testID: 'bible-reader' },
-        `Reader ${preferredTranslation} ${preferredVersionId}`
-      ),
+        `Reader ${props.preferredTranslation} ${props.preferredVersionId}`
+      );
+    },
   };
 });
 
@@ -55,7 +55,7 @@ describe('BibleBrowseScreen', () => {
       </PaperProvider>
     );
 
-    expect(screen.getByText('Read Scripture')).toBeTruthy();
+    expect(screen.getByText('Read the Bible')).toBeTruthy();
     expect(screen.getByLabelText('Search books or passages')).toBeTruthy();
 
     await act(async () => {
@@ -132,6 +132,47 @@ describe('BibleBrowseScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Jonah 1')).toBeTruthy();
+    });
+  });
+
+  test('docks the verse bar and opens a note with selected verses aimed at a section', async () => {
+    const screen = await render(
+      <PaperProvider>
+        <BibleBrowseScreen />
+      </PaperProvider>
+    );
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByLabelText('Search books or passages'), 'Obadiah');
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Obadiah'));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('bible-reader')).toBeTruthy();
+    });
+
+    expect(mockReaderProps.actionBarPlacement).toBe('docked');
+    expect(mockReaderProps.sectionOptions.map((s: { id: string }) => s.id)).toEqual([
+      'light',
+      'question',
+      'arrow',
+    ]);
+
+    await act(async () => {
+      mockReaderProps.onAttachToSection([4, 3], 'question', { book: 'Obadiah', chapter: 1 });
+    });
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/note/edit',
+      params: expect.objectContaining({
+        book: 'Obadiah',
+        chapter: '1',
+        verseStart: '1',
+        templateId: 'swedish',
+        attachSection: 'question',
+        attachVerses: '3,4',
+      }),
     });
   });
 });

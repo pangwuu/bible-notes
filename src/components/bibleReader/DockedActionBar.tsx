@@ -8,6 +8,8 @@ interface DockedActionBarProps {
   visible: boolean;
   children: React.ReactNode;
   onHeightChange?: (height: number) => void;
+  /** Distance from the bottom of the window; defaults to just above the safe area. */
+  bottomOffset?: number;
 }
 
 /**
@@ -18,8 +20,13 @@ export const DockedActionBar: React.FC<DockedActionBarProps> = ({
   visible,
   children,
   onHeightChange,
+  bottomOffset,
 }) => {
   const insets = useSafeAreaInsets();
+  const bottom = bottomOffset ?? insets.bottom + spacing.sm;
+  // With a custom offset the bar floats above other chrome (e.g. a tab bar), so only
+  // the bar itself plus its gap overlaps the screen's scroll area.
+  const overlapBelowBar = bottomOffset !== undefined ? spacing.sm : insets.bottom + spacing.sm;
   const translate = useRef(new Animated.Value(24)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -41,7 +48,7 @@ export const DockedActionBar: React.FC<DockedActionBarProps> = ({
   if (!visible) return null;
 
   const handleLayout = (e: LayoutChangeEvent) => {
-    onHeightChange?.(e.nativeEvent.layout.height + insets.bottom + spacing.sm);
+    onHeightChange?.(e.nativeEvent.layout.height + overlapBelowBar);
   };
 
   return (
@@ -51,7 +58,7 @@ export const DockedActionBar: React.FC<DockedActionBarProps> = ({
           onLayout={handleLayout}
           style={[
             styles.dock,
-            { bottom: insets.bottom + spacing.sm, opacity, transform: [{ translateY: translate }] },
+            { bottom, opacity, transform: [{ translateY: translate }] },
           ]}
         >
           <View style={styles.inner}>{children}</View>

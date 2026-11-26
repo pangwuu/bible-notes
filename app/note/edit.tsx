@@ -107,13 +107,26 @@ export default function NoteEditScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const router = useRouter();
-  const { id, book, chapter, verseStart, verseEnd, draft: draftParam } = useLocalSearchParams<{
+  const {
+    id,
+    book,
+    chapter,
+    verseStart,
+    verseEnd,
+    draft: draftParam,
+    templateId: templateParam,
+    attachSection,
+    attachVerses,
+  } = useLocalSearchParams<{
     id?: string;
     draft?: string;
     book?: string;
     chapter?: string;
     verseStart?: string;
     verseEnd?: string;
+    templateId?: string;
+    attachSection?: string;
+    attachVerses?: string;
   }>();
   const { user, profile } = useAuth();
   const {
@@ -163,7 +176,8 @@ export default function NoteEditScreen() {
 
   // Active Template & Dynamic Sections
   const [title, setTitle] = useState<string>('');
-  const preferredDefaultTplId = profile?.settings?.default_template_id || profile?.default_template_id;
+  const preferredDefaultTplId =
+    (!id && templateParam) || profile?.settings?.default_template_id || profile?.default_template_id;
   const initialTpl = useMemo(() => {
     if (!id && preferredDefaultTplId) {
       const found = allTemplates.find((t) => t.id === preferredDefaultTplId);
@@ -306,7 +320,7 @@ export default function NoteEditScreen() {
 
   // Apply default template preference for new notes
   useEffect(() => {
-    if (!id) {
+    if (!id && !templateParam) {
       safeStorage.getItem('default_template_id').then((stored) => {
         const targetId = profile?.settings?.default_template_id || profile?.default_template_id || stored;
         if (targetId) {
@@ -318,7 +332,7 @@ export default function NoteEditScreen() {
         }
       });
     }
-  }, [id, profile?.settings?.default_template_id, profile?.default_template_id, allTemplates, isDirty]);
+  }, [id, templateParam, profile?.settings?.default_template_id, profile?.default_template_id, allTemplates, isDirty]);
 
   // If friends are disabled, enforce private visibility
   useEffect(() => {
@@ -580,6 +594,24 @@ export default function NoteEditScreen() {
       console.warn('Failed to prefill passage from browse params:', err);
     }
   }, [id, book, chapter, verseStart, verseEnd]);
+
+  // Verses chosen in the Bible tab's "Note in" bar arrive already aimed at a section.
+  const pendingAttachRef = useRef(!id && !!attachSection && !!attachVerses);
+  useEffect(() => {
+    if (!pendingAttachRef.current || !passage || !attachSection) return;
+    if (!sections.some((s) => s.id === attachSection)) return;
+    const verses = String(attachVerses || '')
+      .split(',')
+      .map((v) => parseInt(v, 10))
+      .filter((v) => Number.isFinite(v) && v > 0);
+    pendingAttachRef.current = false;
+    if (verses.length === 0) return;
+    const ch = parseInt(String(chapter), 10);
+    handleAttachToSection(verses, attachSection, {
+      book: book ? String(book) : undefined,
+      chapter: Number.isFinite(ch) ? ch : undefined,
+    });
+  }, [passage, sections, attachSection, attachVerses, book, chapter, handleAttachToSection]);
 
   // Load existing note if editing, then reapply any unsynced draft from this device.
   useEffect(() => {
