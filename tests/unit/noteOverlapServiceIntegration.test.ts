@@ -136,6 +136,24 @@ describe('Note Overlap Service Integration', () => {
       expect(res[0].overlapSegments[0].book).toBe('Romans');
     });
 
+    test('excludes the note being viewed so a friend note does not match itself', async () => {
+      (friendService.getFriends as jest.Mock).mockResolvedValueOnce([
+        {
+          friendshipId: 'u1_f1',
+          friendUid: 'friend_1',
+          friendProfile: mockFriendProfile,
+          createdAt: Date.now(),
+        },
+      ]);
+
+      mockGetDocs.mockResolvedValueOnce([mockFriendNoteDoc]);
+
+      const res = await findFriendNoteOverlaps('user_1', mockPassage, {
+        excludeNoteId: 'friend_note_99',
+      });
+      expect(res).toHaveLength(0);
+    });
+
     test('filters out friend notes that do not overlap in verse numbers', async () => {
       (friendService.getFriends as jest.Mock).mockResolvedValueOnce([
         {
