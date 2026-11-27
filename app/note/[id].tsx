@@ -36,6 +36,7 @@ import { useReaderFontSize } from '../../src/hooks/useReaderFontSize';
 import { useVersePreview } from '../../src/hooks/useVersePreview';
 import { TOCSegmentBar } from '../../src/components/note/TOCSegmentBar';
 import { formatMarkdownCrossReferences } from '../../src/utils/crossReferenceParser';
+import { announceNoteDeleted } from '../../src/state/noteTrash';
 
 export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -44,6 +45,7 @@ export default function NoteDetailScreen() {
   const { user, profile } = useAuth();
 
   const [note, setNote] = useState<Note | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [overlaps, setOverlaps] = useState<FriendOverlapItem[]>([]);
   const [loadingOverlaps, setLoadingOverlaps] = useState<boolean>(false);
   const [relatedNotes, setRelatedNotes] = useState<Note[]>([]);
@@ -226,23 +228,20 @@ export default function NoteDetailScreen() {
     }
   }, [router]);
 
-  const handleDelete = () => {
-    if (!note) return;
-    Alert.alert('Delete Note', 'Are you sure you want to permanently delete this note?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await notesService.deleteNote(note.id);
-            navigateBack();
-          } catch {
-            Alert.alert('Error', 'Failed to delete note.');
-          }
-        },
-      },
-    ]);
+  const handleDelete = async () => {
+    if (!note || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await notesService.deleteNote(note.id);
+      announceNoteDeleted({
+        id: note.id,
+        label: note.title ? `"${note.title}"` : note.passage?.display || 'note',
+      });
+      navigateBack();
+    } catch {
+      setIsDeleting(false);
+      Alert.alert('Error', "Couldn't delete this note. Check your connection and try again.");
+    }
   };
 
   const isAuthor = !!(user?.uid && note?.user_id === user.uid);
@@ -260,14 +259,19 @@ export default function NoteDetailScreen() {
               >
                 <Ionicons name="pencil" size={20} color={colors.accent.keyIdea} />
               </Pressable>
-              <Pressable onPress={handleDelete} style={styles.headerButton} hitSlop={8}>
+              <Pressable
+                onPress={handleDelete}
+                disabled={isDeleting}
+                style={styles.headerButton}
+                hitSlop={8}
+              >
                 <Ionicons name="trash-outline" size={20} color={colors.accent.danger} />
               </Pressable>
             </View>
           )
         : undefined,
     });
-  }, [navigation, isAuthor, note, router]);
+  }, [navigation, isAuthor, note, router, isDeleting]);
 
   const normalizedSections = useMemo(() => {
     if (!note) return [];

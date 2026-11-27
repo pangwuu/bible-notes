@@ -13,6 +13,8 @@ import {
   getUserTags,
   getUserNotesPaginated,
   parseNoteId,
+  restoreNote,
+  getDeletedNotes,
 } from '../../src/services/notesService';
 import { CreateNoteInput, UpdateNoteInput, PassageReference } from '../../src/types/note';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -46,6 +48,11 @@ const mockWhere = jest.fn((...args: any[]) => ({ field: args[0], op: args[1], va
 const mockLimit = jest.fn((...args: any[]) => ({ limit: args[0] }));
 const mockStartAfter = jest.fn((...args: any[]) => ({ startAfter: args[0] }));
 const mockServerTimestamp = jest.fn(() => 123456789);
+const mockBatch = {
+  set: jest.fn(),
+  delete: jest.fn(),
+  commit: jest.fn(async () => {}),
+};
 
 jest.mock('firebase/firestore', () => ({
   doc: (...args: any[]) => mockDoc(...args),
@@ -60,6 +67,7 @@ jest.mock('firebase/firestore', () => ({
   limit: (...args: any[]) => mockLimit(...args),
   startAfter: (...args: any[]) => mockStartAfter(...args),
   serverTimestamp: () => mockServerTimestamp(),
+  writeBatch: () => mockBatch,
 }));
 
 jest.mock('../../src/services/firebase', () => ({
@@ -178,15 +186,71 @@ describe('NotesService Unit Tests', () => {
     expect(JSON.parse(cached!).lightContent).toBe('New Light Truth');
   });
 
-  test('deleteNote removes document from Firestore and AsyncStorage', async () => {
-    mockDeleteDoc.mockResolvedValueOnce(undefined);
+  test('deleteNote moves the note to deleted_notes in one batch and clears local caches', async () => {
+    const noteData = { id: 'del_123', user_id: 'user_123', title: 'Gone soon', tags: [] };
+    mockGetDoc.mockResolvedValueOnce({ exists: () => true, data: () => noteData });
     await AsyncStorage.setItem('note_del_123', JSON.stringify({ id: 'del_123' }));
+    await AsyncStorage.setItem(
+      'user_notes_user_123',
+      JSON.stringify([{ id: 'del_123' }, { id: 'keep_me' }])
+    );
 
     await deleteNote('del_123');
 
+    expect(mockBatch.set).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'del_123' }),
+      expect.objectContaining({ title: 'Gone soon', deleted_at: 123456789 })
+    );
+    expect(mockDoc.mock.calls.some((c) => c[1] === 'deleted_notes')).toBe(true);
+    expect(mockBatch.delete).toHaveBeenCalledTimes(1);
+    expect(mockBatch.commit).toHaveBeenCalledTimes(1);
+    expect(mockDeleteDoc).not.toHaveBeenCalled();
+
+    expect(await AsyncStorage.getItem('note_del_123')).toBeNull();
+    const list = JSON.parse((await AsyncStorage.getItem('user_notes_user_123'))!);
+    expect(list.map((n: any) => n.id)).toEqual(['keep_me']);
+  });
+
+  test('restoreNote puts the note back with the same id and marks it restored', async () => {
+    mockGetDoc.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({ id: 'del_123', user_id: 'user_123', title: 'Back again', deleted_at: 1 }),
+    });
+    await AsyncStorage.setItem('user_notes_user_123', JSON.stringify([{ id: 'other' }]));
+
+    const restored = await restoreNote('del_123');
+
+    const [ref, data] = mockBatch.set.mock.calls[0];
+    expect(ref.id).toBe('del_123');
+    expect(data.deleted_at).toBeUndefined();
+    expect(data.restored_at).toBe(123456789);
+    expect(mockBatch.delete).toHaveBeenCalledTimes(1);
+    expect(restored.id).toBe('del_123');
+    const list = JSON.parse((await AsyncStorage.getItem('user_notes_user_123'))!);
+    expect(list.map((n: any) => n.id)).toEqual(['del_123', 'other']);
+  });
+
+  test('restoreNote fails clearly when the note is no longer in Recently Deleted', async () => {
+    mockGetDoc.mockResolvedValueOnce({ exists: () => false });
+    await expect(restoreNote('ghost')).rejects.toThrow(/no longer in Recently Deleted/);
+    expect(mockBatch.commit).not.toHaveBeenCalled();
+  });
+
+  test('getDeletedNotes returns recent deletions newest first and purges ones past 30 days', async () => {
+    const day = 24 * 60 * 60 * 1000;
+    const docs = [
+      { id: 'old', data: () => ({ user_id: 'user_123', deleted_at: Date.now() - 31 * day }) },
+      { id: 'week', data: () => ({ user_id: 'user_123', deleted_at: Date.now() - 7 * day }) },
+      { id: 'today', data: () => ({ user_id: 'user_123', deleted_at: Date.now() - 1000 }) },
+    ];
+    mockGetDocs.mockResolvedValueOnce({ forEach: (cb: any) => docs.forEach(cb) });
+    mockDeleteDoc.mockResolvedValue(undefined);
+
+    const result = await getDeletedNotes('user_123');
+
+    expect(result.map((n) => n.id)).toEqual(['today', 'week']);
     expect(mockDeleteDoc).toHaveBeenCalledTimes(1);
-    const cached = await AsyncStorage.getItem('note_del_123');
-    expect(cached).toBeNull();
+    expect(mockDeleteDoc).toHaveBeenCalledWith(expect.objectContaining({ id: 'old' }));
   });
 
   test('getNote fetches from Firestore and caches locally', async () => {

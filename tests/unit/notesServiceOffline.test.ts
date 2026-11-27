@@ -67,6 +67,7 @@ jest.mock('firebase/firestore', () => ({
   startAfter: (...args: any[]) => mockStartAfter(...args),
   serverTimestamp: () => mockServerTimestamp(),
   deleteField: () => mockDeleteField(),
+  writeBatch: () => ({ set: jest.fn(), delete: jest.fn(), commit: jest.fn(async () => {}) }),
 }));
 
 jest.mock('../../src/services/firebase', () => ({
@@ -228,7 +229,7 @@ describe('Area 2: Notes Service Offline Fallback & Network Failures', () => {
   });
 
   describe('deleteNote network failures and local resilience', () => {
-    test('cleans up local cache and pending writes even when deleteDoc rejects', async () => {
+    test('reports the failure and keeps local copies when the note cannot be read from the server', async () => {
       const noteToDelete = {
         id: 'note_del_999',
         userId: 'offline_user_999',
@@ -238,31 +239,18 @@ describe('Area 2: Notes Service Offline Fallback & Network Failures', () => {
       };
       await AsyncStorage.setItem('note_note_del_999', JSON.stringify(noteToDelete));
       await AsyncStorage.setItem(
-        'pending_offline_save_note_del_999',
-        JSON.stringify({ some: 'pending write' })
-      );
-      await AsyncStorage.setItem(
         'user_notes_offline_user_999',
         JSON.stringify([noteToDelete, { id: 'other_note', passage: samplePassage }])
       );
 
-      mockDeleteDoc.mockRejectedValueOnce(new Error('Delete rejected: offline'));
+      mockGetDoc.mockRejectedValueOnce(new Error('client is offline'));
 
-      // Should complete without throwing
-      await expect(deleteNote('note_del_999')).resolves.not.toThrow();
+      // Deleting only locally would make the note vanish and then reappear on the next sync.
+      await expect(deleteNote('note_del_999')).rejects.toThrow('client is offline');
 
-      // Verify both note cache and pending offline saves are wiped
-      const noteCache = await AsyncStorage.getItem('note_note_del_999');
-      expect(noteCache).toBeNull();
-
-      const pendingCache = await AsyncStorage.getItem('pending_offline_save_note_del_999');
-      expect(pendingCache).toBeNull();
-
-      // Verify removed from user_notes cache
-      const userList = await AsyncStorage.getItem('user_notes_offline_user_999');
-      const parsedList = JSON.parse(userList!);
-      expect(parsedList).toHaveLength(1);
-      expect(parsedList[0].id).toBe('other_note');
+      expect(await AsyncStorage.getItem('note_note_del_999')).not.toBeNull();
+      const parsedList = JSON.parse((await AsyncStorage.getItem('user_notes_offline_user_999'))!);
+      expect(parsedList).toHaveLength(2);
     });
   });
 

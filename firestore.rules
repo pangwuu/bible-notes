@@ -49,6 +49,15 @@ service cloud.firestore {
       allow update, delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
     }
 
+    // Recently Deleted notes: only the owner can see, restore or purge them.
+    // Nothing edits a deleted note in place.
+    match /deleted_notes/{noteId} {
+      allow get: if isAuthenticated() && (resource == null || resource.data.user_id == request.auth.uid);
+      allow list, delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
+      allow update: if false;
+    }
+
     // Notifications Collection
     match /notifications/{notificationId} {
       allow read, update, delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;

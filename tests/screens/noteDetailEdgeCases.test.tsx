@@ -6,7 +6,7 @@
  *   - Network failure on initial load: renders error message
  *   - Non-author authorization: hides Edit and Delete header action icons
  *   - Delete failure handling: displays Alert.alert error when delete fails without navigating back
- *   - Delete success flow: prompts Alert.alert confirmation, deletes note, and navigates back
+ *   - Delete success flow: deletes straight away (undoable), announces it, and navigates back
  */
 
 import React from 'react';
@@ -16,6 +16,7 @@ import NoteDetailScreen from '../../app/note/[id]';
 import * as notesService from '../../src/services/notesService';
 import { useAuth } from '../../src/context/AuthContext';
 import { Alert } from '../../src/utils/alert';
+import { onNoteDeleted } from '../../src/state/noteTrash';
 
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
@@ -218,55 +219,35 @@ describe('Area 3: Note Detail Screen 404 & Authorization Bounds', () => {
     const trashBtn = headerScreen.getByTestId('ionicon-trash-outline');
     expect(trashBtn).toBeTruthy();
 
-    // Simulate clicking trash
-    fireEvent.press(trashBtn);
-
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Delete Note',
-      'Are you sure you want to permanently delete this note?',
-      expect.any(Array)
-    );
-
-    // Extract Delete action button from Alert options
-    const alertCalls = (Alert.alert as jest.Mock).mock.calls;
-    const alertButtons = alertCalls[alertCalls.length - 1][2];
-    const deleteOption = alertButtons.find((btn: any) => btn.text === 'Delete');
-    expect(deleteOption).toBeDefined();
-
-    // Simulate delete rejection
+    // Deleting is undoable (Undo bar + Recently Deleted), so there's no confirmation step.
     (notesService.deleteNote as jest.Mock).mockRejectedValueOnce(
       new Error('Cloud Firestore delete failed')
     );
 
     await act(async () => {
-      await deleteOption.onPress();
+      fireEvent.press(trashBtn);
     });
 
-    // Verify Error alert displayed and navigation back NOT triggered
-    expect(Alert.alert).toHaveBeenCalledWith('Error', 'Failed to delete note.');
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Error',
+      "Couldn't delete this note. Check your connection and try again."
+    );
     expect(mockBack).not.toHaveBeenCalled();
 
     // Now test successful deletion flow
     (notesService.deleteNote as jest.Mock).mockResolvedValueOnce(undefined);
     (Alert.alert as jest.Mock).mockClear();
-
-    fireEvent.press(trashBtn);
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Delete Note',
-      'Are you sure you want to permanently delete this note?',
-      expect.any(Array)
-    );
-
-    const successAlertCalls = (Alert.alert as jest.Mock).mock.calls;
-    const successAlertButtons = successAlertCalls[successAlertCalls.length - 1][2];
-    const successDeleteOption = successAlertButtons.find((btn: any) => btn.text === 'Delete');
-    expect(successDeleteOption).toBeDefined();
+    const deletedNotices: any[] = [];
+    const stopListening = onNoteDeleted((n) => deletedNotices.push(n));
 
     await act(async () => {
-      await successDeleteOption.onPress();
+      fireEvent.press(trashBtn);
     });
 
+    expect(Alert.alert).not.toHaveBeenCalled();
     expect(notesService.deleteNote).toHaveBeenCalledWith('test_note_id');
+    expect(deletedNotices).toEqual([{ id: 'test_note_id', label: '"Author Private Note"' }]);
     expect(mockBack).toHaveBeenCalled();
+    stopListening();
   });
 });

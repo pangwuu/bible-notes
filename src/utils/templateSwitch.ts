@@ -7,15 +7,17 @@ import type { NoteTemplate } from '../types/template';
  *
  * 1. A section whose id also exists in the new template moves straight across.
  * 2. Any other section with writing goes into the new section at the same
- *    position (or the last one, if the new template is shorter), prefixed with
- *    its old title so it's clear where it came from. If that section already
- *    has writing, it is appended after a blank line.
+ *    position (or the last one, if the new template is shorter). With
+ *    `labelMovedText` on (the default) it is prefixed with its old title so it's
+ *    clear where it came from. If that section already has writing, it is
+ *    appended after a blank line.
  *
  * Linked verses travel with the writing they belong to.
  */
 export function carrySectionsToTemplate(
   current: NoteSectionValue[],
-  target: NoteTemplate
+  target: NoteTemplate,
+  { labelMovedText = true }: { labelMovedText?: boolean } = {}
 ): NoteSectionValue[] {
   const next: NoteSectionValue[] = target.sections.map((sec) => ({
     id: sec.id,
@@ -51,7 +53,7 @@ export function carrySectionsToTemplate(
     const slot = next[Math.min(index, next.length - 1)];
     const text = (section.content || '').trim();
     const sameName = section.title.trim().toLowerCase() === slot.title.trim().toLowerCase();
-    const block = text ? (sameName ? text : `${section.title}:\n${text}`) : '';
+    const block = text && labelMovedText && !sameName ? `${section.title}:\n${text}` : text;
     if (block) {
       slot.content = slot.content ? `${slot.content}\n\n${block}` : block;
     }

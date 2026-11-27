@@ -18,6 +18,7 @@ import { AppLoadingScreen } from '../src/components/AppLoadingScreen';
 import { getAuthRedirect } from '../src/utils/authRouting';
 import { applyWebThemeChrome, resolveWebThemeChromeColor } from '../src/utils/webThemeChrome';
 import { useIosPwaHeaderOptions } from '../src/hooks/useIosPwaHeaderOptions';
+import DeletedNoteSnackbar from '../src/components/DeletedNoteSnackbar';
 
 // Keep splash screen visible while fonts and initial resources load
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -128,6 +129,15 @@ function RootNavigationLayout() {
         />
 
         <Stack.Screen
+          name="recently-deleted"
+          options={{
+            title: 'Recently Deleted',
+            headerShown: true,
+            headerBackTitle: 'Back',
+          }}
+        />
+
+        <Stack.Screen
           name="bible-versions"
           options={{
             title: 'Bible Versions',
@@ -147,6 +157,7 @@ function RootNavigationLayout() {
           }}
         />
       </Stack>
+      {user ? <DeletedNoteSnackbar /> : null}
     </>
   );
 }
