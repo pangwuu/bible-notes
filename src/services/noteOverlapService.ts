@@ -63,10 +63,13 @@ export function segmentsOverlap(a: PassageSegment, b: PassageSegment): boolean {
 /**
  * Searches for all notes authored by accepted friends that overlap with the given passage range.
  * Only returns notes where visibility is 'friends' (or public).
+ * Pass `excludeNoteId` when the passage comes from a friend's note being viewed,
+ * otherwise that note matches itself.
  */
 export async function findFriendNoteOverlaps(
   currentUid: string,
-  passage: PassageReference
+  passage: PassageReference,
+  options: { excludeNoteId?: string } = {}
 ): Promise<FriendOverlapItem[]> {
   if (!currentUid || !passage) {
     return [];
@@ -115,6 +118,9 @@ export async function findFriendNoteOverlaps(
 
         snap.forEach((docSnap) => {
           const friendNote = noteDocumentToNote(docSnap.data(), docSnap.id);
+          if (options.excludeNoteId && friendNote.id === options.excludeNoteId) {
+            return;
+          }
           const intersectingSegments: PassageSegment[] = [];
 
           for (const fSeg of friendNote.passage.segments) {

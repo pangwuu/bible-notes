@@ -174,7 +174,7 @@ export default function NoteDetailScreen() {
           // 1. Friend overlaps (decoupled background fetch)
           if (profile?.settings?.enable_friends !== false) {
             setLoadingOverlaps(true);
-            findFriendNoteOverlaps(user.uid, fetched.passage)
+            findFriendNoteOverlaps(user.uid, fetched.passage, { excludeNoteId: fetched.id })
               .then((items) => setOverlaps(items))
               .catch((err) => {
                 console.warn('Failed to query friend note overlaps:', err);
