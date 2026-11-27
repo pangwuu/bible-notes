@@ -19,12 +19,12 @@ import { announceNotesChanged } from '../src/state/noteTrash';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function daysLeft(deletedAt: number): number {
-  const left = TRASH_RETENTION_DAYS - Math.floor((Date.now() - deletedAt) / DAY_MS);
-  return Math.max(1, left);
+  const elapsedDays = Math.max(0, Math.floor((Date.now() - deletedAt) / DAY_MS));
+  return Math.max(1, TRASH_RETENTION_DAYS - elapsedDays);
 }
 
 function deletedWhen(deletedAt: number): string {
-  const days = Math.floor((Date.now() - deletedAt) / DAY_MS);
+  const days = Math.max(0, Math.floor((Date.now() - deletedAt) / DAY_MS));
   if (days === 0) return 'Deleted today';
   if (days === 1) return 'Deleted yesterday';
   return `Deleted ${days} days ago`;
@@ -42,6 +42,7 @@ export default function RecentlyDeletedScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [emptying, setEmptying] = useState(false);
 
   const load = useCallback(async () => {
     if (!user?.uid) return;
@@ -101,7 +102,7 @@ export default function RecentlyDeletedScreen() {
   }, []);
 
   const handleEmpty = useCallback(() => {
-    if (notes.length === 0) return;
+    if (notes.length === 0 || emptying) return;
     const count = notes.length;
     Alert.alert(
       'Empty Recently Deleted?',
@@ -112,19 +113,29 @@ export default function RecentlyDeletedScreen() {
           text: 'Delete all',
           style: 'destructive',
           onPress: async () => {
-            const results = await Promise.allSettled(notes.map((n) => permanentlyDeleteNote(n.id)));
-            const failed = new Set(
-              notes.filter((_, i) => results[i].status === 'rejected').map((n) => n.id)
-            );
-            setNotes((prev) => prev.filter((n) => failed.has(n.id)));
-            if (failed.size > 0) {
-              Alert.alert('Error', `${failed.size} couldn't be deleted. Try again when you're online.`);
+            setEmptying(true);
+            try {
+              const results = await Promise.allSettled(
+                notes.map((n) => permanentlyDeleteNote(n.id))
+              );
+              const failed = new Set(
+                notes.filter((_, i) => results[i].status === 'rejected').map((n) => n.id)
+              );
+              setNotes((prev) => prev.filter((n) => failed.has(n.id)));
+              if (failed.size > 0) {
+                Alert.alert(
+                  'Error',
+                  `${failed.size} couldn't be deleted. Try again when you're online.`
+                );
+              }
+            } finally {
+              setEmptying(false);
             }
           },
         },
       ]
     );
-  }, [notes]);
+  }, [notes, emptying]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -132,6 +143,8 @@ export default function RecentlyDeletedScreen() {
         notes.length > 0 ? (
           <Button
             compact
+            disabled={emptying}
+            loading={emptying}
             textColor={colors.accentDanger}
             onPress={handleEmpty}
             accessibilityLabel="Empty Recently Deleted"
@@ -140,7 +153,7 @@ export default function RecentlyDeletedScreen() {
           </Button>
         ) : null,
     });
-  }, [navigation, notes.length, handleEmpty]);
+  }, [navigation, notes.length, handleEmpty, emptying]);
 
   if (loading) {
     return (

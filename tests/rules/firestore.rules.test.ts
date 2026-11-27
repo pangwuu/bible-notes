@@ -116,6 +116,7 @@ describe('Firestore Security Rules Integration (Emulator)', () => {
     await assertFails(setDoc(doc(otherDb, 'deleted_notes/n2'), { user_id: 'owner_1' }));
 
     await assertSucceeds(getDoc(doc(ownerDb, 'deleted_notes/n1')));
+    await assertSucceeds(getDoc(doc(ownerDb, 'deleted_notes/missing')));
     await assertFails(getDoc(doc(otherDb, 'deleted_notes/n1')));
 
     await assertFails(updateDoc(doc(ownerDb, 'deleted_notes/n1'), { title: 'edited' }));

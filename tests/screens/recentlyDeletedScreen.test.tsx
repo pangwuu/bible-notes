@@ -65,4 +65,25 @@ describe('RecentlyDeletedScreen', () => {
     await waitFor(() => expect(screen.queryByText('Hope in waiting')).toBeNull());
     expect(screen.getByText('Nothing here')).toBeTruthy();
   });
+
+  test('clamps future deletedAt timestamps from clock skew to today and full retention', async () => {
+    (notesService.getDeletedNotes as jest.Mock).mockResolvedValue([
+      {
+        id: 'n_future',
+        title: 'Clock skew note',
+        passage: { display: 'Psalm 23:1' },
+        tags: [],
+        deletedAt: Date.now() + 60 * 60 * 1000,
+      },
+    ]);
+
+    const screen = await render(
+      <PaperProvider>
+        <RecentlyDeletedScreen />
+      </PaperProvider>
+    );
+
+    expect(await screen.findByText('Clock skew note')).toBeTruthy();
+    expect(screen.getByText('Deleted today, 30 days left')).toBeTruthy();
+  });
 });

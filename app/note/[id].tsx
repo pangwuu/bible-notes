@@ -259,7 +259,12 @@ export default function NoteDetailScreen() {
               >
                 <Ionicons name="pencil" size={20} color={colors.accent.keyIdea} />
               </Pressable>
-              <Pressable onPress={handleDelete} style={styles.headerButton} hitSlop={8}>
+              <Pressable
+                onPress={handleDelete}
+                disabled={isDeleting}
+                style={styles.headerButton}
+                hitSlop={8}
+              >
                 <Ionicons name="trash-outline" size={20} color={colors.accent.danger} />
               </Pressable>
             </View>
