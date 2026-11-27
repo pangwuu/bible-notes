@@ -400,4 +400,12 @@ describe('PassagePicker Component Flow', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
     expect(mockOnSelect).not.toHaveBeenCalled();
   });
+
+  test('passage reference labels use system sans, not SourceSerifPro', () => {
+    const { styles } = require('../../src/components/passagePicker/styles');
+
+    expect(styles.suggestionLabel.fontFamily).toBeUndefined();
+    expect(styles.passageReference.fontFamily).toBeUndefined();
+    expect(styles.draftReference.fontFamily).toBeUndefined();
+  });
 });
