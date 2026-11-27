@@ -29,6 +29,7 @@ import {
 import { useAuth } from '../../src/context/AuthContext';
 import { useReaderFontSize } from '../../src/hooks/useReaderFontSize';
 import { BibleTranslation } from '../../src/types/user';
+import { getTemplateById } from '../../src/constants/templates';
 
 function translationFromProfile(profile: ReturnType<typeof useAuth>['profile']): BibleTranslation {
   const candidates = [
@@ -53,7 +54,7 @@ export default function BibleBrowseScreen() {
   const router = useRouter();
   const { profile } = useAuth();
   const { readerFontSize, setReaderFontSize } = useReaderFontSize(16);
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   const [reading, setReading] = useState(false);
   const [bookName, setBookName] = useState<string | null>(null);
@@ -61,6 +62,28 @@ export default function BibleBrowseScreen() {
   const [expandedBook, setExpandedBook] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const scrollRef = useRef<ScrollView>(null);
+  const chapterNavRef = useRef<View>(null);
+  const [chapterNavTop, setChapterNavTop] = useState<number | null>(null);
+  const [dockedBarHeight, setDockedBarHeight] = useState(0);
+
+  const noteTemplate = useMemo(
+    () =>
+      getTemplateById(
+        profile?.settings?.default_template_id || profile?.default_template_id,
+        profile?.custom_templates || []
+      ),
+    [profile?.settings?.default_template_id, profile?.default_template_id, profile?.custom_templates]
+  );
+  const sectionOptions = useMemo(
+    () =>
+      noteTemplate.sections.map((section) => ({
+        id: section.id,
+        title: section.title,
+        icon: section.icon,
+        color: section.color,
+      })),
+    [noteTemplate]
+  );
 
   const tileSize = useMemo(() => computeSquareTileSize(windowWidth), [windowWidth]);
 
@@ -156,6 +179,37 @@ export default function BibleBrowseScreen() {
     });
   };
 
+  const handleAttachToSection = useCallback(
+    (verses: number[], sectionId: string, context?: { book?: string; chapter?: number }) => {
+      const book = context?.book || bookName;
+      const noteChapter = context?.chapter || chapter;
+      if (!book || !noteChapter || verses.length === 0) return;
+      const sorted = [...verses].sort((a, b) => a - b);
+      router.push({
+        pathname: '/note/edit',
+        params: {
+          book,
+          chapter: String(noteChapter),
+          verseStart: '1',
+          verseEnd: String(getChapterVerseCount(book, noteChapter) || sorted[sorted.length - 1]),
+          templateId: noteTemplate.id,
+          attachSection: sectionId,
+          attachVerses: sorted.join(','),
+        },
+      });
+    },
+    [bookName, chapter, noteTemplate.id, router]
+  );
+
+  const measureChapterNav = useCallback(() => {
+    chapterNavRef.current?.measureInWindow((_x, y) => {
+      if (Number.isFinite(y)) setChapterNavTop(y);
+    });
+  }, []);
+
+  const dockedBottomOffset =
+    chapterNavTop !== null ? Math.max(0, windowHeight - chapterNavTop) + spacing.sm : undefined;
+
   const returnToPicker = () => {
     setExpandedBook(bookName);
     setReading(false);
@@ -217,7 +271,10 @@ export default function BibleBrowseScreen() {
             <ScrollView
               ref={scrollRef}
               style={styles.readerScroll}
-              contentContainerStyle={styles.readerContainer}
+              contentContainerStyle={[
+                styles.readerContainer,
+                dockedBarHeight > 0 && { paddingBottom: spacing.lg + dockedBarHeight },
+              ]}
             >
               <BibleReader
                 passage={passage}
@@ -226,10 +283,16 @@ export default function BibleBrowseScreen() {
                 preferredTranslation={translationFromProfile(profile)}
                 preferredVersionId={versionIdFromProfile(profile)}
                 initiallyCollapsed={false}
+                onOpenVersionGuide={() => router.push('/bible-versions')}
+                sectionOptions={sectionOptions}
+                onAttachToSection={handleAttachToSection}
+                actionBarPlacement="docked"
+                dockedActionBarBottomOffset={dockedBottomOffset}
+                onDockedActionBarHeightChange={setDockedBarHeight}
               />
             </ScrollView>
           ) : null}
-          <View style={styles.chapterNav}>
+          <View ref={chapterNavRef} style={styles.chapterNav} onLayout={measureChapterNav}>
             <Pressable
               style={styles.chapterNavButton}
               onPress={() => moveChapter('previous')}

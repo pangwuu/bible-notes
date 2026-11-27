@@ -28,6 +28,7 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
     onOpenVersionGuide,
     actionBarPlacement = 'inline',
     onDockedActionBarHeightChange,
+    dockedActionBarBottomOffset,
   } = props;
   const isDocked = actionBarPlacement === 'docked';
   const [translationSheetOpen, setTranslationSheetOpen] = useState(false);
@@ -157,6 +158,7 @@ const BibleReaderComponent: React.FC<BibleReaderProps> = (props) => {
         <DockedActionBar
           visible={hasSelection && !collapsed && !crossRefSheetVisible}
           onHeightChange={onDockedActionBarHeightChange}
+          bottomOffset={dockedActionBarBottomOffset}
         >
           {actionBar}
         </DockedActionBar>
