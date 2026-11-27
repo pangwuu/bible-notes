@@ -328,6 +328,47 @@ export async function updateUserProfile(
 }
 
 /**
+ * Updates the authenticated user's username after uniqueness checks.
+ */
+export async function updateUsername(uid: string, newUsername: string): Promise<void> {
+  if (!uid) throw new Error('User ID is required');
+
+  const usernameVal = validateUsername(newUsername);
+  if (!usernameVal.isValid) {
+    throw new Error(usernameVal.error || 'Invalid username');
+  }
+
+  const normalized = normalizeUsername(newUsername);
+  const userDocRef = doc(db, 'users', uid);
+  const snap = await getDoc(userDocRef);
+  if (!snap.exists()) {
+    throw new Error('User profile not found');
+  }
+
+  const current = snap.data() as UserProfile;
+  if (current.username === normalized) {
+    return;
+  }
+
+  const available = await checkUsernameAvailable(normalized);
+  if (!available) {
+    throw new Error('That username is already taken');
+  }
+
+  const search_tokens = generateSearchTokens(
+    normalized,
+    current.display_name || current.full_name || '',
+    current.email || ''
+  );
+
+  await updateDoc(userDocRef, {
+    username: normalized,
+    search_tokens,
+    updated_at: serverTimestamp(),
+  });
+}
+
+/**
  * Formats Firebase Auth errors into clear, friendly messages.
  */
 export function formatAuthError(error: any): string {

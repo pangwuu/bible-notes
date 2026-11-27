@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,11 +13,23 @@ import {
   Button,
   Portal,
   Dialog,
+  Divider,
 } from 'react-native-paper';
 import { useRouter } from 'expo-router';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { colors, spacing, radius } from '../../src/constants/theme';
 import { loginUser, sendPasswordReset } from '../../src/services/authService';
+import {
+  isAppleAuthAvailable,
+  isGoogleAuthConfigured,
+  signInWithAppleIdentityToken,
+  signInWithGoogleIdToken,
+} from '../../src/services/socialAuthService';
 import { validateEmail } from '../../src/utils/validation';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -25,7 +37,31 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [secureText, setSecureText] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [socialSubmitting, setSocialSubmitting] = useState<'google' | 'apple' | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const googleConfigured = isGoogleAuthConfigured();
+  const [googleRequest, googleResponse, promptGoogle] = Google.useIdTokenAuthRequest({
+    clientId: process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+  });
+
+  useEffect(() => {
+    if (googleResponse?.type !== 'success') return;
+    const idToken = googleResponse.params?.id_token;
+    if (!idToken) {
+      setErrorMessage('Google sign-in did not return an ID token.');
+      return;
+    }
+    setSocialSubmitting('google');
+    signInWithGoogleIdToken(idToken)
+      .catch((err: any) => {
+        setErrorMessage(err?.message || 'Google sign-in failed');
+      })
+      .finally(() => setSocialSubmitting(null));
+  }, [googleResponse]);
 
   // Password reset dialog state
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
@@ -33,6 +69,49 @@ export default function LoginScreen() {
   const [resetSubmitting, setResetSubmitting] = useState(false);
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
   const [resetErrorMessage, setResetErrorMessage] = useState<string | null>(null);
+
+  const handleGoogleSignIn = async () => {
+    setErrorMessage(null);
+    if (!googleConfigured) {
+      setErrorMessage(
+        'Google sign-in is not configured. Set EXPO_PUBLIC_GOOGLE_* client IDs and enable Google in Firebase Auth.'
+      );
+      return;
+    }
+    try {
+      await promptGoogle();
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Google sign-in failed');
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    setErrorMessage(null);
+    if (!isAppleAuthAvailable()) {
+      setErrorMessage('Apple sign-in is available on iOS devices only.');
+      return;
+    }
+    setSocialSubmitting('apple');
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      if (!credential.identityToken) {
+        throw new Error('Apple sign-in did not return an identity token.');
+      }
+      await signInWithAppleIdentityToken(credential.identityToken, credential.fullName);
+    } catch (err: any) {
+      if (err?.code === 'ERR_REQUEST_CANCELED') {
+        return;
+      }
+      setErrorMessage(err?.message || 'Apple sign-in failed');
+    } finally {
+      setSocialSubmitting(null);
+    }
+  };
 
   const handleLogin = async () => {
     setErrorMessage(null);
@@ -182,10 +261,48 @@ export default function LoginScreen() {
             labelStyle={styles.actionButtonLabel}
             onPress={handleLogin}
             loading={isSubmitting}
-            disabled={isSubmitting}
+            disabled={isSubmitting || socialSubmitting !== null}
           >
             {isSubmitting ? 'Signing in...' : 'Sign in'}
           </Button>
+
+          <View style={styles.orRow}>
+            <Divider style={styles.orDivider} />
+            <Text style={styles.orText}>or</Text>
+            <Divider style={styles.orDivider} />
+          </View>
+
+          <Button
+            mode="outlined"
+            icon="google"
+            textColor={colors.textPrimary}
+            style={styles.socialButton}
+            onPress={handleGoogleSignIn}
+            loading={socialSubmitting === 'google'}
+            disabled={
+              isSubmitting ||
+              socialSubmitting !== null ||
+              (googleConfigured && !googleRequest)
+            }
+            accessibilityLabel="Continue with Google"
+          >
+            Continue with Google
+          </Button>
+
+          {isAppleAuthAvailable() ? (
+            <Button
+              mode="outlined"
+              icon="apple"
+              textColor={colors.textPrimary}
+              style={styles.socialButton}
+              onPress={handleAppleSignIn}
+              loading={socialSubmitting === 'apple'}
+              disabled={isSubmitting || socialSubmitting !== null}
+              accessibilityLabel="Continue with Apple"
+            >
+              Continue with Apple
+            </Button>
+          ) : null}
         </View>
 
         <View style={styles.footerRow}>
@@ -331,6 +448,25 @@ const styles = StyleSheet.create({
   actionButtonLabel: {
     fontWeight: '600',
     fontSize: 15,
+  },
+  orRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginVertical: spacing.md,
+  },
+  orDivider: {
+    flex: 1,
+    backgroundColor: colors.borderHairline,
+  },
+  orText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+  },
+  socialButton: {
+    borderRadius: radius.control,
+    borderColor: colors.borderHairline,
+    marginBottom: spacing.sm,
   },
   footerRow: {
     flexDirection: 'row',
