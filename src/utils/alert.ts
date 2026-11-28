@@ -1,10 +1,32 @@
 import { Alert as RNAlert, AlertButton, AlertOptions, Platform } from 'react-native';
 
+export interface WebAlertPayload {
+  id: number;
+  title: string;
+  message?: string;
+  buttons: AlertButton[];
+  options?: AlertOptions;
+}
+
+type WebAlertListener = (payload: WebAlertPayload) => void;
+
+const webAlertListeners = new Set<WebAlertListener>();
+let nextAlertId = 1;
+
+export function subscribeWebAlerts(listener: WebAlertListener): () => void {
+  webAlertListeners.add(listener);
+  return () => {
+    webAlertListeners.delete(listener);
+  };
+}
+
 /**
  * Cross-platform alert utility.
  * - On iOS & Android: Uses native React Native Alert.alert.
- * - On Web: Uses window.confirm (for choices) or window.alert (for informational messages)
- *   so buttons and actions actually fire instead of being silent no-ops.
+ * - On Web: Dispatches to <WebAlertDialogHost /> so 1-, 2-, and 3+ button prompts
+ *   render all button labels, preserve destructive/cancel roles, and focus the safe
+ *   Cancel action by default. Falls back to window.alert/window.confirm only when
+ *   no host is mounted (e.g. isolated unit tests).
  */
 export const Alert = {
   alert: (
@@ -15,6 +37,21 @@ export const Alert = {
   ): void => {
     if (Platform.OS !== 'web') {
       RNAlert.alert(title, message, buttons, options);
+      return;
+    }
+
+    const normalizedButtons: AlertButton[] =
+      buttons && buttons.length > 0 ? buttons : [{ text: 'OK' }];
+
+    if (webAlertListeners.size > 0) {
+      const payload: WebAlertPayload = {
+        id: nextAlertId++,
+        title,
+        message,
+        buttons: normalizedButtons,
+        options,
+      };
+      webAlertListeners.forEach((listener) => listener(payload));
       return;
     }
 
@@ -35,8 +72,6 @@ export const Alert = {
       return;
     }
 
-    // 2 or more buttons: typically [Cancel, Confirm/Action]
-    // Find cancel and confirm buttons
     const cancelBtn = buttons.find((b) => b.style === 'cancel');
     const confirmBtn = buttons.find((b) => b.style !== 'cancel') || buttons[buttons.length - 1];
 
@@ -48,7 +83,6 @@ export const Alert = {
         cancelBtn?.onPress?.();
       }
     } else {
-      // Fallback if window.confirm is not available
       confirmBtn?.onPress?.();
     }
   },

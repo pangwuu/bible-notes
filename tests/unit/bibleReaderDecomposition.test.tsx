@@ -46,8 +46,43 @@ describe('BibleReader Decomposed Sub-Components', () => {
       expect(text).toContain('Romans 12:1-2');
 
       expect(typeof tree.props.onPress).toBe('function');
+      expect(tree.props.accessibilityState).toEqual({ expanded: true });
       tree.props.onPress();
       expect(onToggleCollapse).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders translation and text-size controls as sibling buttons rather than nested inside the collapse button', () => {
+      const onToggleCollapse = jest.fn();
+      const onOpenTranslations = jest.fn();
+      const onToggleTextSize = jest.fn();
+
+      const element = (
+        <BibleReaderHeader
+          passageDisplay="Romans 12:1-2"
+          collapsed={false}
+          onToggleCollapse={onToggleCollapse}
+          translationLabel="ESV"
+          onOpenTranslations={onOpenTranslations}
+          onToggleTextSize={onToggleTextSize}
+          textSizeOpen={false}
+        />
+      );
+
+      const tree = (BibleReaderHeader as any)(element.props);
+      // Root is a non-interactive View container, not a Pressable button wrapping buttons
+      expect(tree.props.accessibilityRole).toBeUndefined();
+      expect(tree.props.onPress).toBeUndefined();
+
+      const children = React.Children.toArray(tree.props.children) as any[];
+      const buttons = children.filter((c) => c?.props?.accessibilityRole === 'button');
+      expect(buttons).toHaveLength(3);
+      expect(buttons[0].props.accessibilityState).toEqual({ expanded: true });
+      buttons[0].props.onPress();
+      expect(onToggleCollapse).toHaveBeenCalledTimes(1);
+      buttons[1].props.onPress();
+      expect(onOpenTranslations).toHaveBeenCalledTimes(1);
+      buttons[2].props.onPress();
+      expect(onToggleTextSize).toHaveBeenCalledTimes(1);
     });
   });
 

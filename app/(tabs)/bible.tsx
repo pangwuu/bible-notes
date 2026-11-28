@@ -10,6 +10,7 @@ import {
   ScrollView,
   Pressable,
   PanResponder,
+  Platform,
   useWindowDimensions,
 } from 'react-native';
 import { Text, Button } from 'react-native-paper';
@@ -118,11 +119,29 @@ export default function BibleBrowseScreen() {
     [bookName, chapter]
   );
 
-  const openChapter = useCallback((book: string, nextChapter: number) => {
+  const openChapter = useCallback((book: string, nextChapter: number, options?: { fromHistory?: boolean; replaceHistory?: boolean }) => {
     setBookName(book);
     setChapter(nextChapter);
     setExpandedBook(book);
     setReading(true);
+
+    if (
+      Platform.OS === 'web' &&
+      typeof window !== 'undefined' &&
+      typeof window.location?.href === 'string' &&
+      typeof window.history?.pushState === 'function' &&
+      !options?.fromHistory
+    ) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('book', book);
+      url.searchParams.set('chapter', String(nextChapter));
+      const state = { bibleReading: true, book, chapter: nextChapter };
+      if (options?.replaceHistory) {
+        window.history.replaceState(state, '', url.toString());
+      } else {
+        window.history.pushState(state, '', url.toString());
+      }
+    }
   }, []);
 
   const moveChapter = useCallback((direction: 'previous' | 'next') => {
@@ -131,6 +150,49 @@ export default function BibleBrowseScreen() {
     if (!stop) return;
     openChapter(stop.book, stop.chapter);
   }, [bookName, chapter, openChapter]);
+
+  // Sync initial URL query params and browser Back/Forward (popstate) on web
+  useEffect(() => {
+    if (
+      Platform.OS !== 'web' ||
+      typeof window === 'undefined' ||
+      typeof window.location?.search !== 'string'
+    ) {
+      return;
+    }
+
+    const applyUrlState = (isInitial: boolean) => {
+      const params = new URLSearchParams(window.location.search);
+      const qBook = params.get('book');
+      const qChapter = Number(params.get('chapter'));
+      const matchedBook = qBook
+        ? CANONICAL_BOOKS.find((b) => b.name.toLowerCase() === qBook.toLowerCase())
+        : undefined;
+
+      if (matchedBook && Number.isInteger(qChapter) && qChapter >= 1 && qChapter <= matchedBook.chapters) {
+        openChapter(matchedBook.name, qChapter, { fromHistory: true });
+      } else if (!isInitial) {
+        setReading(false);
+      }
+    };
+
+    applyUrlState(true);
+
+    if (typeof window.addEventListener !== 'function') return;
+    const onPopState = () => applyUrlState(false);
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [openChapter]);
+
+  // Keep document.title in sync on web when drilling into a chapter
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    if (reading && bookName && chapter) {
+      document.title = `${bookName} ${chapter} | Bible Notes`;
+    } else {
+      document.title = 'Bible | Bible Notes';
+    }
+  }, [reading, bookName, chapter]);
 
   const moveRef = useRef(moveChapter);
   moveRef.current = moveChapter;
@@ -213,6 +275,24 @@ export default function BibleBrowseScreen() {
   const returnToPicker = () => {
     setExpandedBook(bookName);
     setReading(false);
+    if (
+      Platform.OS === 'web' &&
+      typeof window !== 'undefined' &&
+      typeof window.location?.href === 'string' &&
+      typeof window.history?.replaceState === 'function'
+    ) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('book') || params.has('chapter')) {
+        if (window.history.state?.bibleReading) {
+          window.history.back();
+        } else {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('book');
+          url.searchParams.delete('chapter');
+          window.history.replaceState({}, '', url.toString());
+        }
+      }
+    }
   };
 
   const referenceLabel = bookName && chapter ? `${bookName} ${chapter}` : '';
@@ -245,11 +325,15 @@ export default function BibleBrowseScreen() {
           />
         </View>
       ) : (
-        <View style={styles.readPane} {...panResponder.panHandlers}>
+        <View
+          style={styles.readPane}
+          {...(Platform.OS !== 'web' ? panResponder.panHandlers : {})}
+        >
           <View style={styles.readHeader}>
             <Pressable
               style={styles.backRow}
               onPress={returnToPicker}
+              accessibilityRole="button"
               accessibilityLabel={`Back to books, ${referenceLabel}`}
             >
               <Ionicons name="chevron-back" size={18} color={colors.accentKeyIdea} />

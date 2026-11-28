@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,6 +6,7 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  TextInput as RNTextInput,
 } from 'react-native';
 import {
   Text,
@@ -21,6 +22,7 @@ import { validateEmail } from '../../src/utils/validation';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const passwordInputRef = useRef<RNTextInput>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secureText, setSecureText] = useState(true);
@@ -35,6 +37,7 @@ export default function LoginScreen() {
   const [resetErrorMessage, setResetErrorMessage] = useState<string | null>(null);
 
   const handleLogin = async () => {
+    if (isSubmitting) return;
     setErrorMessage(null);
     setResetSuccessMessage(null);
 
@@ -73,6 +76,7 @@ export default function LoginScreen() {
   };
 
   const handleSendResetEmail = async () => {
+    if (resetSubmitting) return;
     const targetEmail = resetEmail.trim();
     if (!targetEmail) {
       setResetErrorMessage('Please enter your email address');
@@ -110,18 +114,27 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerArea}>
-          <Text style={styles.title}>Bible Notes</Text>
+          <Text style={styles.title} accessibilityRole="header">
+            Bible Notes
+          </Text>
           <Text style={styles.subtitle}>Bible study journal</Text>
         </View>
 
         {errorMessage && (
-          <View style={styles.errorBanner}>
+          <View
+            style={styles.errorBanner}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="assertive"
+          >
             <Text style={styles.errorText}>{errorMessage}</Text>
           </View>
         )}
 
         {resetSuccessMessage && (
-          <View style={styles.successBanner}>
+          <View
+            style={styles.successBanner}
+            accessibilityLiveRegion="polite"
+          >
             <Text style={styles.successText}>{resetSuccessMessage}</Text>
           </View>
         )}
@@ -136,7 +149,13 @@ export default function LoginScreen() {
             }}
             autoCapitalize="none"
             autoCorrect={false}
+            spellCheck={false}
+            autoComplete="username"
+            textContentType="emailAddress"
             keyboardType="email-address"
+            returnKeyType="next"
+            onSubmitEditing={() => passwordInputRef.current?.focus()}
+            blurOnSubmit={false}
             textColor={colors.textPrimary}
             style={styles.input}
             mode="outlined"
@@ -146,6 +165,7 @@ export default function LoginScreen() {
           />
 
           <TextInput
+            ref={passwordInputRef}
             label="Password"
             value={password}
             onChangeText={(text) => {
@@ -153,6 +173,13 @@ export default function LoginScreen() {
               if (errorMessage) setErrorMessage(null);
             }}
             secureTextEntry={secureText}
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            autoComplete="current-password"
+            textContentType="password"
+            returnKeyType="go"
+            onSubmitEditing={handleLogin}
             textColor={colors.textPrimary}
             style={styles.input}
             mode="outlined"
@@ -163,13 +190,20 @@ export default function LoginScreen() {
               <TextInput.Icon
                 icon={secureText ? 'eye' : 'eye-off'}
                 color={colors.textSecondary}
+                accessibilityLabel={secureText ? 'Show password' : 'Hide password'}
                 onPress={() => setSecureText(!secureText)}
               />
             }
           />
 
           <View style={styles.forgotPasswordRow}>
-            <Pressable onPress={handleOpenResetDialog} disabled={isSubmitting}>
+            <Pressable
+              onPress={handleOpenResetDialog}
+              disabled={isSubmitting}
+              style={styles.linkTouchTarget}
+              accessibilityRole="button"
+              accessibilityLabel="Forgot password?"
+            >
               <Text style={styles.forgotPasswordLink}>Forgot password?</Text>
             </Pressable>
           </View>
@@ -193,6 +227,9 @@ export default function LoginScreen() {
           <Pressable
             onPress={() => router.push('/(auth)/register')}
             disabled={isSubmitting}
+            style={styles.linkTouchTarget}
+            accessibilityRole="button"
+            accessibilityLabel="Create one"
           >
             <Text style={styles.footerLink}>Create one</Text>
           </Pressable>
@@ -202,6 +239,7 @@ export default function LoginScreen() {
         <Portal>
           <Dialog
             visible={resetDialogOpen}
+            dismissable={!resetSubmitting}
             onDismiss={() => {
               if (!resetSubmitting) setResetDialogOpen(false);
             }}
@@ -213,7 +251,11 @@ export default function LoginScreen() {
                 Enter your email address to receive instructions to reset your password.
               </Text>
               {resetErrorMessage && (
-                <View style={styles.dialogErrorBanner}>
+                <View
+                  style={styles.dialogErrorBanner}
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="assertive"
+                >
                   <Text style={styles.dialogErrorText}>{resetErrorMessage}</Text>
                 </View>
               )}
@@ -223,7 +265,12 @@ export default function LoginScreen() {
                 onChangeText={setResetEmail}
                 autoCapitalize="none"
                 autoCorrect={false}
+                spellCheck={false}
+                autoComplete="email"
+                textContentType="emailAddress"
                 keyboardType="email-address"
+                returnKeyType="send"
+                onSubmitEditing={handleSendResetEmail}
                 textColor={colors.textPrimary}
                 style={styles.dialogInput}
                 mode="outlined"
@@ -251,7 +298,7 @@ export default function LoginScreen() {
             </Dialog.Actions>
           </Dialog>
         </Portal>
-        </ScrollView>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -319,7 +366,12 @@ const styles = StyleSheet.create({
   },
   forgotPasswordRow: {
     alignItems: 'flex-end',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  linkTouchTarget: {
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
   },
   forgotPasswordLink: {
     color: colors.textSecondary,
@@ -334,8 +386,9 @@ const styles = StyleSheet.create({
   },
   footerRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
   },
   footerText: {
     color: colors.textSecondary,

@@ -59,7 +59,7 @@ describe('Web theme chrome (mobile Safari outside safe area)', () => {
       documentElement: htmlEl,
       body: bodyEl,
       head: {
-        appendChild(node: typeof themeMeta) {
+        appendChild(node: (typeof created)[number]) {
           created.push(node);
         },
       },

@@ -38,7 +38,15 @@ export default function NotificationsModal() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Set header options
+  const handleMarkAllRead = useCallback(async () => {
+    if (!user?.uid) return;
+    try {
+      await markAllNotificationsAsRead(user.uid);
+    } catch (err) {
+      console.warn('Failed to mark all as read:', err);
+    }
+  }, [user?.uid]);
+
   useLayoutEffect(() => {
     navigation.setOptions({
       title: 'Notifications',
@@ -53,21 +61,27 @@ export default function NotificationsModal() {
           }}
           style={styles.closeButton}
           hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Close notifications"
         >
           <Ionicons name="close" size={24} color={colors.textPrimary} />
         </Pressable>
       ),
-      headerRight: () => (
+      headerRight: () =>
         notifications.some((n) => !n.read) ? (
-          <Pressable onPress={handleMarkAllRead} style={styles.markAllButton} hitSlop={8}>
+          <Pressable
+            onPress={handleMarkAllRead}
+            style={styles.markAllButton}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Mark all read"
+          >
             <Text style={styles.markAllText}>Mark all read</Text>
           </Pressable>
-        ) : null
-      ),
+        ) : null,
     });
-  }, [navigation, router, notifications]);
+  }, [navigation, router, notifications, handleMarkAllRead]);
 
-  // Real-time subscription to notifications
   useEffect(() => {
     if (!user?.uid) {
       setLoading(false);
@@ -101,15 +115,6 @@ export default function NotificationsModal() {
     }
   }, [user?.uid]);
 
-  const handleMarkAllRead = async () => {
-    if (!user?.uid) return;
-    try {
-      await markAllNotificationsAsRead(user.uid);
-    } catch (err) {
-      console.warn('Failed to mark all as read:', err);
-    }
-  };
-
   const handleNotificationPress = async (item: NotificationDocument) => {
     if (!item.read) {
       markNotificationAsRead(item.id).catch(() => {});
@@ -135,10 +140,14 @@ export default function NotificationsModal() {
       messageText = 'sent you a friend request';
     }
 
+    const fullSentence = `${item.related_user_name} ${messageText}`;
+
     return (
       <Pressable
         style={[styles.row, !item.read && styles.unreadRow]}
         onPress={() => handleNotificationPress(item)}
+        accessibilityRole="button"
+        accessibilityLabel={`${!item.read ? 'Unread: ' : ''}${fullSentence}, ${timeAgo}`}
       >
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initial}</Text>
@@ -158,7 +167,11 @@ export default function NotificationsModal() {
   return (
     <View style={styles.screen}>
       {loading ? (
-        <View style={styles.center}>
+        <View
+          style={styles.center}
+          accessibilityRole="progressbar"
+          accessibilityLabel="Loading notifications"
+        >
           <ActivityIndicator color={colors.accentSocial} size="large" />
         </View>
       ) : (
@@ -219,12 +232,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
+    paddingHorizontal: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderHairline,
   },
   unreadRow: {
     backgroundColor: colors.bgSurface,
-    paddingHorizontal: spacing.sm,
     borderRadius: radius.control,
   },
   avatar: {
@@ -243,6 +256,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    minWidth: 0,
   },
   actor: {
     fontWeight: '600',

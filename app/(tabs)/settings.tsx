@@ -307,7 +307,7 @@ export default function SettingsScreen() {
         <Text style={styles.cardDescription}>
           The template used when creating new study notes.
         </Text>
-        <View style={styles.translationChipGrid}>
+        <View style={styles.translationChipGrid} accessibilityRole="radiogroup" accessibilityLabel="Default note template">
           {availableTemplates.map((t) => {
             const isSelected = t.id === defaultTemplateId;
             return (
@@ -316,6 +316,7 @@ export default function SettingsScreen() {
                 mode={isSelected ? 'contained' : 'outlined'}
                 buttonColor={isSelected ? colors.accentKeyIdea : undefined}
                 textColor={isSelected ? colors.bgBase : colors.textPrimary}
+                accessibilityState={{ selected: isSelected }}
                 style={[
                   styles.translationChip,
                   !isSelected && styles.translationChipOutlined,
@@ -354,7 +355,7 @@ export default function SettingsScreen() {
         <Text style={styles.cardDescription}>
           Primary translation used for reading and study reflections.
         </Text>
-        <View style={styles.translationChipGrid}>
+        <View style={styles.translationChipGrid} accessibilityRole="radiogroup" accessibilityLabel="Preferred Bible translation">
           {SUPPORTED_BIBLE_VERSIONS.map((t) => {
             const isSelected = t.id === preferredVersionId;
             return (
@@ -363,6 +364,7 @@ export default function SettingsScreen() {
                 mode={isSelected ? 'contained' : 'outlined'}
                 buttonColor={isSelected ? colors.accentKeyIdea : undefined}
                 textColor={isSelected ? colors.bgBase : colors.textPrimary}
+                accessibilityState={{ selected: isSelected }}
                 style={[
                   styles.translationChip,
                   !isSelected && styles.translationChipOutlined,
@@ -476,6 +478,7 @@ export default function SettingsScreen() {
             value={showVerseNumbers}
             onValueChange={handleToggleVerseNumbers}
             color={colors.accentKeyIdea}
+            accessibilityLabel="Show verse numbers"
           />
         </View>
 
@@ -533,7 +536,7 @@ export default function SettingsScreen() {
                 {isActive && p ? (
                   <>
                     <Text style={styles.offlineStatus}>
-                      {p.currentBook} {p.currentChapter} · {p.percent}%
+                      {p.currentBook} {p.currentChapter} ({p.percent}%)
                     </Text>
                     <ProgressBar
                       progress={Math.max(0, Math.min(1, p.percent / 100))}
@@ -572,7 +575,9 @@ export default function SettingsScreen() {
         </Text>
         <View style={styles.saveKeyRow}>
           {cacheClearedMessage ? (
-            <Text style={styles.keySavedText}>{cacheClearedMessage}</Text>
+            <Text style={styles.keySavedText} accessibilityLiveRegion="polite">
+              {cacheClearedMessage}
+            </Text>
           ) : (
             <View />
           )}

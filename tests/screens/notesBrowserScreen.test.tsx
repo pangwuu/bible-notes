@@ -181,7 +181,9 @@ describe('NotesBrowserScreen loading and error states', () => {
 });
 
 describe('NotesBrowserScreen unfinished drafts', () => {
-  it('lists unfinished new-note drafts and resumes them in the editor', async () => {
+  it('lists unfinished new-note drafts, confirms before discarding, and resumes them in the editor', async () => {
+    const { Alert } = require('../../src/utils/alert');
+    const alertSpy = jest.spyOn(Alert, 'alert');
     const { saveDraft } = require('../../src/services/noteDraftStore');
     await saveDraft({
       key: 'note_draft:user_123:new:abc',
@@ -202,11 +204,23 @@ describe('NotesBrowserScreen unfinished drafts', () => {
     expect(await findByText('Half done')).toBeTruthy();
 
     await act(async () => {
-      fireEvent.press(getByLabelText('Resume unfinished note'));
+      fireEvent.press(getByLabelText('Discard unfinished note: Half done'));
+    });
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Discard unfinished note?',
+      expect.any(String),
+      expect.any(Array)
+    );
+    // Draft stays until user confirms destructive action
+    expect(await findByText('Half done')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Resume unfinished note: Half done'));
     });
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/note/edit',
       params: { draft: 'note_draft:user_123:new:abc' },
     });
+    alertSpy.mockRestore();
   });
 });

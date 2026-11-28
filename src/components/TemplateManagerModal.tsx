@@ -57,7 +57,12 @@ export const TemplateManagerModal: React.FC<TemplateManagerModalProps> = ({
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Pressable
+          style={styles.backdrop}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss templates"
+        />
         <View style={styles.sheet}>
           {/* Header */}
           <View style={styles.header}>
@@ -65,7 +70,13 @@ export const TemplateManagerModal: React.FC<TemplateManagerModalProps> = ({
               <Text style={styles.title}>Note Templates</Text>
               <Text style={styles.subtitle}>Choose or create structured reflection formats</Text>
             </View>
-            <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={8}>
+            <Pressable
+              onPress={onClose}
+              style={styles.closeBtn}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Close templates"
+            >
               <Ionicons name="close" size={22} color={colors.text.secondary} />
             </Pressable>
           </View>
@@ -125,6 +136,8 @@ export const TemplateManagerModal: React.FC<TemplateManagerModalProps> = ({
                             }}
                             style={styles.actionIconBtn}
                             hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Edit ${template.name} template`}
                           >
                             <Ionicons name="pencil-outline" size={16} color={colors.text.secondary} />
                           </Pressable>
@@ -132,6 +145,8 @@ export const TemplateManagerModal: React.FC<TemplateManagerModalProps> = ({
                             onPress={() => handleDelete(template)}
                             style={styles.actionIconBtn}
                             hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Delete ${template.name} template`}
                           >
                             <Ionicons name="trash-outline" size={16} color={colors.accent.danger} />
                           </Pressable>
@@ -142,6 +157,11 @@ export const TemplateManagerModal: React.FC<TemplateManagerModalProps> = ({
                           onSelectTemplate(template);
                           onClose();
                         }}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
+                        accessibilityLabel={
+                          isSelected ? `Active: ${template.name}` : `Use ${template.name}`
+                        }
                         style={[
                           styles.selectBtn,
                           isSelected && styles.selectBtnActive,

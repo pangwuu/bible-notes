@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { Text } from 'react-native-paper';
 import { colors, spacing, radius, typography } from '../src/constants/theme';
 import { useAuth } from '../src/context/AuthContext';
@@ -7,54 +7,89 @@ import {
   SUPPORTED_BIBLE_VERSIONS,
   DEFAULT_BIBLE_VERSION_ID,
   resolveVersionId,
+  getVersionMetadata,
 } from '../src/constants/bibleVersions';
+import type { BibleTranslation } from '../src/types/user';
 
 export default function BibleVersionsScreen() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
 
   const rawPreferred =
     profile?.preferred_version_id ||
     profile?.settings?.preferred_version_id ||
     profile?.preferred_translation ||
     profile?.settings?.preferred_translation;
-  const preferredVersionId = rawPreferred ? resolveVersionId(rawPreferred) : DEFAULT_BIBLE_VERSION_ID;
+  const resolvedFromProfile = rawPreferred
+    ? resolveVersionId(rawPreferred)
+    : DEFAULT_BIBLE_VERSION_ID;
+
+  const [selectedVersionId, setSelectedVersionId] = useState<number>(resolvedFromProfile);
+
+  useEffect(() => {
+    setSelectedVersionId(resolvedFromProfile);
+  }, [resolvedFromProfile]);
+
+  const handleSelectVersion = async (versionId: number) => {
+    setSelectedVersionId(versionId);
+    if (!user?.uid) return;
+    try {
+      const shortName = getVersionMetadata(versionId).shortName as BibleTranslation;
+      const { updateUserProfile } = await import('../src/services/authService');
+      await updateUserProfile(user.uid, {
+        preferred_version_id: versionId,
+        preferred_translation: shortName,
+        settings: {
+          ...profile?.settings,
+          preferred_version_id: versionId,
+          preferred_translation: shortName,
+        },
+      });
+    } catch (err) {
+      console.warn('Failed to update preferred Bible version:', err);
+    }
+  };
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
       <Text style={styles.intro}>
         Each translation takes a slightly different approach to rendering the original Hebrew,
-        Aramaic, and Greek. Here is a quick guide to the versions available in the app.
+        Aramaic, and Greek. Tap a translation below to set it as your preferred version.
       </Text>
 
-      {SUPPORTED_BIBLE_VERSIONS.map((v) => {
-        const isPreferred = v.id === preferredVersionId;
-        return (
-          <View
-            key={v.id}
-            testID={`bible-version-card-${v.code}`}
-            accessibilityState={{ selected: isPreferred }}
-            style={[styles.card, isPreferred && styles.cardPreferred]}
-          >
-            <View style={styles.cardHeader}>
-              <View style={[styles.badge, isPreferred && styles.badgePreferred]}>
-                <Text style={[styles.badgeText, isPreferred && styles.badgeTextPreferred]}>
-                  {v.shortName}
-                </Text>
+      <View accessibilityRole="radiogroup" accessibilityLabel="Bible versions">
+        {SUPPORTED_BIBLE_VERSIONS.map((v) => {
+          const isPreferred = v.id === selectedVersionId;
+          return (
+            <Pressable
+              key={v.id}
+              testID={`bible-version-card-${v.code}`}
+              onPress={() => handleSelectVersion(v.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isPreferred }}
+              accessibilityLabel={`${v.shortName} — ${v.fullName}`}
+              style={[styles.card, isPreferred && styles.cardPreferred]}
+            >
+              <View style={styles.cardHeader}>
+                <View style={[styles.badge, isPreferred && styles.badgePreferred]}>
+                  <Text style={[styles.badgeText, isPreferred && styles.badgeTextPreferred]}>
+                    {v.shortName}
+                  </Text>
+                </View>
+                <Text style={styles.fullName}>{v.fullName}</Text>
               </View>
-              <Text style={styles.fullName}>{v.fullName}</Text>
-            </View>
 
-            {(v.isPublicDomain || isPreferred) && (
-              <View style={styles.tagRow}>
-                {isPreferred && <Text style={styles.preferredTag}>Your preferred version</Text>}
-                {v.isPublicDomain && <Text style={styles.tag}>Public domain</Text>}
-              </View>
-            )}
+              {(v.isPublicDomain || isPreferred) && (
+                <View style={styles.tagRow}>
+                  {isPreferred && <Text style={styles.preferredTag}>Your preferred version</Text>}
+                  {v.isPublicDomain && <Text style={styles.tag}>Public domain</Text>}
+                </View>
+              )}
 
-            <Text style={styles.summary}>{v.summary}</Text>
-          </View>
-        );
-      })}
+              <Text style={styles.summary}>{v.summary}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </ScrollView>
   );
 }

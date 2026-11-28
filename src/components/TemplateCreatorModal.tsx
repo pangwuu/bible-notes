@@ -30,6 +30,23 @@ interface TemplateCreatorModalProps {
   onSave: (template: NoteTemplate) => void;
 }
 
+const COLOR_LABELS: Record<string, string> = {
+  '#E3A53D': 'Amber',
+  '#5B93C4': 'Blue',
+  '#7BA05B': 'Sage green',
+  '#B4789E': 'Dusty plum',
+  '#C4664F': 'Terracotta red',
+  '#EDE7DD': 'Parchment',
+};
+
+function formatColorName(hex: string): string {
+  return COLOR_LABELS[hex.toUpperCase()] || COLOR_LABELS[hex] || hex;
+}
+
+function formatIconName(icon: string): string {
+  return icon.replace(/-outline$/, '').replace(/-/g, ' ');
+}
+
 export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
   visible,
   initialTemplate,
@@ -171,13 +188,25 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
           <View style={styles.sheet}>
             {/* Header */}
             <View style={styles.header}>
-              <Pressable onPress={onClose} style={styles.headerBtn} hitSlop={8}>
+              <Pressable
+                onPress={onClose}
+                style={styles.headerBtn}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
+              >
                 <Text style={styles.cancelText}>Cancel</Text>
               </Pressable>
               <Text style={styles.headerTitle}>
                 {initialTemplate ? 'Edit Template' : 'New Template'}
               </Text>
-              <Pressable onPress={handleSave} style={styles.headerBtn} hitSlop={8}>
+              <Pressable
+                onPress={handleSave}
+                style={styles.headerBtn}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Save"
+              >
                 <Text style={styles.saveText}>Save</Text>
               </Pressable>
             </View>
@@ -223,7 +252,7 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
                   <Text style={styles.iconSelectorText}>Tap to customize icon & color</Text>
                   <View style={styles.colorPreviewRow}>
                     <View style={[styles.colorDot, { backgroundColor: color }]} />
-                    <Text style={styles.colorNameText}>{color}</Text>
+                    <Text style={styles.colorNameText}>{formatColorName(color)}</Text>
                   </View>
                 </View>
               </Pressable>
@@ -325,7 +354,12 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
               <View style={styles.iconPickerContent}>
                 <View style={styles.iconPickerHeader}>
                   <Text style={styles.iconPickerTitle}>Select Icon & Color</Text>
-                  <Pressable onPress={() => setShowIconPicker(null)} hitSlop={8}>
+                  <Pressable
+                    onPress={() => setShowIconPicker(null)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close icon and color picker"
+                  >
                     <Ionicons name="close" size={20} color={colors.text.secondary} />
                   </Pressable>
                 </View>
@@ -345,6 +379,9 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
                             handleUpdateSection(showIconPicker, 'color', c);
                           }
                         }}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
+                        accessibilityLabel={`${formatColorName(c)} color`}
                         style={[
                           styles.colorSwatch,
                           { backgroundColor: c },
@@ -376,6 +413,9 @@ export const TemplateCreatorModal: React.FC<TemplateCreatorModalProps> = ({
                             }
                             setShowIconPicker(null);
                           }}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: isSelected }}
+                          accessibilityLabel={`${formatIconName(ic)} icon`}
                           style={[
                             styles.iconGridCell,
                             isSelected && { borderColor: activePickerColor, backgroundColor: colors.bg.surface },

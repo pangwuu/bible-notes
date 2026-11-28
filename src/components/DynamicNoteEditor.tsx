@@ -102,9 +102,14 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
               <Ionicons name="eye-outline" size={15} color={colors.text.secondary} />
               <Text style={styles.metaLabel}>Visibility</Text>
             </View>
-            <View style={styles.visibilityToggle}>
+            <View
+              style={styles.visibilityToggle}
+              accessibilityRole="radiogroup"
+              accessibilityLabel="Note visibility"
+            >
               <Pressable
-                accessibilityRole="switch"
+                accessibilityRole="radio"
+                accessibilityState={{ checked: visibility === 'friends', selected: visibility === 'friends' }}
                 accessibilityLabel="Note visibility: friends"
                 onPress={() => onChangeVisibility('friends')}
                 style={[
@@ -128,7 +133,8 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
               </Pressable>
 
               <Pressable
-                accessibilityRole="switch"
+                accessibilityRole="radio"
+                accessibilityState={{ checked: visibility === 'private', selected: visibility === 'private' }}
                 accessibilityLabel="Note visibility: private"
                 onPress={() => onChangeVisibility('private')}
                 style={[
@@ -219,6 +225,7 @@ export const DynamicNoteEditor: React.FC<DynamicNoteEditorProps> = ({
 
               <TextInput
                 value={section.content}
+                accessibilityLabel={section.title}
                 onChangeText={(val) => onChangeSection(idx, val)}
                 onContentSizeChange={(e) => {
                   const nextHeight = Math.max(

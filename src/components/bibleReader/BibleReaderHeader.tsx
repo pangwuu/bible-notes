@@ -24,21 +24,52 @@ export const BibleReaderHeader: React.FC<BibleReaderHeaderProps> = ({
   onToggleTextSize,
   textSizeOpen = false,
 }) => {
+  const showTranslationBtn = Boolean(!collapsed && translationLabel && onOpenTranslations);
+  const showTextSizeBtn = Boolean(!collapsed && onToggleTextSize);
+  const hasSecondaryControls = showTranslationBtn || showTextSizeBtn;
+  const collapseLabel = `${passageDisplay}. ${collapsed ? 'Show' : 'Hide'} Bible text`;
+
+  if (!hasSecondaryControls) {
+    return (
+      <Pressable
+        style={styles.headerRow}
+        onPress={onToggleCollapse}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: !collapsed }}
+        accessibilityLabel={collapseLabel}
+      >
+        <View style={styles.headerLeft}>
+          <Ionicons name="book-outline" size={17} color={colors.accent.keyIdea} style={styles.bookIcon} />
+          <Text style={styles.scriptureHeaderLabel} numberOfLines={2} ellipsizeMode="tail">
+            {passageDisplay}
+          </Text>
+        </View>
+        <Ionicons
+          name={collapsed ? 'chevron-down' : 'chevron-up'}
+          size={16}
+          color={colors.text.secondary}
+          style={styles.collapseIcon}
+        />
+      </Pressable>
+    );
+  }
+
   return (
-    <Pressable
-      style={styles.headerRow}
-      onPress={onToggleCollapse}
-      accessibilityRole="button"
-      accessibilityLabel={`${passageDisplay}. ${collapsed ? 'Show' : 'Hide'} Bible text`}
-    >
-      <View style={styles.headerLeft}>
+    <View style={styles.headerRow}>
+      <Pressable
+        style={styles.headerLeft}
+        onPress={onToggleCollapse}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: !collapsed }}
+        accessibilityLabel={collapseLabel}
+      >
         <Ionicons name="book-outline" size={17} color={colors.accent.keyIdea} style={styles.bookIcon} />
         <Text style={styles.scriptureHeaderLabel} numberOfLines={2} ellipsizeMode="tail">
           {passageDisplay}
         </Text>
-      </View>
+      </Pressable>
 
-      {!collapsed && translationLabel && onOpenTranslations && (
+      {showTranslationBtn && (
         <Pressable
           onPress={onOpenTranslations}
           style={styles.controlButton}
@@ -51,7 +82,7 @@ export const BibleReaderHeader: React.FC<BibleReaderHeaderProps> = ({
         </Pressable>
       )}
 
-      {!collapsed && onToggleTextSize && (
+      {showTextSizeBtn && (
         <Pressable
           onPress={onToggleTextSize}
           style={[styles.controlButton, textSizeOpen && styles.controlButtonActive]}
@@ -60,17 +91,26 @@ export const BibleReaderHeader: React.FC<BibleReaderHeaderProps> = ({
           accessibilityLabel="Text size"
           hitSlop={4}
         >
-          <Text style={[styles.controlText, styles.aaText, textSizeOpen && styles.controlTextActive]}>Aa</Text>
+          <Text style={[styles.controlText, styles.aaText, textSizeOpen && styles.controlTextActive]}>
+            Aa
+          </Text>
         </Pressable>
       )}
 
-      <Ionicons
-        name={collapsed ? 'chevron-down' : 'chevron-up'}
-        size={16}
-        color={colors.text.secondary}
-        style={styles.collapseIcon}
-      />
-    </Pressable>
+      <Pressable
+        onPress={onToggleCollapse}
+        hitSlop={8}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={styles.collapseIconButton}
+      >
+        <Ionicons
+          name={collapsed ? 'chevron-down' : 'chevron-up'}
+          size={16}
+          color={colors.text.secondary}
+        />
+      </Pressable>
+    </View>
   );
 };
 
@@ -88,6 +128,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    minHeight: 32,
     marginRight: spacing.xs,
   },
   bookIcon: {
@@ -129,5 +170,10 @@ const styles = StyleSheet.create({
   collapseIcon: {
     flexShrink: 0,
     marginLeft: spacing.xs,
+  },
+  collapseIconButton: {
+    flexShrink: 0,
+    marginLeft: spacing.xs,
+    padding: 4,
   },
 });

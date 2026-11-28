@@ -44,22 +44,15 @@ export const RandomReflectionCard: React.FC<RandomReflectionCardProps> = ({
     : passageDisplay;
 
   return (
-    <Pressable
-      style={[styles.card, { borderLeftColor: indicatorColor }, style]}
-      onPress={onPress}
-      accessibilityLabel={`Rediscover reflection on ${accessibilityTitle}`}
-    >
+    <View style={[styles.card, { borderLeftColor: indicatorColor }, style]}>
       <View style={styles.topRow}>
         <View style={styles.titleGroup}>
           <Ionicons name="sparkles-outline" size={15} color={colors.accentKeyIdea} />
-          <Text style={styles.cardHeaderTitle}>Rediscover a Reflection</Text>
+          <Text style={styles.cardHeaderTitle}>Past reflection</Text>
         </View>
 
         <Pressable
-          onPress={(e) => {
-            e.stopPropagation();
-            onShuffle();
-          }}
+          onPress={onShuffle}
           hitSlop={12}
           style={styles.shuffleButton}
           accessibilityRole="button"
@@ -70,63 +63,69 @@ export const RandomReflectionCard: React.FC<RandomReflectionCardProps> = ({
         </Pressable>
       </View>
 
-      <View style={styles.passageRow}>
-        <View style={styles.titleColumn}>
-          {note.title ? (
-            <>
-              <Text style={styles.noteTitle} numberOfLines={2} ellipsizeMode="tail">
-                {note.title}
-              </Text>
-              <Text style={styles.passageSubref} numberOfLines={1} ellipsizeMode="tail">
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`Rediscover reflection on ${accessibilityTitle}`}
+        style={styles.bodyTrigger}
+      >
+        <View style={styles.passageRow}>
+          <View style={styles.titleColumn}>
+            {note.title ? (
+              <>
+                <Text style={styles.noteTitle} numberOfLines={2} ellipsizeMode="tail">
+                  {note.title}
+                </Text>
+                <Text style={styles.passageSubref} numberOfLines={1} ellipsizeMode="tail">
+                  {passageDisplay}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.passageRef} numberOfLines={1}>
                 {passageDisplay}
               </Text>
-            </>
-          ) : (
-            <Text style={styles.passageRef} numberOfLines={1}>
-              {passageDisplay}
-            </Text>
-          )}
+            )}
+          </View>
+
+          <View style={styles.sectionIndicators}>
+            {note.sections && note.sections.length > 0 ? (
+              note.sections.map((sec) =>
+                sec.content?.trim() ? (
+                  <TemplateIcon
+                    key={sec.id}
+                    name={sec.icon || 'document-text-outline'}
+                    size={14}
+                    color={getSectionColor(sec.id, sec.color)}
+                  />
+                ) : null
+              )
+            ) : (
+              <>
+                {note.lightContent ? (
+                  <Ionicons name="bulb-outline" size={14} color={colors.accentKeyIdea} />
+                ) : null}
+                {note.questionContent ? (
+                  <Ionicons name="help-circle-outline" size={14} color={colors.accentQuestion} />
+                ) : null}
+                {note.arrowContent ? (
+                  <Ionicons name="footsteps-outline" size={14} color={colors.accentApplication} />
+                ) : null}
+              </>
+            )}
+          </View>
         </View>
 
-        {/* Section indicator icons on the right */}
-        <View style={styles.sectionIndicators}>
-          {note.sections && note.sections.length > 0 ? (
-            note.sections.map((sec) =>
-              sec.content?.trim() ? (
-                <TemplateIcon
-                  key={sec.id}
-                  name={sec.icon || 'document-text-outline'}
-                  size={14}
-                  color={getSectionColor(sec.id, sec.color)}
-                />
-              ) : null
-            )
-          ) : (
-            <>
-              {note.lightContent ? (
-                <Ionicons name="bulb-outline" size={14} color={colors.accentKeyIdea} />
-              ) : null}
-              {note.questionContent ? (
-                <Ionicons name="help-circle-outline" size={14} color={colors.accentQuestion} />
-              ) : null}
-              {note.arrowContent ? (
-                <Ionicons name="footsteps-outline" size={14} color={colors.accentApplication} />
-              ) : null}
-            </>
-          )}
-        </View>
-      </View>
-
-      {note.tags && note.tags.length > 0 ? (
-        <View style={styles.tagRow}>
-          {note.tags.slice(0, 3).map((tag) => (
-            <View key={tag} style={styles.tagChip}>
-              <Text style={styles.tagText}>#{tag}</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-    </Pressable>
+        {note.tags && note.tags.length > 0 ? (
+          <View style={styles.tagRow}>
+            {note.tags.slice(0, 3).map((tag) => (
+              <View key={tag} style={styles.tagChip}>
+                <Text style={styles.tagText}>#{tag}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </Pressable>
+    </View>
   );
 };
 
@@ -172,6 +171,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
     color: colors.textSecondary,
+  },
+  bodyTrigger: {
+    paddingTop: 2,
   },
   passageRow: {
     flexDirection: 'row',

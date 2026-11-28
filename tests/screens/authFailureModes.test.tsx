@@ -356,13 +356,30 @@ describe('Area 1: Authentication & Onboarding Failure Modes', () => {
 
       await waitFor(() => {
         expect(getByText('This email address is already in use by another account.')).toBeTruthy();
-        expect(Alert.alert).toHaveBeenCalledWith(
-          'Registration Failed',
-          'This email address is already in use by another account.'
-        );
       });
+      expect(Alert.alert).not.toHaveBeenCalled();
 
       jest.useRealTimers();
+    });
+
+    test('defers short username error while typing and reveals it on blur', async () => {
+      const { getByText, queryByText, getAllByTestId } = await renderWithPaper(<RegisterScreen />);
+      const inputs = getAllByTestId('text-input-outlined');
+      const unameInput = inputs[1];
+
+      await act(async () => {
+        fireEvent.changeText(unameInput, 'jo');
+      });
+
+      // Should keep neutral hint while typing < 3 valid chars
+      expect(queryByText('Username must be at least 3 characters')).toBeNull();
+      expect(getByText('3–20 lowercase letters, numbers, or underscores')).toBeTruthy();
+
+      await act(async () => {
+        fireEvent(unameInput, 'blur');
+      });
+
+      expect(getByText('Username must be at least 3 characters')).toBeTruthy();
     });
   });
 });

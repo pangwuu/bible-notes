@@ -42,6 +42,9 @@ export const TOCSegmentBar: React.FC<TOCSegmentBarProps> = ({
         {segments.length > 1 && (
           <Pressable
             onPress={() => onSelectSegment(null)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: activeSegmentIndex === null }}
+            accessibilityLabel="Entire passage"
             style={[
               styles.tocPill,
               activeSegmentIndex === null && styles.tocPillActive,
@@ -57,25 +60,31 @@ export const TOCSegmentBar: React.FC<TOCSegmentBarProps> = ({
             </Text>
           </Pressable>
         )}
-        {segments.map((seg, idx) => (
-          <Pressable
-            key={idx}
-            onPress={() => onSelectSegment(idx)}
-            style={[
-              styles.tocPill,
-              activeSegmentIndex === idx && styles.tocPillActive,
-            ]}
-          >
-            <Text
+        {segments.map((seg, idx) => {
+          const segLabel = formatSegmentDisplay(seg);
+          return (
+            <Pressable
+              key={idx}
+              onPress={() => onSelectSegment(idx)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: activeSegmentIndex === idx }}
+              accessibilityLabel={segLabel}
               style={[
-                styles.tocPillText,
-                activeSegmentIndex === idx && styles.tocPillTextActive,
+                styles.tocPill,
+                activeSegmentIndex === idx && styles.tocPillActive,
               ]}
             >
-              {formatSegmentDisplay(seg)}
-            </Text>
-          </Pressable>
-        ))}
+              <Text
+                style={[
+                  styles.tocPillText,
+                  activeSegmentIndex === idx && styles.tocPillTextActive,
+                ]}
+              >
+                {segLabel}
+              </Text>
+            </Pressable>
+          );
+        })}
       </ScrollView>
     </View>
   );
