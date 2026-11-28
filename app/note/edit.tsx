@@ -1208,12 +1208,12 @@ export default function NoteEditScreen() {
           ) : null}
           <Pressable
             onPress={handleDiscard}
-            style={styles.headerIconButton}
+            style={styles.headerDiscardButton}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={currentNoteIdRef.current ? 'Discard changes' : 'Discard note'}
           >
-            <Ionicons name="ellipsis-horizontal" size={20} color={colors.text.secondary} />
+            <Text style={styles.headerDiscardText}>Discard</Text>
           </Pressable>
         </View>
       ),
@@ -1661,6 +1661,17 @@ const styles = StyleSheet.create({
     height: 32,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerDiscardButton: {
+    minHeight: 32,
+    paddingHorizontal: spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerDiscardText: {
+    ...typography.label,
+    fontSize: 14,
+    color: colors.accent.danger,
   },
   recoveryBanner: {
     flexDirection: 'row',

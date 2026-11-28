@@ -1,11 +1,17 @@
 import React from 'react';
+import { render, fireEvent, within } from '@testing-library/react-native';
 import {
   getTimeGreeting,
   formatGreetingDate,
   extractFirstName,
 } from '../../src/components/DashboardGreeting';
+import { RandomReflectionCard } from '../../src/components/RandomReflectionCard';
 import { spacing } from '../../src/constants/theme';
 import safeStorage from '../../src/utils/safeStorage';
+
+jest.mock('@expo/vector-icons', () => ({
+  Ionicons: () => null,
+}));
 
 describe('Dashboard UI Enhancements', () => {
   describe('getTimeGreeting', () => {
@@ -86,6 +92,37 @@ describe('Dashboard UI Enhancements', () => {
   describe('Tab header margin normalization', () => {
     test('standard margin spacing is spacing.md (16px)', () => {
       expect(spacing.md).toBe(16);
+    });
+  });
+
+  describe('RandomReflectionCard semantic buttons', () => {
+    test('renders Shuffle and card body as sibling buttons rather than nested Pressables', async () => {
+      const onPress = jest.fn();
+      const onShuffle = jest.fn();
+      const sampleNote: any = {
+        id: 'n_ref_1',
+        title: 'Living Sacrifice',
+        passage: { display: 'Romans 12:1-2', books: ['Romans'], segments: [] },
+        tags: ['worship'],
+        visibility: 'private',
+      };
+
+      const screen = await render(
+        <RandomReflectionCard note={sampleNote} onPress={onPress} onShuffle={onShuffle} />
+      );
+
+      const shuffleBtn = screen.getByLabelText('Shuffle reflection');
+      const openBtn = screen.getByLabelText('Rediscover reflection on Living Sacrifice (Romans 12:1-2)');
+
+      expect(within(openBtn).queryByLabelText('Shuffle reflection')).toBeNull();
+      expect(within(shuffleBtn).queryByLabelText(/Rediscover reflection/)).toBeNull();
+
+      await fireEvent.press(shuffleBtn);
+      expect(onShuffle).toHaveBeenCalledTimes(1);
+      expect(onPress).not.toHaveBeenCalled();
+
+      await fireEvent.press(openBtn);
+      expect(onPress).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -295,5 +295,21 @@ describe('Friends Screen & Friend Profile Screen (app/(tabs)/friends.tsx & app/f
       expect(friendService.unfriend).toHaveBeenCalledWith('rel_1');
       expect(mockBack).toHaveBeenCalled();
     });
+
+    test('renders error state instead of phantom user when profile fetch fails or returns null', async () => {
+      (authService.getUserProfile as jest.Mock).mockRejectedValueOnce(new Error('Network offline'));
+      (friendService.getFriendshipStatus as jest.Mock).mockResolvedValueOnce({ status: 'none' });
+
+      const { getByText, queryByText } = await renderWithPaper(<FriendProfileScreen />);
+
+      await waitFor(() => {
+        expect(getByText('Profile unavailable')).toBeTruthy();
+        expect(getByText('Retry')).toBeTruthy();
+        expect(getByText('Go Back')).toBeTruthy();
+      });
+
+      expect(queryByText('@friend_uid_1')).toBeNull();
+      expect(queryByText('Not Connected')).toBeNull();
+    });
   });
 });

@@ -79,12 +79,20 @@ export const TagInput: React.FC<TagInputProps> = ({
             onFocus={onFocus}
             placeholder="Add tag (e.g. faith, grace)..."
             placeholderTextColor={colors.textSecondary}
+            accessibilityLabel="Add tag"
             autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
             returnKeyType="done"
             style={styles.textInput}
           />
           {input.trim().length > 0 && (
-            <Pressable onPress={handleAdd} style={styles.addButton}>
+            <Pressable
+              onPress={handleAdd}
+              style={styles.addButton}
+              accessibilityRole="button"
+              accessibilityLabel="Add"
+            >
               <Text style={styles.addButtonText}>Add</Text>
             </Pressable>
           )}
@@ -107,6 +115,8 @@ export const TagInput: React.FC<TagInputProps> = ({
                 setInput('');
               }}
               style={styles.suggestionChip}
+              accessibilityRole="button"
+              accessibilityLabel={`+${sug}`}
             >
               <Text style={styles.suggestionText}>+{sug}</Text>
             </Pressable>

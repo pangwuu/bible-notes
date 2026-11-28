@@ -19,6 +19,7 @@ import { getAuthRedirect } from '../src/utils/authRouting';
 import { applyWebThemeChrome, resolveWebThemeChromeColor } from '../src/utils/webThemeChrome';
 import { useIosPwaHeaderOptions } from '../src/hooks/useIosPwaHeaderOptions';
 import DeletedNoteSnackbar from '../src/components/DeletedNoteSnackbar';
+import WebAlertDialogHost from '../src/components/WebAlertDialogHost';
 
 // Keep splash screen visible while fonts and initial resources load
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -188,6 +189,7 @@ export default function RootLayout() {
           <AuthProvider>
             <RootNavigationLayout />
           </AuthProvider>
+          <WebAlertDialogHost />
         </PaperProvider>
       </ThemeProvider>
     </SafeAreaProvider>

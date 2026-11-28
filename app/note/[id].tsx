@@ -256,6 +256,8 @@ export default function NoteDetailScreen() {
                 onPress={() => router.push({ pathname: '/note/edit', params: { id: note?.id } })}
                 style={styles.headerButton}
                 hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Edit note"
               >
                 <Ionicons name="pencil" size={20} color={colors.accent.keyIdea} />
               </Pressable>
@@ -264,6 +266,9 @@ export default function NoteDetailScreen() {
                 disabled={isDeleting}
                 style={styles.headerButton}
                 hitSlop={8}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isDeleting }}
+                accessibilityLabel="Delete note"
               >
                 <Ionicons name="trash-outline" size={20} color={colors.accent.danger} />
               </Pressable>
@@ -469,8 +474,15 @@ export default function NoteDetailScreen() {
   if (error || !note) {
     return (
       <View style={[styles.screen, styles.center]}>
-        <Text style={styles.errorText}>{error || 'Note not found'}</Text>
-        <Pressable onPress={navigateBack} style={styles.backBtn}>
+        <Text style={styles.errorText} accessibilityRole="alert">
+          {error || 'Note not found'}
+        </Text>
+        <Pressable
+          onPress={navigateBack}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Go Back"
+        >
           <Text style={styles.backBtnText}>Go Back</Text>
         </Pressable>
       </View>
@@ -494,7 +506,7 @@ export default function NoteDetailScreen() {
       {/* Prominent Note Title & Passage Subtitle Header with Visibility Pill (Always Rendered) */}
       <View style={styles.titleHeaderBox}>
         <View style={styles.titleHeaderTopRow}>
-          <Text style={styles.noteTitleText} numberOfLines={2} ellipsizeMode="tail">
+          <Text style={styles.noteTitleText} accessibilityRole="header">
             {note.title || formatPassageDisplay(note.passage)}
           </Text>
 
@@ -564,6 +576,7 @@ export default function NoteDetailScreen() {
                   style={styles.overlapTogglePill}
                   onPress={() => setShowAllOverlaps((prev) => !prev)}
                   accessibilityRole="button"
+                  accessibilityState={{ expanded: showAllOverlaps }}
                   accessibilityLabel={
                     showAllOverlaps
                       ? 'Show fewer friend notes'
@@ -800,6 +813,8 @@ export default function NoteDetailScreen() {
             <Pressable
               onPress={() => router.push({ pathname: '/note/edit', params: { id: note?.id } })}
               style={styles.addReflectionBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Add Reflection"
             >
               <Text style={styles.addReflectionBtnText}>Add Reflection</Text>
             </Pressable>
@@ -824,6 +839,9 @@ export default function NoteDetailScreen() {
           <Pressable
             style={styles.relatedNotesHeaderRow}
             onPress={() => setShowRelatedNotes(!showRelatedNotes)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showRelatedNotes }}
+            accessibilityLabel={`Your other notes on this passage (${relatedNotes.length})`}
           >
             <View style={styles.relatedNotesTitleGroup}>
               <Ionicons name="book-outline" size={16} color={colors.accent.keyIdea} />

@@ -6,8 +6,8 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  TextInput as RNTextInput,
 } from 'react-native';
-import { Alert } from '../../src/utils/alert';
 import { Text, TextInput, Button } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { colors, spacing, radius } from '../../src/constants/theme';
@@ -23,10 +23,18 @@ import {
 
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
+const DEFAULT_USERNAME_HINT = '3–20 lowercase letters, numbers, or underscores';
+
 export default function RegisterScreen() {
   const router = useRouter();
+  const usernameInputRef = useRef<RNTextInput>(null);
+  const emailInputRef = useRef<RNTextInput>(null);
+  const passwordInputRef = useRef<RNTextInput>(null);
+  const confirmPasswordInputRef = useRef<RNTextInput>(null);
+
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
+  const [usernameBlurred, setUsernameBlurred] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -34,15 +42,13 @@ export default function RegisterScreen() {
   const [secureConfirmPassword, setSecureConfirmPassword] = useState(true);
 
   const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
-  const [usernameMessage, setUsernameMessage] = useState<string>(
-    '3–20 lowercase letters, numbers, or underscores'
-  );
+  const [usernameMessage, setUsernameMessage] = useState<string>(DEFAULT_USERNAME_HINT);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Debounced live username availability check
+  // Debounced live username availability check; defer minimum-length warning until blur/submit
   useEffect(() => {
     const trimmed = username.trim().toLowerCase();
 
@@ -52,14 +58,27 @@ export default function RegisterScreen() {
 
     if (!trimmed) {
       setUsernameStatus('idle');
-      setUsernameMessage('3–20 lowercase letters, numbers, or underscores');
+      setUsernameMessage(DEFAULT_USERNAME_HINT);
       return;
     }
 
-    const val = validateUsername(trimmed);
-    if (!val.isValid) {
+    const hasValidChars = /^[a-z0-9_]+$/.test(trimmed);
+    if (!hasValidChars || trimmed.length > 20) {
+      const val = validateUsername(trimmed);
       setUsernameStatus('invalid');
       setUsernameMessage(val.error || 'Invalid username format');
+      return;
+    }
+
+    if (trimmed.length < 3) {
+      if (usernameBlurred) {
+        const val = validateUsername(trimmed);
+        setUsernameStatus('invalid');
+        setUsernameMessage(val.error || 'Username must be at least 3 characters');
+      } else {
+        setUsernameStatus('idle');
+        setUsernameMessage(DEFAULT_USERNAME_HINT);
+      }
       return;
     }
 
@@ -77,8 +96,6 @@ export default function RegisterScreen() {
           setUsernameMessage('✕ Username is already taken');
         }
       } catch (_err) {
-        // In unauthenticated context, if rules block with permission-denied,
-        // checkUsernameAvailable returns true (deferred to registration).
         setUsernameStatus('available');
         setUsernameMessage('✓ Username format valid');
       }
@@ -89,10 +106,12 @@ export default function RegisterScreen() {
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [username]);
+  }, [username, usernameBlurred]);
 
   const handleRegister = async () => {
+    if (isSubmitting) return;
     setErrorMessage(null);
+    setUsernameBlurred(true);
 
     // 1. Validate full name
     const nameVal = validateDisplayName(fullName);
@@ -105,6 +124,8 @@ export default function RegisterScreen() {
     const normalizedUname = normalizeUsername(username);
     const uVal = validateUsername(normalizedUname);
     if (!uVal.isValid) {
+      setUsernameStatus('invalid');
+      setUsernameMessage(uVal.error || 'Please enter a valid username');
       setErrorMessage(uVal.error || 'Please enter a valid username');
       return;
     }
@@ -138,12 +159,10 @@ export default function RegisterScreen() {
     setIsSubmitting(true);
     try {
       await registerUser(trimmedEmail, password, normalizedUname, fullName.trim());
-      // Explicitly navigate to tabs upon completed registration and profile setup
       router.replace('/(tabs)');
     } catch (err: any) {
       const msg = err.message || 'Registration failed. Please try again.';
       setErrorMessage(msg);
-      Alert.alert('Registration Failed', msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -152,14 +171,14 @@ export default function RegisterScreen() {
   const getUsernameStatusColor = () => {
     switch (usernameStatus) {
       case 'available':
-        return colors.accentApplication; // Sage green
+        return colors.accentApplication;
       case 'taken':
       case 'invalid':
-        return colors.accentDanger; // Brick red
+        return colors.accentDanger;
       case 'checking':
       case 'idle':
       default:
-        return colors.textSecondary; // Warm gray
+        return colors.textSecondary;
     }
   };
 
@@ -173,7 +192,11 @@ export default function RegisterScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {errorMessage && (
-          <View style={styles.errorBanner}>
+          <View
+            style={styles.errorBanner}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="assertive"
+          >
             <Text style={styles.errorText}>{errorMessage}</Text>
           </View>
         )}
@@ -187,6 +210,11 @@ export default function RegisterScreen() {
               if (errorMessage) setErrorMessage(null);
             }}
             autoCapitalize="words"
+            autoComplete="name"
+            textContentType="name"
+            returnKeyType="next"
+            onSubmitEditing={() => usernameInputRef.current?.focus()}
+            blurOnSubmit={false}
             textColor={colors.textPrimary}
             style={styles.input}
             mode="outlined"
@@ -195,15 +223,26 @@ export default function RegisterScreen() {
             disabled={isSubmitting}
           />
 
+          <Text style={[styles.helperTextAbove, { color: getUsernameStatusColor() }]}>
+            {usernameMessage}
+          </Text>
           <TextInput
+            ref={usernameInputRef}
             label="Username"
             value={username}
             onChangeText={(text) => {
               setUsername(text.toLowerCase());
               if (errorMessage) setErrorMessage(null);
             }}
+            onBlur={() => setUsernameBlurred(true)}
             autoCapitalize="none"
             autoCorrect={false}
+            spellCheck={false}
+            autoComplete="username"
+            textContentType="username"
+            returnKeyType="next"
+            onSubmitEditing={() => emailInputRef.current?.focus()}
+            blurOnSubmit={false}
             textColor={colors.textPrimary}
             style={styles.input}
             mode="outlined"
@@ -211,11 +250,9 @@ export default function RegisterScreen() {
             activeOutlineColor={colors.accentKeyIdea}
             disabled={isSubmitting}
           />
-          <Text style={[styles.helperText, { color: getUsernameStatusColor() }]}>
-            {usernameMessage}
-          </Text>
 
           <TextInput
+            ref={emailInputRef}
             label="Email"
             value={email}
             onChangeText={(text) => {
@@ -224,7 +261,13 @@ export default function RegisterScreen() {
             }}
             autoCapitalize="none"
             autoCorrect={false}
+            spellCheck={false}
+            autoComplete="email"
+            textContentType="emailAddress"
             keyboardType="email-address"
+            returnKeyType="next"
+            onSubmitEditing={() => passwordInputRef.current?.focus()}
+            blurOnSubmit={false}
             textColor={colors.textPrimary}
             style={styles.input}
             mode="outlined"
@@ -234,6 +277,7 @@ export default function RegisterScreen() {
           />
 
           <TextInput
+            ref={passwordInputRef}
             label="Password"
             value={password}
             onChangeText={(text) => {
@@ -241,6 +285,14 @@ export default function RegisterScreen() {
               if (errorMessage) setErrorMessage(null);
             }}
             secureTextEntry={securePassword}
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            autoComplete="new-password"
+            textContentType="newPassword"
+            returnKeyType="next"
+            onSubmitEditing={() => confirmPasswordInputRef.current?.focus()}
+            blurOnSubmit={false}
             textColor={colors.textPrimary}
             style={styles.input}
             mode="outlined"
@@ -251,12 +303,14 @@ export default function RegisterScreen() {
               <TextInput.Icon
                 icon={securePassword ? 'eye' : 'eye-off'}
                 color={colors.textSecondary}
+                accessibilityLabel={securePassword ? 'Show password' : 'Hide password'}
                 onPress={() => setSecurePassword(!securePassword)}
               />
             }
           />
 
           <TextInput
+            ref={confirmPasswordInputRef}
             label="Confirm Password"
             value={confirmPassword}
             onChangeText={(text) => {
@@ -264,6 +318,13 @@ export default function RegisterScreen() {
               if (errorMessage) setErrorMessage(null);
             }}
             secureTextEntry={secureConfirmPassword}
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            autoComplete="new-password"
+            textContentType="newPassword"
+            returnKeyType="go"
+            onSubmitEditing={handleRegister}
             textColor={colors.textPrimary}
             style={styles.input}
             mode="outlined"
@@ -274,6 +335,9 @@ export default function RegisterScreen() {
               <TextInput.Icon
                 icon={secureConfirmPassword ? 'eye' : 'eye-off'}
                 color={colors.textSecondary}
+                accessibilityLabel={
+                  secureConfirmPassword ? 'Show confirm password' : 'Hide confirm password'
+                }
                 onPress={() => setSecureConfirmPassword(!secureConfirmPassword)}
               />
             }
@@ -290,8 +354,7 @@ export default function RegisterScreen() {
             disabled={
               isSubmitting ||
               usernameStatus === 'taken' ||
-              usernameStatus === 'checking' ||
-              usernameStatus === 'invalid'
+              usernameStatus === 'checking'
             }
           >
             {isSubmitting ? 'Creating account...' : 'Create account'}
@@ -303,6 +366,9 @@ export default function RegisterScreen() {
           <Pressable
             onPress={() => router.replace('/(auth)/login')}
             disabled={isSubmitting}
+            style={styles.linkTouchTarget}
+            accessibilityRole="button"
+            accessibilityLabel="Sign in"
           >
             <Text style={styles.footerLink}>Sign in</Text>
           </Pressable>
@@ -347,10 +413,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgSurface,
     marginBottom: spacing.sm,
   },
-  helperText: {
+  helperTextAbove: {
     fontSize: 12,
-    marginBottom: spacing.md,
-    marginTop: -2,
+    marginTop: 2,
+    marginBottom: 4,
     paddingHorizontal: 2,
   },
   actionButton: {
@@ -363,8 +429,14 @@ const styles = StyleSheet.create({
   },
   footerRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
+  },
+  linkTouchTarget: {
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
   },
   footerText: {
     color: colors.textSecondary,

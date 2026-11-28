@@ -169,6 +169,7 @@ export default function DashboardScreen() {
             style={styles.hideButton}
             onPress={() => toggleSection('recentNotes')}
             accessibilityRole="button"
+            accessibilityState={{ expanded: !hiddenSections.recentNotes }}
             accessibilityLabel={hiddenSections.recentNotes ? 'Show Recent Notes' : 'Hide Recent Notes'}
             hitSlop={8}
           >
@@ -184,7 +185,16 @@ export default function DashboardScreen() {
         </View>
 
         {!hiddenSections.recentNotes && (
-          recentNotes.length === 0 ? (
+          loading && recentNotes.length === 0 ? (
+            <View accessibilityRole="progressbar" accessibilityLabel="Loading recent notes">
+              {[0, 1].map((idx) => (
+                <View key={idx} style={styles.skeletonCard}>
+                  <View style={[styles.skeletonLine, styles.skeletonTitle]} />
+                  <View style={styles.skeletonLine} />
+                </View>
+              ))}
+            </View>
+          ) : recentNotes.length === 0 ? (
             <EmptyState
               icon="book-outline"
               title="No notes yet"
@@ -213,6 +223,7 @@ export default function DashboardScreen() {
                 style={styles.hideButton}
                 onPress={() => toggleSection('friendsActivity')}
                 accessibilityRole="button"
+                accessibilityState={{ expanded: !hiddenSections.friendsActivity }}
                 accessibilityLabel={hiddenSections.friendsActivity ? "Show Friends' Activity" : "Hide Friends' Activity"}
                 hitSlop={8}
               >
@@ -250,7 +261,7 @@ export default function DashboardScreen() {
                     style={styles.findFriendsButton}
                     onPress={() => router.push('/(tabs)/friends')}
                     accessibilityRole="button"
-                    accessibilityLabel="Find Friends"
+                    accessibilityLabel={friendActivity.hasFriends ? 'Friends' : 'Find Friends'}
                   >
                     <Text style={styles.findFriendsButtonText}>
                       {friendActivity.hasFriends ? 'Friends' : 'Find Friends'}
@@ -283,6 +294,7 @@ export default function DashboardScreen() {
                           style={styles.showMoreButton}
                           onPress={() => setShowAllSharedPassages((prev) => !prev)}
                           accessibilityRole="button"
+                          accessibilityState={{ expanded: showAllSharedPassages }}
                           accessibilityLabel={
                             showAllSharedPassages
                               ? 'Show fewer shared passages'
@@ -330,6 +342,7 @@ export default function DashboardScreen() {
                           style={styles.showMoreButton}
                           onPress={() => setShowAllRecentUpdates((prev) => !prev)}
                           accessibilityRole="button"
+                          accessibilityState={{ expanded: showAllRecentUpdates }}
                           accessibilityLabel={
                             showAllRecentUpdates
                               ? 'Show fewer recent updates'
@@ -366,6 +379,7 @@ export default function DashboardScreen() {
                 style={styles.hideButton}
                 onPress={() => toggleSection('rediscover')}
                 accessibilityRole="button"
+                accessibilityState={{ expanded: !hiddenSections.rediscover }}
                 accessibilityLabel={hiddenSections.rediscover ? "Show Rediscover a Reflection" : "Hide Rediscover a Reflection"}
                 hitSlop={8}
               >
@@ -517,5 +531,23 @@ const styles = StyleSheet.create({
   },
   loadingActivityCard: {
     marginBottom: spacing.sm,
+  },
+  skeletonCard: {
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.content,
+    borderWidth: 1,
+    borderColor: colors.borderHairline,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  skeletonLine: {
+    height: 10,
+    borderRadius: 2,
+    backgroundColor: colors.bgSurfaceRaised,
+  },
+  skeletonTitle: {
+    width: '45%',
+    height: 14,
   },
 });

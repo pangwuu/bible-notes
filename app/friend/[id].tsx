@@ -32,25 +32,48 @@ export default function FriendProfileScreen() {
   const [isFriend, setIsFriend] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingNotes, setLoadingNotes] = useState(true);
   const [showUnfriendDialog, setShowUnfriendDialog] = useState(false);
   const [unfriending, setUnfriending] = useState(false);
+  const [unfriendError, setUnfriendError] = useState<string | null>(null);
+
+  const navigateBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/friends');
+    }
+  }, [router]);
 
   const loadData = useCallback(async () => {
-    if (!id || !user) return;
+    if (!id || !user) {
+      setLoadError('User not found');
+      setLoading(false);
+      setLoadingNotes(false);
+      return;
+    }
+    setLoadError(null);
+    setLoading(true);
     try {
-      // 1. Load profile and friendship status
       const [profile, relStatus] = await Promise.all([
         getUserProfile(id),
         getFriendshipStatus(user.uid, id),
       ]);
+
+      if (!profile) {
+        setFriendProfile(null);
+        setLoadError('User not found');
+        setLoading(false);
+        setLoadingNotes(false);
+        return;
+      }
 
       setFriendProfile(profile);
       setFriendshipId(relStatus.friendshipId || null);
       setIsFriend(relStatus.status === 'accepted');
       setLoading(false);
 
-      // 2. Fetch shared notes progressively
       setLoadingNotes(true);
       try {
         const sharedNotes = await getFriendNotes(id);
@@ -62,6 +85,7 @@ export default function FriendProfileScreen() {
       }
     } catch (err) {
       console.error('Failed to load friend profile:', err);
+      setLoadError("Couldn't load this profile. Check your connection and try again.");
       setLoading(false);
       setLoadingNotes(false);
     }
@@ -74,37 +98,61 @@ export default function FriendProfileScreen() {
   const handleUnfriend = async () => {
     if (!friendshipId) return;
     setUnfriending(true);
+    setUnfriendError(null);
     try {
       await unfriend(friendshipId);
       setShowUnfriendDialog(false);
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace('/(tabs)/friends');
-      }
+      navigateBack();
     } catch (err) {
       console.error('Failed to unfriend user:', err);
+      setUnfriendError("Couldn't remove friend. Check your connection and try again.");
       setUnfriending(false);
     }
   };
 
   if (loading) {
     return (
-      <View style={[styles.screen, styles.center]}>
+      <View
+        style={[styles.screen, styles.center]}
+        accessibilityRole="progressbar"
+        accessibilityLabel="Loading friend profile"
+      >
         <ActivityIndicator color={colors.accentSocial} size="large" />
       </View>
     );
   }
 
+  if (loadError || !friendProfile) {
+    return (
+      <View style={[styles.screen, styles.center, styles.errorWrap]}>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Profile unavailable"
+          subtitle={loadError || 'User not found'}
+          actionLabel="Retry"
+          onAction={loadData}
+        />
+        <Pressable
+          onPress={navigateBack}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   const initial = (
-    friendProfile?.display_name ||
-    friendProfile?.username ||
+    friendProfile.display_name ||
+    friendProfile.username ||
     id ||
     'F'
   )[0].toUpperCase();
 
-  const displayName = friendProfile?.display_name || friendProfile?.username || 'User';
-  const username = friendProfile?.username || id;
+  const displayName = friendProfile.display_name || friendProfile.username || 'User';
+  const username = friendProfile.username || id;
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
@@ -124,7 +172,12 @@ export default function FriendProfileScreen() {
         {isFriend && friendshipId ? (
           <Pressable
             style={styles.unfriendButton}
-            onPress={() => setShowUnfriendDialog(true)}
+            onPress={() => {
+              setUnfriendError(null);
+              setShowUnfriendDialog(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`Unfriend ${displayName}`}
           >
             <Text style={styles.unfriendButtonText}>Unfriend</Text>
           </Pressable>
@@ -158,7 +211,13 @@ export default function FriendProfileScreen() {
       <Portal>
         <Dialog
           visible={showUnfriendDialog}
-          onDismiss={() => setShowUnfriendDialog(false)}
+          dismissable={!unfriending}
+          onDismiss={() => {
+            if (!unfriending) {
+              setShowUnfriendDialog(false);
+              setUnfriendError(null);
+            }
+          }}
           style={styles.dialog}
         >
           <Dialog.Title style={styles.dialogTitle}>Unfriend {displayName}?</Dialog.Title>
@@ -166,11 +225,23 @@ export default function FriendProfileScreen() {
             <Text style={styles.dialogText}>
               Are you sure you want to remove {displayName} as a friend? You will no longer be able to view their shared notes.
             </Text>
+            {unfriendError ? (
+              <Text
+                style={styles.dialogErrorText}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
+                {unfriendError}
+              </Text>
+            ) : null}
           </Dialog.Content>
           <Dialog.Actions>
             <Button
               textColor={colors.textSecondary}
-              onPress={() => setShowUnfriendDialog(false)}
+              onPress={() => {
+                setShowUnfriendDialog(false);
+                setUnfriendError(null);
+              }}
               disabled={unfriending}
             >
               Cancel
@@ -198,6 +269,23 @@ const styles = StyleSheet.create({
   center: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  errorWrap: {
+    padding: spacing.md,
+  },
+  backButton: {
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.borderHairline,
+    backgroundColor: colors.bgSurface,
+  },
+  backButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textSecondary,
   },
   container: {
     padding: spacing.md,
@@ -255,11 +343,11 @@ const styles = StyleSheet.create({
   unfriendButton: {
     marginTop: spacing.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.xs + 2,
     borderRadius: radius.control,
     borderWidth: 1,
     borderColor: colors.borderHairline,
-    backgroundColor: colors.bgSurfaceRaised,
+    backgroundColor: colors.bgBase,
   },
   unfriendButtonText: {
     fontSize: 13,
@@ -287,5 +375,10 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
+  },
+  dialogErrorText: {
+    color: colors.accentDanger,
+    fontSize: 13,
+    marginTop: spacing.sm,
   },
 });

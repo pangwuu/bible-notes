@@ -25,6 +25,7 @@ import AddNoteFAB from '../../src/components/AddNoteFAB';
 import { findCanonicalBook, CANONICAL_BOOKS } from '../../src/constants/bibleData';
 import { NoteDraft, listNewNoteDrafts, clearDraft } from '../../src/services/noteDraftStore';
 import { onNotesChanged } from '../../src/state/noteTrash';
+import { Alert } from '../../src/utils/alert';
 
 export default function NotesBrowserScreen() {
   const router = useRouter();
@@ -147,11 +148,14 @@ export default function NotesBrowserScreen() {
   return (
     <View style={styles.screen}>
       {/* Search Input matching Friends search component */}
-      <View style={styles.searchContainer}>
+      <View style={styles.searchContainer} accessibilityRole="search">
         <Searchbar
           placeholder="Search by title, book, tag, or reflection..."
+          accessibilityLabel="Search by title, book, tag, or reflection"
           value={searchQuery}
           onChangeText={setSearchQuery}
+          autoCorrect={false}
+          spellCheck={false}
           style={styles.searchBar}
           inputStyle={{ color: colors.textPrimary }}
           placeholderTextColor={colors.textSecondary}
@@ -187,6 +191,9 @@ export default function NotesBrowserScreen() {
           <View style={styles.tagPillRow}>
             <Pressable
               onPress={() => setSelectedTag(null)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: selectedTag === null }}
+              accessibilityLabel={`All (${notes.length})`}
               style={[
                 styles.filterPill,
                 selectedTag === null && styles.filterPillActive,
@@ -205,6 +212,9 @@ export default function NotesBrowserScreen() {
               <Pressable
                 key={tag}
                 onPress={() => setSelectedTag(selectedTag === tag ? null : tag)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: selectedTag === tag }}
+                accessibilityLabel={`#${tag} (${count})`}
                 style={[
                   styles.filterPill,
                   selectedTag === tag && styles.filterPillActive,
@@ -224,7 +234,7 @@ export default function NotesBrowserScreen() {
         )}
 
         {loadError && (
-          <View style={styles.errorRow} accessibilityLiveRegion="polite">
+          <View style={styles.errorRow} accessibilityRole="alert" accessibilityLiveRegion="polite">
             <Ionicons name="cloud-offline-outline" size={16} color={colors.text.secondary} />
             <Text style={styles.errorText}>
               Couldn't refresh your notes. Pull down to try again.
@@ -232,37 +242,54 @@ export default function NotesBrowserScreen() {
           </View>
         )}
 
-        {drafts.map((draft) => (
-          <View key={draft.key} style={styles.draftCard}>
-            <Ionicons name="create-outline" size={18} color={colors.accent.keyIdea} />
-            <View style={styles.draftTextCol}>
-              <Text style={styles.draftTitle}>Unfinished note</Text>
-              <Text style={styles.draftMeta} numberOfLines={1}>
-                {draft.payload.title.trim() ||
-                  (draft.payload.passage ? formatPassageDisplay(draft.payload.passage) : 'No passage yet')}
-              </Text>
+        {drafts.map((draft) => {
+          const draftLabel =
+            draft.payload.title.trim() ||
+            (draft.payload.passage ? formatPassageDisplay(draft.payload.passage) : 'No passage yet');
+          return (
+            <View key={draft.key} style={styles.draftCard}>
+              <Ionicons name="create-outline" size={18} color={colors.accent.keyIdea} />
+              <View style={styles.draftTextCol}>
+                <Text style={styles.draftTitle}>Unfinished note</Text>
+                <Text style={styles.draftMeta} numberOfLines={1}>
+                  {draftLabel}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => {
+                  Alert.alert(
+                    'Discard unfinished note?',
+                    'Everything you wrote in this unfinished note will be deleted.',
+                    [
+                      { text: 'Keep draft', style: 'cancel' },
+                      {
+                        text: 'Discard',
+                        style: 'destructive',
+                        onPress: () => {
+                          clearDraft(draft.key);
+                          setDrafts((prev) => prev.filter((d) => d.key !== draft.key));
+                        },
+                      },
+                    ]
+                  );
+                }}
+                style={styles.draftButton}
+                accessibilityRole="button"
+                accessibilityLabel={`Discard unfinished note: ${draftLabel}`}
+              >
+                <Text style={[styles.draftButtonText, styles.draftButtonMuted]}>Discard</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => router.push({ pathname: '/note/edit', params: { draft: draft.key } })}
+                style={styles.draftButton}
+                accessibilityRole="button"
+                accessibilityLabel={`Resume unfinished note: ${draftLabel}`}
+              >
+                <Text style={styles.draftButtonText}>Resume</Text>
+              </Pressable>
             </View>
-            <Pressable
-              onPress={() => {
-                clearDraft(draft.key);
-                setDrafts((prev) => prev.filter((d) => d.key !== draft.key));
-              }}
-              style={styles.draftButton}
-              accessibilityRole="button"
-              accessibilityLabel="Discard unfinished note"
-            >
-              <Text style={[styles.draftButtonText, styles.draftButtonMuted]}>Discard</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => router.push({ pathname: '/note/edit', params: { draft: draft.key } })}
-              style={styles.draftButton}
-              accessibilityRole="button"
-              accessibilityLabel="Resume unfinished note"
-            >
-              <Text style={styles.draftButtonText}>Resume</Text>
-            </Pressable>
-          </View>
-        ))}
+          );
+        })}
 
         {loading && notes.length === 0 ? (
           <View accessibilityLabel="Loading notes" accessibilityRole="progressbar">
@@ -318,6 +345,19 @@ export default function NotesBrowserScreen() {
               onPress={() => router.push({ pathname: '/note/[id]', params: { id: note.id } })}
             />
           ))
+        )}
+
+        {!loading && (
+          <Pressable
+            onPress={() => router.push('/recently-deleted')}
+            style={styles.recentlyDeletedLink}
+            accessibilityRole="button"
+            accessibilityLabel="Recently Deleted"
+          >
+            <Ionicons name="trash-outline" size={15} color={colors.text.secondary} />
+            <Text style={styles.recentlyDeletedText}>Recently Deleted</Text>
+            <Ionicons name="chevron-forward" size={15} color={colors.text.secondary} />
+          </Pressable>
         )}
       </ScrollView>
 
@@ -464,64 +504,23 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     marginBottom: spacing.sm,
   },
-  noteItem: {
-    backgroundColor: colors.bg.surface,
-    borderRadius: radii.content,
-    padding: spacing.md,
+  recentlyDeletedLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs + 2,
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.controls,
     borderWidth: 1,
     borderColor: colors.border.hairline,
-    marginBottom: spacing.sm,
+    backgroundColor: colors.bg.surface,
+    alignSelf: 'center',
   },
-  itemHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.xs,
-  },
-  itemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text.primary,
-  },
-  swedishIndicators: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  indicatorSymbol: {
+  recentlyDeletedText: {
+    ...typography.label,
     fontSize: 13,
-  },
-  itemSnippet: {
-    fontFamily: typography.body.fontFamily,
-    fontSize: 14,
-    lineHeight: 20,
     color: colors.text.secondary,
-    marginBottom: spacing.xs,
-  },
-  tagChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 4,
-  },
-  tagLabel: {
-    fontSize: 11,
-    color: colors.text.secondary,
-  },
-  emptyContainer: {
-    paddingVertical: spacing.xxl,
-    alignItems: 'center',
-  },
-  emptyTitle: {
-    fontSize: typography.title.fontSize,
-    fontWeight: '600',
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-  },
-  emptySubtitle: {
-    fontSize: typography.caption.fontSize,
-    color: colors.text.secondary,
-    textAlign: 'center',
-    maxWidth: 240,
   },
 });

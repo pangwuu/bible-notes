@@ -41,7 +41,7 @@ export default function RecentlyDeletedScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busyState, setBusyState] = useState<{ id: string; action: 'restore' | 'delete' } | null>(null);
   const [emptying, setEmptying] = useState(false);
 
   const load = useCallback(async () => {
@@ -64,7 +64,7 @@ export default function RecentlyDeletedScreen() {
   );
 
   const handleRestore = useCallback(async (note: DeletedNote) => {
-    setBusyId(note.id);
+    setBusyState({ id: note.id, action: 'restore' });
     try {
       await restoreNote(note.id);
       setNotes((prev) => prev.filter((n) => n.id !== note.id));
@@ -72,7 +72,7 @@ export default function RecentlyDeletedScreen() {
     } catch {
       Alert.alert('Error', "Couldn't restore this note. Check your connection and try again.");
     } finally {
-      setBusyId(null);
+      setBusyState(null);
     }
   }, []);
 
@@ -86,14 +86,14 @@ export default function RecentlyDeletedScreen() {
           text: 'Delete forever',
           style: 'destructive',
           onPress: async () => {
-            setBusyId(note.id);
+            setBusyState({ id: note.id, action: 'delete' });
             try {
               await permanentlyDeleteNote(note.id);
               setNotes((prev) => prev.filter((n) => n.id !== note.id));
             } catch {
               Alert.alert('Error', "Couldn't delete this note. Check your connection and try again.");
             } finally {
-              setBusyId(null);
+              setBusyState(null);
             }
           },
         },
@@ -157,7 +157,11 @@ export default function RecentlyDeletedScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
+      <View
+        style={styles.center}
+        accessibilityRole="progressbar"
+        accessibilityLabel="Loading deleted notes"
+      >
         <ActivityIndicator color={colors.accentKeyIdea} />
       </View>
     );
@@ -186,7 +190,13 @@ export default function RecentlyDeletedScreen() {
             Friends can't see them while they're here.
           </Text>
           {loadError ? (
-            <Text style={styles.error}>Couldn't load deleted notes. Pull down to try again.</Text>
+            <Text
+              style={styles.error}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+            >
+              Couldn't load deleted notes. Pull down to try again.
+            </Text>
           ) : null}
         </>
       }
@@ -200,7 +210,9 @@ export default function RecentlyDeletedScreen() {
         )
       }
       renderItem={({ item }) => {
-        const busy = busyId === item.id;
+        const busy = busyState?.id === item.id;
+        const isDeleting = busy && busyState?.action === 'delete';
+        const isRestoring = busy && busyState?.action === 'restore';
         const left = daysLeft(item.deletedAt);
         return (
           <View style={styles.card}>
@@ -220,6 +232,7 @@ export default function RecentlyDeletedScreen() {
                 compact
                 mode="text"
                 disabled={busy}
+                loading={isDeleting}
                 textColor={colors.accentDanger}
                 onPress={() => handleDeleteForever(item)}
                 accessibilityLabel={`Delete ${noteLabel(item)} forever`}
@@ -230,7 +243,7 @@ export default function RecentlyDeletedScreen() {
                 compact
                 mode="outlined"
                 disabled={busy}
-                loading={busy}
+                loading={isRestoring}
                 textColor={colors.accentKeyIdea}
                 style={styles.restoreButton}
                 onPress={() => handleRestore(item)}

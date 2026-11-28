@@ -159,7 +159,7 @@ describe('VersePreviewModal Component', () => {
     const tree = (VersePreviewModal as any)(element.props);
     const allText = extractText(tree);
 
-    expect(allText).toContain('Loading Scripture text...');
+    expect(allText).toContain('Loading Bible verses...');
   });
 
   it('triggers onClose when backdrop overlay is pressed', () => {
