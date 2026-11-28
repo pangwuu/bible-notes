@@ -434,7 +434,6 @@ export default function NoteDetailScreen() {
             return (
               <Text
                 key={node.key}
-                accessibilityRole={isVerse ? 'button' : 'link'}
                 style={
                   isVerse
                     ? [styles.verseLinkBadge, { color: secColor }]

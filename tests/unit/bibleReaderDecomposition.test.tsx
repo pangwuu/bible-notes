@@ -3,6 +3,7 @@
  */
 
 import React from 'react';
+import { Platform } from 'react-native';
 import { BibleReaderHeader } from '../../src/components/bibleReader/BibleReaderHeader';
 import { VerseItem } from '../../src/components/bibleReader/VerseItem';
 import { VerseActionBar } from '../../src/components/bibleReader/VerseActionBar';
@@ -151,6 +152,34 @@ describe('BibleReader Decomposed Sub-Components', () => {
       const text = extractNormalizedText(ComponentToTest(element.props));
       expect(text).not.toContain('‡');
       expect(text).toContain('16 For God so loved the world');
+    });
+
+    it('omits button accessibilityRole on web so inline verses stay spans instead of line-breaking buttons', () => {
+      const originalOS = Platform.OS;
+      const ComponentToTest = (VerseItem as any).type || VerseItem;
+      const props = {
+        verse: { verseNumber: 1, text: 'In the beginning was the Word' },
+        isSelected: true,
+        isTargetHighlighted: false,
+        showVerseNumbers: true,
+        fontSize: 16,
+        onToggle: jest.fn(),
+      };
+
+      try {
+        (Platform as any).OS = 'ios';
+        const nativeTree = ComponentToTest(props);
+        expect(nativeTree.props.accessibilityRole).toBe('button');
+        expect(nativeTree.props.accessibilityState).toEqual({ selected: true });
+
+        (Platform as any).OS = 'web';
+        const webTree = ComponentToTest(props);
+        expect(webTree.props.accessibilityRole).toBeUndefined();
+        expect(webTree.props.accessibilityState).toBeUndefined();
+        expect(typeof webTree.props.onPress).toBe('function');
+      } finally {
+        (Platform as any).OS = originalOS;
+      }
     });
   });
 

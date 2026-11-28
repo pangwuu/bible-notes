@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, StyleSheet } from 'react-native';
+import { Platform, Text, StyleSheet } from 'react-native';
 import { VerseSegment } from '../../services/bibleService';
 import { LinkedSectionInfo } from '../../utils/verseLinkUtils';
 import { colors, typography } from '../../constants/theme';
@@ -27,13 +27,17 @@ const VerseItemComponent: React.FC<VerseItemProps> = ({
   onLayout,
   renderHeading = true,
 }) => {
+  const isWeb = Platform.OS === 'web';
+
   return (
     <Text
       onLayout={onLayout}
       onPress={() => onToggle(verse.verseNumber)}
-      accessibilityRole="button"
-      accessibilityState={{ selected: isSelected }}
-      accessibilityHint="Selects this verse to link, share or find related passages"
+      accessibilityRole={isWeb ? undefined : 'button'}
+      accessibilityState={isWeb ? undefined : { selected: isSelected }}
+      accessibilityHint={
+        isWeb ? undefined : 'Selects this verse to link, share or find related passages'
+      }
       style={[
         styles.verseTextUnit,
         isSelected && styles.verseSelected,
